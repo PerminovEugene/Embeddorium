@@ -1,7 +1,7 @@
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
 import uuid
 
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 QDRANT_URL = "http://localhost:6333"
 VECTOR_SIZE = 1536  # change to match your embedding model output dimension

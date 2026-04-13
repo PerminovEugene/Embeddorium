@@ -3,9 +3,11 @@ from typing import TypedDict
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
+
 class LinkInfo(TypedDict):
     label: str
     url: str
+
 
 class LinkExtractor:
     def extract_links(self, markdown: str) -> list[LinkInfo]:

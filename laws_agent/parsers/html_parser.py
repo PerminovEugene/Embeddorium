@@ -1,5 +1,6 @@
 import trafilatura
 
+
 class HtmlParser:
     def parse(self, html: str, url: str = "") -> str:
         text = trafilatura.extract(

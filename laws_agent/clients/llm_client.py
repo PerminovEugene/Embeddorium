@@ -10,7 +10,8 @@ DEFAULT_MODEL = "google/gemma-4-27b-it"
 
 
 class LlmClient:
-    """Client for HuggingFace models — generative via transformers pipeline, embeddings via SentenceTransformer."""
+    """Client for HuggingFace models — generative via transformers pipeline""
+    ""embeddings via SentenceTransformer."""
 
     def __init__(
         self,
@@ -34,10 +35,6 @@ class LlmClient:
             )
         return self._pipeline
 
-    # ------------------------------------------------------------------
-    # Inference
-    # ------------------------------------------------------------------
-
     def generate(
         self,
         prompt: str,
@@ -54,11 +51,14 @@ class LlmClient:
             do_sample=temperature > 0,
         )
         generated: str = results[0]["generated_text"]
-        # Strip the echoed prompt that transformers pipelines include by default.
+        # Strip the echoed prompt
+        #  that transformers pipelines include by default.
         return generated[len(full_prompt):]
 
     def embed(self, text: str) -> list:
         """Return a float embedding vector for *text* via the injected SentenceTransformer."""
         if self.embedding_model is None:
-            raise ValueError("No embedding model provided — pass a SentenceTransformer to LlmClient(embedding_model=...)")
+            raise ValueError(
+                "No embedding model provided — pass a SentenceTransformer to LlmClient(embedding_model=...)"
+            )
         return self.embedding_model.encode(text).tolist()

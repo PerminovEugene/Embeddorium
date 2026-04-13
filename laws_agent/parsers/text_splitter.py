@@ -1,9 +1,12 @@
 from langchain_text_splitters import MarkdownTextSplitter
-from link_extractor import LinkExtractor, LinkInfo
+
+from laws_agent.parsers.link_extractor import LinkExtractor, LinkInfo
+
 
 class Chunk:
     text: str
     links: LinkInfo
+
 
 class TextSplitter:
     def __init__(self) -> None:
