@@ -4,8 +4,8 @@ from laws_agent.clients.hg_client import HgClient
 from laws_agent.models import Document, DocumentChunk
 from laws_agent.parsers.html_parser import HtmlParser
 from laws_agent.parsers.text_splitter import TextSplitter
-from laws_agent.storage.sql_store import SqlStore
-from laws_agent.storage.vector_store import VectorStore
+from laws_agent.storage.sql.sql_store import SqlStore
+from laws_agent.storage.vector.vector_store import VectorStore
 
 URL = "https://www.evgeniiperminov.dev/"
 LANGUAGE = "ES"

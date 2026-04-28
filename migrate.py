@@ -6,7 +6,7 @@ import sys
 from sqlalchemy.exc import OperationalError
 
 from laws_agent import config
-from laws_agent.storage.sql_store import SqlStore
+from laws_agent.storage.sql.sql_store import SqlStore
 
 
 def main() -> None:
