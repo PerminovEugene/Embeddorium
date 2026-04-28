@@ -1,11 +1,14 @@
+from dataclasses import dataclass, field
+
 from langchain_text_splitters import MarkdownTextSplitter
 
 from laws_agent.parsers.link_extractor import LinkExtractor, LinkInfo
 
 
+@dataclass
 class Chunk:
     text: str
-    links: LinkInfo
+    links: list[LinkInfo] = field(default_factory=list)
 
 
 class TextSplitter:
@@ -17,8 +20,7 @@ class TextSplitter:
         )
 
     def split(self, text: str) -> list[Chunk]:
-        chunks = self.splitter.split_text(text)
         return [
-            {"text": chunk, "links": self.extractor.extract_links(chunk)}
-            for chunk in chunks
+            Chunk(text=chunk, links=self.extractor.extract_links(chunk))
+            for chunk in self.splitter.split_text(text)
         ]

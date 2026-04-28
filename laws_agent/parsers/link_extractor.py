@@ -1,5 +1,5 @@
 import re
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 

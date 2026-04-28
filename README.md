@@ -6,7 +6,7 @@ A Python agent for fetching, parsing, embedding, and querying legislative docume
 
 ```
 laws_agent/
-    config.py           # env-based configuration
+    config.py               # env-based configuration (single source of truth)
     parsers/
         html_parser.py      # HTML → Markdown via trafilatura
         link_extractor.py   # Markdown link extraction
@@ -14,9 +14,17 @@ laws_agent/
     clients/
         hg_client.py        # HuggingFace Hub login + model loading
         llm_client.py       # Text generation + embedding client
+    models/
+        document.py         # Document Pydantic model
+        document_chunk.py   # DocumentChunk Pydantic model
     storage/
+        sql_store.py        # PostgreSQL ORM models + repository (SQLAlchemy)
         vector_store.py     # Qdrant vector store wrapper
-main.py                 # Entry point
+        migrations/
+            001_create_documents.sql
+            002_create_document_chunks.sql
+main.py                     # Indexing entry point
+migrate.py                  # Migration runner
 ```
 
 ## Setup
@@ -27,20 +35,28 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env` and fill in your tokens:
+Copy `.env.example` to `.env` and fill in your values:
 
 ```sh
 cp .env.example .env
 ```
 
-```ini
-HG_TOKEN=your_huggingface_token
-```
+| Variable          | Required | Default                  | Description                  |
+|-------------------|----------|--------------------------|------------------------------|
+| `HG_TOKEN`        | yes      | —                        | HuggingFace API token        |
+| `POSTGRES_USER`   | yes      | —                        | PostgreSQL user              |
+| `POSTGRES_PASSWORD` | yes    | —                        | PostgreSQL password          |
+| `POSTGRES_DB`     | yes      | —                        | PostgreSQL database name     |
+| `POSTGRES_HOST`   | no       | `localhost`              | PostgreSQL host              |
+| `POSTGRES_PORT`   | no       | `5432`                   | PostgreSQL port              |
+| `QDRANT_URL`      | no       | `http://localhost:6333`  | Qdrant instance URL          |
 
 ## Run
 
+Apply migrations first, then run the indexer:
+
 ```sh
-source .venv/bin/activate
+python migrate.py
 python main.py
 ```
 

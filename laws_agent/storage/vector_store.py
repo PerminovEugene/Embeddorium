@@ -3,12 +3,13 @@ import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-QDRANT_URL = "http://localhost:6333"
+from laws_agent import config
+
 VECTOR_SIZE = 1536  # change to match your embedding model output dimension
 
 
 class VectorStore:
-    def __init__(self, collection: str, url: str = QDRANT_URL) -> None:
+    def __init__(self, collection: str, url: str = config.QDRANT_URL) -> None:
         self.client = QdrantClient(url=url)
         self.collection = collection
 
