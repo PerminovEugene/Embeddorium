@@ -24,6 +24,22 @@ class LlmClient:
         self.device = device
         self._pipeline = None
 
+    def get_embedding_dimension(self) -> int:
+        """Return embedding vector dimension for the injected SentenceTransformer."""
+        if self.embedding_model is None:
+            raise ValueError(
+                "No embedding model provided — pass a SentenceTransformer to "
+                "LlmClient(embedding_model=...)"
+            )
+
+        dimension = self.embedding_model.get_sentence_embedding_dimension()
+
+        if dimension is None:
+            # Fallback for unusual/custom models
+            dimension = len(self.embed("dimension probe"))
+
+        return int(dimension)
+
     @property
     def _generator(self):
         if self._pipeline is None:

@@ -10,10 +10,13 @@ from laws_agent.storage.vector.vector_store import VectorStore
 URL = "https://www.evgeniiperminov.dev/"
 LANGUAGE = "ES"
 BATCH_SIZE = 32
-COLLECTION = "laws"
+COLLECTION_BASE = "LAWS"
+MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
+MODEL_COLLECTION_POSTFIX = "qwen_embed_8b"
 
 hg_client = HgClient()
-model = hg_client.get_model("Qwen/Qwen3-Embedding-8B")
+model = hg_client.get_model(MODEL_NAME)
+model_size = hg_client.get_model_size(MODEL_NAME)
 
 response = requests.get(URL, timeout=10, verify=False)
 print("got url", response)
@@ -26,12 +29,14 @@ splitter = TextSplitter()
 chunks = splitter.split(text)
 print("chunks amount", len(chunks))
 
+COLLECTION = COLLECTION_BASE + "_" + LANGUAGE + "_" + MODEL_COLLECTION_POSTFIX
+
 vector_store = VectorStore(collection=COLLECTION)
 
-vector_store.create
+vector_store.create_collection(model_size)
 
 with SqlStore() as sql_store:
-    document = sql_store.save_document(Document(source_url=URL, language=LANGUAGE))
+    document = sql_store.documents.save(Document(source_url=URL, language=LANGUAGE))
     print(f"saved document id={document.id}")
 
     for start in range(0, len(chunks), BATCH_SIZE):
@@ -44,7 +49,7 @@ with SqlStore() as sql_store:
             normalize_embeddings=True,
         )
 
-        saved_chunks = sql_store.save_chunks([
+        saved_chunks = sql_store.chunks.save_many([
             DocumentChunk(
                 document_id=document.id,
                 text=chunk.text,
@@ -58,12 +63,12 @@ with SqlStore() as sql_store:
             vectors=[embedding.tolist() for embedding in embeddings],
             payloads=[
                 {
-                    "chunk_id": str(saved.id),
-                    "document_id": str(saved.document_id),
-                    "chunk_index": saved.chunk_index,
+                    "chunk_id": str(chunk.id),
+                    "document_id": str(document.id),
+                    "chunk_index": chunk.chunk_index,
                     "language": LANGUAGE,
                 }
-                for saved in saved_chunks
+                for chunk in saved_chunks
             ],
         )
 

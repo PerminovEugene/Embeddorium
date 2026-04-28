@@ -41,15 +41,15 @@ Copy `.env.example` to `.env` and fill in your values:
 cp .env.example .env
 ```
 
-| Variable          | Required | Default                  | Description                  |
-|-------------------|----------|--------------------------|------------------------------|
-| `HG_TOKEN`        | yes      | —                        | HuggingFace API token        |
-| `POSTGRES_USER`   | yes      | —                        | PostgreSQL user              |
-| `POSTGRES_PASSWORD` | yes    | —                        | PostgreSQL password          |
-| `POSTGRES_DB`     | yes      | —                        | PostgreSQL database name     |
-| `POSTGRES_HOST`   | no       | `localhost`              | PostgreSQL host              |
-| `POSTGRES_PORT`   | no       | `5432`                   | PostgreSQL port              |
-| `QDRANT_URL`      | no       | `http://localhost:6333`  | Qdrant instance URL          |
+| Variable            | Required | Default                 | Description              |
+| ------------------- | -------- | ----------------------- | ------------------------ |
+| `HG_TOKEN`          | yes      | —                       | HuggingFace API token    |
+| `POSTGRES_USER`     | yes      | —                       | PostgreSQL user          |
+| `POSTGRES_PASSWORD` | yes      | —                       | PostgreSQL password      |
+| `POSTGRES_DB`       | yes      | —                       | PostgreSQL database name |
+| `POSTGRES_HOST`     | no       | `localhost`             | PostgreSQL host          |
+| `POSTGRES_PORT`     | no       | `5432`                  | PostgreSQL port          |
+| `QDRANT_URL`        | no       | `http://localhost:6333` | Qdrant instance URL      |
 
 ## Run
 
@@ -94,3 +94,8 @@ ruff format .         # format (replaces Black)
 pip install pycodestyle
 pycodestyle .
 ```
+
+## Local dev
+
+1. for management qdarnt - http://0.0.0.0:6333/dashboard
+2. for management psql -
