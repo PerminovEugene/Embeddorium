@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select
 
 from laws_agent.models import DocumentChunk
 from laws_agent.storage.sql.models.chunk import DocumentChunkORM
@@ -16,7 +17,6 @@ class ChunkRepository:
             orm_chunk = DocumentChunkORM(
                 document_id=chunk.document_id,
                 text=chunk.text,
-                links=chunk.links,
                 chunk_index=chunk.chunk_index,
             )
             session.add(orm_chunk)
@@ -31,7 +31,6 @@ class ChunkRepository:
                 DocumentChunkORM(
                     document_id=chunk.document_id,
                     text=chunk.text,
-                    links=chunk.links,
                     chunk_index=chunk.chunk_index,
                 )
                 for chunk in chunks
@@ -58,5 +57,30 @@ class ChunkRepository:
 
             result = _to_chunk(orm_chunk)
             result.document = _to_document(orm_chunk.document)
+
+            return result
+        
+    def get_many(self, chunk_ids: list[uuid.UUID]) -> list[DocumentChunk]:
+        if not chunk_ids:
+            return []
+
+        with Session(self.engine) as session:
+            statement = (
+                select(DocumentChunkORM)
+                .where(DocumentChunkORM.id.in_(chunk_ids))
+                .options(selectinload(DocumentChunkORM.document))
+            )
+
+            orm_chunks = session.scalars(statement).all()
+
+            result: list[DocumentChunk] = []
+
+            for orm_chunk in orm_chunks:
+                chunk = _to_chunk(orm_chunk)
+
+                if orm_chunk.document is not None:
+                    chunk.document = _to_document(orm_chunk.document)
+
+                result.append(chunk)
 
             return result

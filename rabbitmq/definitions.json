@@ -1,0 +1,23 @@
+{
+  "vhosts": [{ "name": "/" }],
+  "users": [
+    {
+      "name": "laws_user",
+      "password_hash": "0sCstBHhzmLtzohE5puri0rEs10Ta984jkj0Bny2yoWz/TB+",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ["administrator"]
+    }
+  ],
+  "permissions": [
+    {
+      "user": "laws_user",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [],
+  "queues": [],
+  "bindings": []
+}

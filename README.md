@@ -60,6 +60,49 @@ python migrate.py
 python main.py
 ```
 
+### Enqueue web sources
+
+`laws_agent/runners/add_web_source_job.py` reads a sources config file and publishes one crawl message per source URL to RabbitMQ. Run it after the queue workers are up.
+
+```sh
+.venv/bin/python3 -m laws_agent.runners.add_web_source_job config.json
+```
+
+The config file must be a JSON file with this structure:
+
+```json
+{
+  "groups": [
+    {
+      "name": "Estonia",
+      "attributes": { "code": "EE" },
+      "sources": [
+        { "description": "Tax authority", "link": "emta.ee" },
+        { "description": "Laws", "link": "https://riigiteataja.ee" }
+      ]
+    }
+  ]
+}
+```
+
+URLs without a scheme (`emta.ee`) are treated as `https://`. The script requires the following env vars in addition to the standard ones:
+
+| Variable            | Required | Default     | Description       |
+| ------------------- | -------- | ----------- | ----------------- |
+| `RABBITMQ_USER`     | yes      | —           | RabbitMQ username |
+| `RABBITMQ_PASSWORD` | yes      | —           | RabbitMQ password |
+| `RABBITMQ_HOST`     | no       | `localhost` | RabbitMQ host     |
+| `RABBITMQ_PORT`     | no       | `5672`      | RabbitMQ port     |
+| `RABBITMQ_VHOST`    | no       | `/`         | RabbitMQ vhost    |
+
+### Run actor locally
+
+Run embed actor locally
+
+```
+dramatiq laws_agent laws_agent.actors.embed_chunks_actor --processes 1 --threads 1
+```
+
 ## Dependency management
 
 ```sh
@@ -95,7 +138,22 @@ pip install pycodestyle
 pycodestyle .
 ```
 
+## Testing
+
+```sh
+.venv/bin/python3 -m pytest tests/ -v
+```
+
+Run a specific test file:
+
+```sh
+.venv/bin/python3 -m pytest tests/runners/test_add_web_source_job.py -v
+```
+
 ## Local dev
 
 1. for management qdarnt - http://0.0.0.0:6333/dashboard
-2. for management psql -
+2. for management psql - install `https://dbeaver.io`
+3. for management rabbitmq http://localhost:15672/
+
+##

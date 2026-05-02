@@ -1,0 +1,17 @@
+{
+  "groups": [
+    {
+      "name": "Estonia",
+      "attributes": {
+        "code": "EE",
+        "Country": "Estonia"
+      },
+      "sources": [
+        {
+          "description": "Main website.",
+          "link": "emta.ee"
+        }
+      ]
+    }
+  ]
+}

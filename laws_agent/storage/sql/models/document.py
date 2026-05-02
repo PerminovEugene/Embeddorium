@@ -35,7 +35,7 @@ class DocumentORM(Base):
         nullable=False,
     )
     language: Mapped[str] = mapped_column(
-        String(2),
+        String(100),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

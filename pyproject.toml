@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["laws_agent*"]
+
+[project]
+name = "laws-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+# Shared by every actor and the runner
+dependencies = [
+  "pydantic>=2",
+  "sqlalchemy>=2",
+  "psycopg2-binary>=2.9",
+  "dramatiq[rabbitmq,watch]>=1.17",
+  "python-dotenv>=1",
+]
+
+[project.optional-dependencies]
+
+# worker-web-source-processor
+web = [
+  "requests>=2",
+  "trafilatura>=2",
+  "langchain-text-splitters>=0.3",
+]
+
+# worker-embed-chunks (runs locally, not in docker-compose)
+embedding = [
+  "sentence-transformers>=3",
+  "huggingface-hub>=0.20",
+  "qdrant-client>=1",
+  "torch>=2",
+]
+
+dev = [
+  "pytest>=8",
+  "ruff>=0.8",
+  "mypy>=1",
+  "watchdog>=6",
+]

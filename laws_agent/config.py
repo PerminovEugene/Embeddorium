@@ -24,3 +24,10 @@ SQL_DATABASE: str = _require("POSTGRES_DB")
 
 # Qdrant
 QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+
+# RabbitMQ
+RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT: str = os.getenv("RABBITMQ_PORT", "5672")
+RABBITMQ_USER: str = _require("RABBITMQ_USER")
+RABBITMQ_PASSWORD: str = _require("RABBITMQ_PASSWORD")
+RABBITMQ_VHOST: str = os.getenv("RABBITMQ_VHOST", "/")

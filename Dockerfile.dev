@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+ARG EXTRAS
+
+WORKDIR /app
+
+COPY pyproject.toml .
+# Stub so pip can resolve the editable install without the real source tree.
+# The volume mount at runtime overlays this with the actual code.
+RUN mkdir -p laws_agent && touch laws_agent/__init__.py
+RUN pip install --no-cache-dir -e ".${EXTRAS:+[$EXTRAS]}"

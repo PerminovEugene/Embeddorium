@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import text as sql_text
 from sqlalchemy.engine import Engine
 
-_MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+_MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 
 def run_migrations(engine: Engine) -> list[str]:

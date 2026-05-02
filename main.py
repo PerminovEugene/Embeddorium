@@ -6,6 +6,8 @@ from laws_agent.parsers.html_parser import HtmlParser
 from laws_agent.parsers.text_splitter import TextSplitter
 from laws_agent.storage.sql.sql_store import SqlStore
 from laws_agent.storage.vector.vector_store import VectorStore
+from laws_agent.parsers.config_parser import parse_sources_config
+import os
 
 URL = "https://www.evgeniiperminov.dev/"
 LANGUAGE = "ES"
@@ -14,10 +16,13 @@ COLLECTION_BASE = "LAWS"
 MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
 MODEL_COLLECTION_POSTFIX = "qwen_embed_8b"
 
+config = parse_sources_config(os.getenv("CONFIG_PATH"))
+
 hg_client = HgClient()
 model = hg_client.get_model(MODEL_NAME)
 model_size = hg_client.get_model_size(MODEL_NAME)
 
+print("pulling from", url)
 response = requests.get(URL, timeout=10, verify=False)
 print("got url", response)
 

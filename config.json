@@ -1,0 +1,29 @@
+{
+  "groups": [
+    {
+      "name": "Estonia",
+      "attributes": {
+        "code": "EE",
+        "Country": "Estonia"
+      },
+      "sources": [
+        {
+          "description": "Main website.",
+          "link": "emta.ee"
+        },
+        {
+          "description": "Source of truth for laws and edge cases.",
+          "link": "riigiteataja.ee"
+        },
+        {
+          "description": "Source of truth about II pillar / mandatory funded pension.",
+          "link": "pensionikeskus.ee"
+        },
+        {
+          "description": "Unemployment insurance.",
+          "link": "tootukassa.ee"
+        }
+      ]
+    }
+  ]
+}

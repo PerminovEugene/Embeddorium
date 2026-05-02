@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from laws_agent.storage.sql.models.document import DocumentORM
+    from laws_agent.storage.sql.models.crawl_target import CrawlTargetORM
 
 
 import uuid
@@ -15,14 +16,13 @@ from sqlalchemy import (
     Text,
     text as sql_text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
     relationship,
 )
 from laws_agent.storage.sql.models.base import Base
-# from laws_agent.storage.sql.models.document import DocumentORM
 
 class DocumentChunkORM(Base):
     __tablename__ = "document_chunks"
@@ -41,11 +41,6 @@ class DocumentChunkORM(Base):
         Text,
         nullable=False,
     )
-    links: Mapped[list] = mapped_column(
-        JSONB,
-        nullable=False,
-        default=list,
-    )
     chunk_index: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -59,4 +54,10 @@ class DocumentChunkORM(Base):
     document: Mapped["DocumentORM"] = relationship(
         "DocumentORM",
         back_populates="chunks",
+    )
+    crawl_targets: Mapped[list["CrawlTargetORM"]] = relationship(
+        "CrawlTargetORM",
+        back_populates="parent_chunk",
+        cascade="all, delete-orphan",
+        foreign_keys="CrawlTargetORM.parent_chunk_id",
     )

@@ -19,7 +19,6 @@ def _to_chunk(orm: DocumentChunkORM) -> DocumentChunk:
         id=orm.id,
         document_id=orm.document_id,
         text=orm.text,
-        links=orm.links,
         chunk_index=orm.chunk_index,
         created_at=orm.created_at,
     )
