@@ -1,9 +1,11 @@
 import dramatiq
 
+from laws_agent.logging_config import configure_logging
 from laws_agent.models import CrawlTarget, CrawlTargetStatus
 from laws_agent.storage.sql.sql_store import SqlStore
 from laws_agent.clients.queue.queue_client import QueueClient
 from laws_agent.clients.queue.process_link_payload import ProcessLinkSourcePayload
+from laws_agent.clients.queue.logging_middleware import log_message_skipped
 from laws_agent.clients.queue.queue_names import (
     FETCH_SOURCE_ACTOR,
     FETCH_SOURCE_QUEUE,
@@ -12,13 +14,14 @@ from laws_agent.clients.queue.queue_names import (
 )
 from laws_agent.actors.url_helper import normalize_url, get_origin
 
+configure_logging()
 
+print("setup broker")
 rabbitmq_broker = QueueClient().create("link_processor")
 dramatiq.set_broker(rabbitmq_broker)
+print("setup broker done", rabbitmq_broker)
 
 sql_store = SqlStore()
-sql_store.run_migrations()
-
 
 def _is_allowed_url(
     *, payload: ProcessLinkSourcePayload, normalized_url: str, store: SqlStore
@@ -33,7 +36,7 @@ def _is_allowed_url(
     return get_origin(parent_document.source_url) == get_origin(normalized_url)
 
 
-def process_link(
+def handle(
     *,
     url: str,
     group: str,
@@ -42,7 +45,6 @@ def process_link(
     store: SqlStore,
     broker,
 ) -> None:
-    print('got message', url)
     payload = ProcessLinkSourcePayload.from_actor_kwargs(
         url=url,
         group=group,
@@ -57,9 +59,21 @@ def process_link(
         normalized_url=clean_url,
     )
     if existing_target is not None:
+        log_message_skipped(
+            actor_name=LINK_PROCESSOR_ACTOR,
+            queue_name=LINK_PROCESSOR_QUEUE,
+            reason="url_already_queued",
+            extra={"normalized_url": clean_url, "group": payload.group},
+        )
         return
 
     if not _is_allowed_url(payload=payload, normalized_url=clean_url, store=store):
+        log_message_skipped(
+            actor_name=LINK_PROCESSOR_ACTOR,
+            queue_name=LINK_PROCESSOR_QUEUE,
+            reason="url_not_allowed",
+            extra={"normalized_url": clean_url, "parent_document_id": str(payload.parent_document_id)},
+        )
         return
 
     target = store.crawl_targets.save(
@@ -92,14 +106,16 @@ def process_link(
     actor_name=LINK_PROCESSOR_ACTOR,
     max_retries=3,
 )
-def link_processor(
+def process_link(
     *,
     url: str,
     group: str,
     parent_document_id: str | None = None,
     parent_chunk_id: str | None = None,
 ) -> None:
-    process_link(
+    print('got', url)
+    
+    handle(
         url=url,
         group=group,
         parent_document_id=parent_document_id,

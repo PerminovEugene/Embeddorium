@@ -4,6 +4,7 @@ import pika
 from dramatiq.brokers.rabbitmq import RabbitmqBroker
 
 from laws_agent import config
+from laws_agent.clients.queue.logging_middleware import MessageLoggingMiddleware
 
 
 class QueueClient:
@@ -12,6 +13,8 @@ class QueueClient:
 
     def create(self, connection_name: str) -> RabbitmqBroker:
         if self._broker is None:
+            # params = 
+            # print(params, config.RABBITMQ_USER, config.RABBITMQ_PASSWORD)
             self._broker = RabbitmqBroker(
                 parameters=[{
                     "host": config.RABBITMQ_HOST,
@@ -23,5 +26,6 @@ class QueueClient:
                     "client_properties": {"connection_name": connection_name},
                 }]
             )
+            self._broker.add_middleware(MessageLoggingMiddleware())
 
         return self._broker

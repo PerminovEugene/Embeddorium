@@ -28,4 +28,4 @@ class HgClient:
 
     def get_model_size(self, model_name: str) -> int:
         model = self.get_model(model_name)
-        return model.get_sentence_embedding_dimension()
+        return model.get_embedding_dimension()

@@ -1,6 +1,7 @@
 import requests
 import dramatiq
 
+from laws_agent.logging_config import configure_logging
 from laws_agent.models import Document, DocumentChunk
 from laws_agent.models.crawl_target import CrawlTargetStatus
 from laws_agent.parsers.html_parser import HtmlParser
@@ -9,6 +10,7 @@ from laws_agent.storage.sql.sql_store import SqlStore
 from laws_agent.clients.queue.queue_client import QueueClient
 from laws_agent.clients.queue.process_web_source_payload import ProcessWebSourcePayload
 from laws_agent.clients.queue.embed_chunks_payload import EmbedChunksPayload
+from laws_agent.clients.queue.logging_middleware import log_message_skipped
 from laws_agent.clients.queue.queue_names import (
     FETCH_SOURCE_ACTOR,
     FETCH_SOURCE_QUEUE,
@@ -18,14 +20,16 @@ from laws_agent.clients.queue.queue_names import (
     LINK_PROCESSOR_ACTOR,
 )
 
+configure_logging()
+
 BATCH_SIZE = 32
 
-rabbitmq_broker = QueueClient().create("web_source")
+rabbitmq_broker = QueueClient().create("web_source_processor")
 dramatiq.set_broker(rabbitmq_broker)
 
 sql_store = SqlStore()
-sql_store.run_migrations()
-
+parser = HtmlParser()
+splitter = TextSplitter()
 
 def _process_web_source(
     *,
@@ -42,6 +46,12 @@ def _process_web_source(
 
     crawl_target = store.crawl_targets.get(payload.crawl_target_id)
     if crawl_target is None:
+        log_message_skipped(
+            actor_name=FETCH_SOURCE_ACTOR,
+            queue_name=FETCH_SOURCE_QUEUE,
+            reason="crawl_target_not_found",
+            extra={"crawl_target_id": payload.crawl_target_id},
+        )
         return
 
     store.crawl_targets.update_status(
@@ -60,10 +70,9 @@ def _process_web_source(
         )
         raise
 
-    parser = HtmlParser()
+
     text = parser.parse(response.text, crawl_target.original_url)
 
-    splitter = TextSplitter()
     chunks = splitter.split(text)
 
     document = store.documents.save(
@@ -126,7 +135,9 @@ def _process_web_source(
     actor_name=FETCH_SOURCE_ACTOR,
     max_retries=3,
 )
-def process_web_source(*, crawl_target_id: str, group: str) -> None:
+def fetch_source(*, crawl_target_id: str, group: str) -> None:
+    print("got", crawl_target_id)
+    
     _process_web_source(
         crawl_target_id=crawl_target_id,
         group=group,
