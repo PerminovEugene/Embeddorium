@@ -12,8 +12,9 @@ def _require(name: str) -> str:
     return value
 
 
-# HuggingFace
-HG_TOKEN: str = _require("HG_TOKEN")
+# HuggingFace. Optional: only used by hg_client, which already no-ops when unset,
+# so DB-only entrypoints (e.g. migrations) don't need a token.
+HG_TOKEN: str = os.getenv("HG_TOKEN", "")
 
 # PostgreSQL
 SQL_USER: str = _require("POSTGRES_USER")
@@ -24,6 +25,14 @@ SQL_DATABASE: str = _require("POSTGRES_DB")
 
 # Qdrant
 QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+
+# Domains explicitly allowed to skip TLS verification (comma-separated).
+# Empty by default — TLS is verified everywhere unless a domain is listed here.
+INSECURE_TLS_DOMAINS: frozenset[str] = frozenset(
+    d.strip().lower()
+    for d in os.getenv("INSECURE_TLS_DOMAINS", "").split(",")
+    if d.strip()
+)
 
 # RabbitMQ
 RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST", "localhost")

@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, selectinload
 
@@ -27,6 +28,15 @@ class DocumentRepository:
     def get(self, document_id: uuid.UUID) -> Document | None:
         with Session(self.engine) as session:
             orm_doc = session.get(DocumentORM, document_id)
+            return _to_document(orm_doc) if orm_doc else None
+
+    def get_by_crawl_target(self, crawl_target_id: uuid.UUID) -> Document | None:
+        with Session(self.engine) as session:
+            orm_doc = session.scalars(
+                select(DocumentORM).where(
+                    DocumentORM.crawl_target_id == crawl_target_id
+                )
+            ).first()
             return _to_document(orm_doc) if orm_doc else None
 
     def get_with_chunks(self, document_id: uuid.UUID) -> Document | None:

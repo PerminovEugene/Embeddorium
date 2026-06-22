@@ -2,6 +2,20 @@
 
 A Python agent for fetching, parsing, embedding, and querying legislative documents.
 
+## Pipeline flow
+
+Ingestion runs as a chain of single-responsibility Dramatiq actors. Each stage advances the crawl target through its status machine and hands off to the next stage via the transactional outbox (no actor enqueues RabbitMQ directly):
+
+1. **crawl_frontier_manager** — dedup gate; normalizes the URL, creates a `crawl_target` (`queued`), enqueues fetch. Discovered links loop back here.
+2. **fetch_source** — fetches the URL (TLS verified), classifies failures (transient vs permanent), rejects unsupported content types, stores the raw fetch + provenance.
+3. **parse_source** — picks a parser by content type, extracts normalized text, saves the `Document` with metadata/hashes.
+4. **chunk_document** — splits text into chunks and persists discovered links.
+5. **schedule_embeddings** — emits one embed job per chunk batch, then triggers link scheduling.
+6. **schedule_discovered_links** — schedules persisted links back to the frontier, then marks the target `processed`.
+7. **embed_chunks** — embeds chunks and upserts vectors into Qdrant (point id = chunk id).
+
+The **outbox dispatcher** (`python -m laws_agent.outbox.dispatcher`) publishes committed outbox events to RabbitMQ; delivery is at-least-once and every stage is idempotent.
+
 ## Project structure
 
 ```
@@ -20,9 +34,16 @@ laws_agent/
     storage/
         sql_store.py        # PostgreSQL ORM models + repository (SQLAlchemy)
         vector_store.py     # Qdrant vector store wrapper
-        migrations/
-            001_create_documents.sql
-            002_create_document_chunks.sql
+    mcp/
+        server.py           # FastMCP server exposing KB tools
+    agent/
+        config.py           # agent env vars (dotenv)
+        mcp_client.py       # MultiServerMCPClient factory
+        graph.py            # LangGraph ReAct agent builder
+        generate.py         # CLI entry point
+        providers/
+            ollama.py       # ChatOllama factory
+            openai.py       # ChatOpenAI factory
 main.py                     # Indexing entry point
 migrate.py                  # Migration runner
 ```
@@ -51,6 +72,17 @@ cp .env.example .env
 | `POSTGRES_PORT`     | no       | `5432`                  | PostgreSQL port          |
 | `QDRANT_URL`        | no       | `http://localhost:6333` | Qdrant instance URL      |
 
+### Agent env vars
+
+| Variable         | Required             | Default                      | Description                    |
+| ---------------- | -------------------- | ---------------------------- | ------------------------------ |
+| `LLM_PROVIDER`   | no                   | `ollama`                     | `ollama` or `openai`           |
+| `MCP_SERVER_URL` | no                   | `http://localhost:8000/mcp`  | FastMCP server endpoint        |
+| `OPENAI_API_KEY` | if provider=openai   | —                            | OpenAI API key                 |
+| `OPENAI_MODEL`   | no                   | `gpt-4o-mini`                | OpenAI model name              |
+| `OLLAMA_BASE_URL`| no                   | `http://localhost:11434`     | Ollama server URL              |
+| `OLLAMA_MODEL`   | no                   | `llama3.2`                   | Ollama model name              |
+
 ## Run
 
 Apply migrations first, then run the indexer:
@@ -67,6 +99,16 @@ python main.py
 ```sh
 .venv/bin/python3 -m laws_agent.runners.add_web_source_job config.json
 ```
+
+When the stack runs in Docker, seed inside the compose network instead (so it reaches `rabbitmq`/`postgres` by service name via `.env.docker`):
+
+```sh
+scripts/seed.sh config.json          # defaults to config.json
+# equivalent to:
+docker compose run --rm seed config.json
+```
+
+The `seed` service is in the `tools` profile, so `docker compose up -d` never starts it. The config path is relative to the repo root (mounted at `/app`).
 
 The config file must be a JSON file with this structure:
 
@@ -85,7 +127,15 @@ The config file must be a JSON file with this structure:
 }
 ```
 
-URLs without a scheme (`emta.ee`) are treated as `https://`. The script requires the following env vars in addition to the standard ones:
+The unit is a **group**; each group lists one or more `sources`. To crawl **different URLs in one group**, add more entries under `sources`. To crawl **different groups**, add more group objects:
+
+- Each `sources[].link` becomes one seed crawl target tagged with its group `name`. The group flows through the whole pipeline and becomes the Qdrant collection suffix (e.g. `LAWS_Estonia_qwen_embed_8b`).
+- A link without a scheme (`emta.ee`) is treated as `https://emta.ee`.
+- `name`, `attributes` (object), and `sources` (list of `{description, link}`) are all required.
+- Re-running with the same URLs is safe — the frontier manager dedups by normalized URL, so already-crawled targets aren't re-queued.
+- You only seed entry points: each seed fans out automatically as discovered same-origin links loop back into the frontier.
+
+Make sure the pipeline workers and the outbox dispatcher are up before seeding. The script requires the following env vars in addition to the standard ones:
 
 | Variable            | Required | Default     | Description       |
 | ------------------- | -------- | ----------- | ----------------- |
@@ -95,11 +145,36 @@ URLs without a scheme (`emta.ee`) are treated as `https://`. The script requires
 | `RABBITMQ_PORT`     | no       | `5672`      | RabbitMQ port     |
 | `RABBITMQ_VHOST`    | no       | `/`         | RabbitMQ vhost    |
 
+### Run the LangGraph agent
+
+The agent connects to the MCP server and answers questions using the knowledge base.
+
+Start the MCP server first:
+
+```sh
+python -m laws_agent.mcp.server
+```
+
+Then send a prompt (defaults to Ollama):
+
+```sh
+python -m laws_agent.agent.generate "What are the VAT rules in Estonia?"
+
+# or explicitly choose a provider
+python -m laws_agent.agent.generate "What are the VAT rules?" ollama
+python -m laws_agent.agent.generate "What are the VAT rules?" openai
+
+# or via the installed script
+laws-generate "What are the VAT rules in Estonia?"
+```
+
+The provider can also be set via `LLM_PROVIDER` in `.env` instead of passing it as an argument.
+
 ### Run actor locally
 
 Run embed actor locally
 
-```
+```sh
 dramatiq laws_agent laws_agent.actors.embed_chunks_actor --processes 1 --threads 1
 ```
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, call
 from laws_agent.models.crawl_target import CrawlTarget, CrawlTargetStatus
 from laws_agent.models.document import Document
 from laws_agent.clients.queue.queue_names import FETCH_SOURCE_QUEUE, FETCH_SOURCE_ACTOR
-from laws_agent.actors.link_processor_actor import process_link
+from laws_agent.actors.crawl_frontier_manager_actor import handle
 
 
 def _make_store(*, existing_target=None, parent_document=None) -> MagicMock:
@@ -29,7 +29,7 @@ def test_new_root_url_saves_crawl_target() -> None:
     store = _make_store()
     broker = _make_broker()
 
-    process_link(url="https://emta.ee", group="Estonia", store=store, broker=broker)
+    handle(url="https://emta.ee", group="Estonia", store=store, broker=broker)
 
     store.crawl_targets.save.assert_called_once()
     saved: CrawlTarget = store.crawl_targets.save.call_args.args[0]
@@ -45,7 +45,7 @@ def test_new_root_url_enqueues_fetch_message() -> None:
     store = _make_store()
     broker = _make_broker()
 
-    process_link(url="https://emta.ee", group="Estonia", store=store, broker=broker)
+    handle(url="https://emta.ee", group="Estonia", store=store, broker=broker)
 
     broker.enqueue.assert_called_once()
     message: dramatiq.Message = broker.enqueue.call_args.args[0]
@@ -65,7 +65,7 @@ def test_child_url_same_origin_saves_and_enqueues() -> None:
     store = _make_store(parent_document=parent_doc)
     broker = _make_broker()
 
-    process_link(
+    handle(
         url="https://emta.ee/sub-page",
         group="Estonia",
         parent_document_id=str(parent_doc_id),
@@ -89,7 +89,7 @@ def test_existing_active_target_is_skipped() -> None:
     store = _make_store(existing_target=existing)
     broker = _make_broker()
 
-    process_link(url="https://emta.ee", group="Estonia", store=store, broker=broker)
+    handle(url="https://emta.ee", group="Estonia", store=store, broker=broker)
 
     store.crawl_targets.save.assert_not_called()
     broker.enqueue.assert_not_called()
@@ -106,7 +106,7 @@ def test_deduplication_uses_normalized_url() -> None:
     broker = _make_broker()
 
     # trailing slash stripped by normalize_url → same normalized form
-    process_link(url="https://emta.ee/", group="Estonia", store=store, broker=broker)
+    handle(url="https://emta.ee/", group="Estonia", store=store, broker=broker)
 
     store.crawl_targets.save.assert_not_called()
     broker.enqueue.assert_not_called()
@@ -124,7 +124,7 @@ def test_child_url_different_origin_is_rejected() -> None:
     store = _make_store(parent_document=parent_doc)
     broker = _make_broker()
 
-    process_link(
+    handle(
         url="https://riigiteataja.ee/act/123",
         group="Estonia",
         parent_document_id=str(parent_doc_id),
@@ -141,7 +141,7 @@ def test_child_url_missing_parent_document_is_rejected() -> None:
     store = _make_store(parent_document=None)
     broker = _make_broker()
 
-    process_link(
+    handle(
         url="https://emta.ee/page",
         group="Estonia",
         parent_document_id=str(parent_doc_id),
@@ -163,7 +163,7 @@ def test_url_without_scheme_gets_https() -> None:
     # expected to add the scheme before calling process_link (ensure_scheme
     # in add_web_source_job does this). Test that a pre-schemed URL is stored
     # with the normalised form.
-    process_link(url="https://EMTA.EE/Path/", group="Estonia", store=store, broker=broker)
+    handle(url="https://EMTA.EE/Path/", group="Estonia", store=store, broker=broker)
 
     saved: CrawlTarget = store.crawl_targets.save.call_args.args[0]
     assert saved.normalized_url == "https://emta.ee/Path"  # scheme+host lowercased, trailing slash stripped

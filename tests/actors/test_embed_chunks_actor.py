@@ -157,7 +157,18 @@ def test_upsert_payload_contains_correct_metadata() -> None:
         assert payload["chunk_id"] == str(chunk.id)
         assert payload["document_id"] == str(doc_id)
         assert payload["chunk_index"] == chunk.chunk_index
-        assert payload["language"] == "Estonia"
+        # group is stored under "group" now, not mislabeled as "language"
+        assert payload["group"] == "Estonia"
+
+
+def test_upsert_uses_chunk_ids_as_point_ids() -> None:
+    # Deterministic point ids make re-embedding idempotent (overwrite, not dup).
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(2, doc_id)
+    _, vector_store, _ = _call(chunks=chunks, document_id=doc_id)
+
+    ids = vector_store.upsert.call_args.kwargs["ids"]
+    assert ids == [str(c.id) for c in chunks]
 
 
 # --- batching ---

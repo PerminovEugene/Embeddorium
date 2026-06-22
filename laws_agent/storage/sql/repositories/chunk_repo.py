@@ -1,12 +1,14 @@
 import uuid
 
+from sqlalchemy import or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import select
 
 from laws_agent.models import DocumentChunk
-from laws_agent.storage.sql.models.chunk import DocumentChunkORM
 from laws_agent.storage.sql.model_to_dto import _to_chunk, _to_document
+from laws_agent.storage.sql.models.chunk import DocumentChunkORM
+
+
 
 class ChunkRepository:
     def __init__(self, engine: Engine) -> None:
@@ -60,6 +62,37 @@ class ChunkRepository:
 
             return result
         
+    def get_neighbors(self, document_id: str, chunk_index: int) -> list[DocumentChunk]:
+        with Session(self.engine) as session:
+            statement = (
+                select(DocumentChunkORM)
+                .where(
+                    DocumentChunkORM.document_id == document_id,
+                    or_(
+                        DocumentChunkORM.chunk_index == chunk_index - 1,
+                        DocumentChunkORM.chunk_index == chunk_index + 1,
+                    ),
+                )
+                .options(selectinload(DocumentChunkORM.document))
+            )
+            orm_chunks = session.scalars(statement).all()
+            result: list[DocumentChunk] = []
+            for orm_chunk in orm_chunks:
+                chunk = _to_chunk(orm_chunk)
+                if orm_chunk.document is not None:
+                    chunk.document = _to_document(orm_chunk.document)
+                result.append(chunk)
+            return result
+
+    def list_by_document(self, document_id: uuid.UUID) -> list[DocumentChunk]:
+        with Session(self.engine) as session:
+            statement = (
+                select(DocumentChunkORM)
+                .where(DocumentChunkORM.document_id == document_id)
+                .order_by(DocumentChunkORM.chunk_index)
+            )
+            return [_to_chunk(orm) for orm in session.scalars(statement).all()]
+
     def get_many(self, chunk_ids: list[uuid.UUID]) -> list[DocumentChunk]:
         if not chunk_ids:
             return []

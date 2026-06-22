@@ -4,6 +4,9 @@ from langchain_text_splitters import MarkdownTextSplitter
 
 from laws_agent.parsers.link_extractor import LinkExtractor, LinkInfo
 
+# Bump when chunking parameters/algorithm change.
+CHUNKER_VERSION = "1"
+
 
 @dataclass
 class Chunk:

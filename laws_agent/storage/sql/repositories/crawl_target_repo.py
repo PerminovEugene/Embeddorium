@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Iterable, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from laws_agent.models.crawl_target import CrawlTarget, CrawlTargetStatus
+from laws_agent.models.crawl_target import (
+    CrawlTarget,
+    CrawlTargetStatus,
+    TERMINAL_OR_ACTIVE_STATUSES,
+)
 from laws_agent.storage.sql.models.crawl_target import CrawlTargetORM
 
 
@@ -98,6 +102,36 @@ class CrawlTargetRepository:
             session.refresh(orm)
             return _to_crawl_target(orm)
 
+    def acquire(
+        self,
+        *,
+        target_id: uuid.UUID,
+        from_statuses: Iterable[CrawlTargetStatus],
+        to_status: CrawlTargetStatus,
+    ) -> Optional[CrawlTarget]:
+        """Conditional ``status`` transition used as a processing lock.
+
+        Atomically moves the target to ``to_status`` only if its current status
+        is one of ``from_statuses``. Returns the updated target if this caller
+        won the transition, or ``None`` if the row was already taken/advanced by
+        someone else (caller should then skip).
+        """
+        froms = [str(s) for s in from_statuses]
+        with Session(self.engine) as session:
+            stmt = (
+                update(CrawlTargetORM)
+                .where(
+                    CrawlTargetORM.id == target_id,
+                    CrawlTargetORM.status.in_(froms),
+                )
+                .values(status=to_status)
+                .returning(CrawlTargetORM)
+            )
+            orm = session.execute(stmt).scalars().first()
+            target = _to_crawl_target(orm) if orm else None
+            session.commit()
+            return target
+
     def get(self, target_id: uuid.UUID) -> Optional[CrawlTarget]:
         with Session(self.engine) as session:
             orm = session.get(CrawlTargetORM, target_id)
@@ -106,12 +140,18 @@ class CrawlTargetRepository:
     def find_active_by_normalized_url(
         self, group: str, normalized_url: str
     ) -> Optional[CrawlTarget]:
-        """Return existing target if it exists and has not failed."""
+        """Return an existing target unless it is in a re-queueable failed state.
+
+        Transient failures (and the legacy ``FAILED``) are treated as
+        re-queueable, so they are excluded; everything else (including permanent
+        failures and skips) counts as "active" and blocks re-queueing.
+        """
+        active = [str(s) for s in TERMINAL_OR_ACTIVE_STATUSES]
         with Session(self.engine) as session:
             stmt = select(CrawlTargetORM).where(
                 CrawlTargetORM.group == group,
                 CrawlTargetORM.normalized_url == normalized_url,
-                CrawlTargetORM.status != CrawlTargetStatus.FAILED,
+                CrawlTargetORM.status.in_(active),
             )
             orm = session.scalars(stmt).first()
             return _to_crawl_target(orm) if orm else None

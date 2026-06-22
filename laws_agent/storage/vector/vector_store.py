@@ -21,14 +21,24 @@ class VectorStore:
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
 
-    def upsert(self, vectors: list[list[float]], payloads: list[dict]) -> None:
+    def upsert(
+        self,
+        vectors: list[list[float]],
+        payloads: list[dict],
+        ids: list[str] | None = None,
+    ) -> None:
+        # Deterministic ids (e.g. chunk_id) make re-embedding idempotent: the
+        # same point is overwritten instead of duplicated. Falls back to random
+        # ids when the caller has no stable key.
+        if ids is None:
+            ids = [str(uuid.uuid4()) for _ in vectors]
         points = [
             PointStruct(
-                id=str(uuid.uuid4()),
+                id=point_id,
                 vector=vector,
                 payload=payload,
             )
-            for vector, payload in zip(vectors, payloads)
+            for point_id, vector, payload in zip(ids, vectors, payloads)
         ]
         self.client.upsert(collection_name=self.collection, points=points)
 

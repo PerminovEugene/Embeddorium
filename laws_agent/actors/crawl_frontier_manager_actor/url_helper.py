@@ -1,5 +1,8 @@
 from urllib.parse import urlparse, urlunparse
 
+from laws_agent.clients.queue.process_link_payload import ProcessLinkSourcePayload
+from laws_agent.storage.sql.sql_store import SqlStore
+
 
 def normalize_url(url: str) -> str:
     parsed = urlparse(url)
@@ -25,4 +28,17 @@ def normalize_url(url: str) -> str:
 def get_origin(url: str) -> str:
     parsed = urlparse(url)
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def is_allowed_url(
+    *, payload: ProcessLinkSourcePayload, normalized_url: str, store: SqlStore
+) -> bool:
+    if payload.parent_document_id is None:
+        return True
+
+    parent_document = store.documents.get(payload.parent_document_id)
+    if parent_document is None:
+        return False
+
+    return get_origin(parent_document.source_url) == get_origin(normalized_url)
 

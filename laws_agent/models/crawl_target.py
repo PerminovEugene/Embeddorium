@@ -11,10 +11,35 @@ from pydantic import BaseModel
 class CrawlTargetStatus(StrEnum):
     DISCOVERED = "discovered"
     QUEUED = "queued"
-    PROCESSING = "processing"
+
+    # Pipeline stages (each owned by one actor via a compare-and-set lock).
+    FETCHING = "fetching"
+    FETCHED = "fetched"
+    PARSING = "parsing"
+    PARSED = "parsed"
+    CHUNKING = "chunking"
+    CHUNKED = "chunked"
+    SCHEDULING = "scheduling"
     PROCESSED = "processed"
+
+    # Terminal / skip states.
     SKIPPED = "skipped"
+    SKIPPED_UNSUPPORTED = "skipped_unsupported"
+    FAILED_TRANSIENT = "failed_transient"
+    FAILED_PERMANENT = "failed_permanent"
+
+    # Legacy statuses kept for backwards compatibility with existing rows.
+    PROCESSING = "processing"
     FAILED = "failed"
+
+
+# Statuses from which a URL should NOT be re-queued by the frontier manager.
+# Transient failures (and the legacy FAILED) stay re-queueable.
+TERMINAL_OR_ACTIVE_STATUSES = frozenset(
+    s
+    for s in CrawlTargetStatus
+    if s not in (CrawlTargetStatus.FAILED_TRANSIENT, CrawlTargetStatus.FAILED)
+)
 
 
 class CrawlTarget(BaseModel):

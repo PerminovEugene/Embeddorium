@@ -2,7 +2,7 @@ import sys
 import dramatiq
 
 from laws_agent.clients.queue.queue_client import QueueClient
-from laws_agent.clients.queue.queue_names import LINK_PROCESSOR_QUEUE, LINK_PROCESSOR_ACTOR
+from laws_agent.clients.queue.queue_names import CRAWL_FRONTIER_MANAGER_QUEUE, CRAWL_FRONTIER_MANAGER_ACTOR
 from laws_agent.clients.queue.process_link_payload import ProcessLinkSourcePayload
 from laws_agent.parsers.config_parser import parse_sources_config
 
@@ -26,8 +26,8 @@ def main(config_path: str, broker=None) -> None:
             payload = ProcessLinkSourcePayload(url=url, group=group.name)
             broker.enqueue(
                 dramatiq.Message(
-                    queue_name=LINK_PROCESSOR_QUEUE,
-                    actor_name=LINK_PROCESSOR_ACTOR,
+                    queue_name=CRAWL_FRONTIER_MANAGER_QUEUE,
+                    actor_name=CRAWL_FRONTIER_MANAGER_ACTOR,
                     args=[],
                     kwargs=payload.to_actor_kwargs(),
                     options={},

@@ -67,13 +67,14 @@ def _embed_chunks(
             torch.mps.empty_cache()
 
         vector_store.upsert(
+            ids=[str(chunk.id) for chunk in batch],
             vectors=[embedding.tolist() for embedding in embeddings],
             payloads=[
                 {
                     "chunk_id": str(chunk.id),
                     "document_id": str(payload.document_id),
                     "chunk_index": chunk.chunk_index,
-                    "language": payload.group,
+                    "group": payload.group,
                 }
                 for chunk in batch
             ],

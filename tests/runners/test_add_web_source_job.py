@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, call
 
-from laws_agent.clients.queue.queue_names import LINK_PROCESSOR_QUEUE, LINK_PROCESSOR_ACTOR
+from laws_agent.clients.queue.queue_names import CRAWL_FRONTIER_MANAGER_QUEUE, CRAWL_FRONTIER_MANAGER_ACTOR
 from laws_agent.runners.add_web_source_job import main, ensure_scheme
 
 
@@ -49,8 +49,8 @@ def test_enqueued_messages_have_correct_queue_and_actor(config_file: Path) -> No
 
     for enqueue_call in broker.enqueue.call_args_list:
         message: dramatiq.Message = enqueue_call.args[0]
-        assert message.queue_name == LINK_PROCESSOR_QUEUE
-        assert message.actor_name == LINK_PROCESSOR_ACTOR
+        assert message.queue_name == CRAWL_FRONTIER_MANAGER_QUEUE
+        assert message.actor_name == CRAWL_FRONTIER_MANAGER_ACTOR
 
 
 def test_enqueued_messages_have_correct_urls_and_groups(config_file: Path) -> None:

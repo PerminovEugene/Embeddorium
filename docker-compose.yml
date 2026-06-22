@@ -34,6 +34,22 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
 
+  # One-off migrator. Applies pending SQL migrations and exits. Workers that
+  # touch the DB wait for this to complete successfully before starting.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    command: python -m laws_agent.storage.sql.migrate
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      - postgres
+
   # x-worker-env: &worker-env
   #   HG_TOKEN: ${HG_TOKEN}
   #   POSTGRES_HOST: postgres
@@ -48,37 +64,169 @@ services:
   #   RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
   #   QDRANT_URL: http://qdrant:6333
 
-  worker-link-processor:
+  worker-crawl-frontier-manager:
     build:
       context: .
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: dramatiq --watch laws_agent laws_agent.actors.link_processor_actor
+    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
-      - rabbitmq
-      - postgres
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
     restart: on-failure
 
-  worker-web-source-processor:
+  # --- ingestion pipeline (one worker per stage) ---
+
+  worker-fetch-source:
     build:
       context: .
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: "web"
-    command: dramatiq --watch laws_agent laws_agent.actors.web_source_processor_actor
+    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
-      - rabbitmq
-      - postgres
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
     restart: on-failure
+
+  worker-parse-source:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: "web"
+    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-chunk-document:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: "web"
+    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-schedule-embeddings:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-schedule-links:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-outbox-dispatcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    command: python -m laws_agent.outbox.dispatcher
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  # One-off seeder. Not started by `up` (tools profile); run via scripts/seed.sh
+  # or: docker compose run --rm seed config.json
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    profiles: ["tools"]
+    entrypoint: ["python", "-m", "laws_agent.runners.add_web_source_job"]
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   qdrant_data:
