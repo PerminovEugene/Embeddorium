@@ -71,6 +71,10 @@ class CrawlTargetORM(Base):
         ForeignKey("documents.id", ondelete="SET NULL"),
         nullable=True,
     )
+    log_dir: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
     error: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,

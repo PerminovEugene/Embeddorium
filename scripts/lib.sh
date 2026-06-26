@@ -32,4 +32,7 @@ WORKERS=(
 # Qdrant's REST API, reached from the host (container port 6333 is published).
 QDRANT_HOST_URL="${QDRANT_HOST_URL:-http://localhost:6333}"
 
+# Per-URL file logging base dir (mirrors laws_agent.config.LOG_DIR default).
+LOG_DIR="${LOG_DIR:-logs}"
+
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }

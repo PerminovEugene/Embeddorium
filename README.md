@@ -71,6 +71,8 @@ cp .env.example .env
 | `POSTGRES_HOST`     | no       | `localhost`             | PostgreSQL host          |
 | `POSTGRES_PORT`     | no       | `5432`                  | PostgreSQL port          |
 | `QDRANT_URL`        | no       | `http://localhost:6333` | Qdrant instance URL      |
+| `EMBED_PROVIDER`    | no       | `huggingface`           | `huggingface` (real model) or `mock` (random vectors) |
+| `MOCK_EMBED_DIM`    | no       | `4096`                  | Vector dimension used by the `mock` provider |
 
 ### Agent env vars
 
@@ -170,9 +172,28 @@ laws-generate "What are the VAT rules in Estonia?"
 
 The provider can also be set via `LLM_PROVIDER` in `.env` instead of passing it as an argument.
 
-### Run actor locally
+### Embedding provider
 
-Run embed actor locally
+The embed stage (`worker-embed-chunks`) runs in Docker like every other stage. The provider is selected by `EMBED_PROVIDER` in `.env.docker`:
+
+- **`mock`** (the compose default) — returns random vectors of `MOCK_EMBED_DIM` dimensions. Imports neither `torch` nor `sentence-transformers` and loads no model, so embedding completes near-instantly and the container image stays light (`qdrant-client` only). Use this to exercise the **entire pipeline end to end quickly**. Mock vectors are random, so retrieval results are meaningless — this verifies the flow, not query quality.
+
+  ```sh
+  EMBED_PROVIDER=mock
+  # optional — defaults to 4096 (the real model's dimension)
+  MOCK_EMBED_DIM=4096
+  ```
+
+Bring the stack up and seed as usual; the embed worker drains the queue automatically:
+
+```sh
+docker compose up -d --build
+scripts/seed.sh config.json
+```
+
+#### Real local model (optional)
+
+Embedding with the real `Qwen/Qwen3-Embedding-8B` model is heavy (multi-GB `torch`/`sentence-transformers` install + slow inference) and isn't installed in the compose image. To use it, install the `embedding` extra (`pip install -e ".[embedding]"`), leave `EMBED_PROVIDER` unset (or set it to `huggingface`) in `.env`, and run the actor locally:
 
 ```sh
 dramatiq laws_agent laws_agent.actors.embed_chunks_actor --processes 1 --threads 1

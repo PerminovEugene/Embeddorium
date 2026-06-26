@@ -58,6 +58,10 @@ class CrawlTarget(BaseModel):
     parent_chunk_id: Optional[uuid.UUID] = None
     parent_document_id: Optional[uuid.UUID] = None
 
+    # Relative path of this target's per-URL log folder, nested under its
+    # parent's (e.g. "emta_ee-a1b2/some-subpage-c3d4"). See log_routing.py.
+    log_dir: Optional[str] = None
+
     error: Optional[str] = None
     skip_reason: Optional[str] = None
 

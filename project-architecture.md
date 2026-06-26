@@ -113,7 +113,7 @@ Loads chunks, runs `Qwen/Qwen3-Embedding-8B` via `sentence-transformers`, upsert
 | `worker-chunk-document`    | Runs chunk_document (stage 3)     |
 | `worker-schedule-embeddings` | Runs schedule_embeddings (stage 4) |
 | `worker-schedule-links`    | Runs schedule_discovered_links (stage 5) |
+| `worker-embed-chunks`      | Runs embed_chunks (stage 7) — embeds chunks, upserts to Qdrant |
 | `worker-outbox-dispatcher` | Publishes outbox_events to RabbitMQ |
-| `worker-embed-chunks`      | Runs embed_chunks_actor (local)   |
 
 Workers are built from `Dockerfile.dev`, mount the source tree as a volume, and use `dramatiq --watch laws_agent` so they reload on any code change.

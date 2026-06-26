@@ -28,11 +28,19 @@ web = [
   "langchain-text-splitters>=0.3",
 ]
 
-# worker-embed-chunks (runs locally, not in docker-compose)
+# worker-embed-chunks (in docker-compose): lightweight path for the mock and,
+# later, remote-HTTP embedding providers. Qdrant client only — no ML libraries
+# in the container image.
+embed = [
+  "qdrant-client>=1",
+]
+
+# Real local embedding model (run by hand, not in docker-compose): the heavy ML
+# stack on top of the lightweight `embed` deps.
 embedding = [
+  "qdrant-client>=1",
   "sentence-transformers>=3",
   "huggingface-hub>=0.20",
-  "qdrant-client>=1",
   "torch>=2",
 ]
 

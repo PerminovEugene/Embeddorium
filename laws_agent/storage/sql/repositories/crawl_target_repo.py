@@ -26,6 +26,7 @@ def _to_crawl_target(orm: CrawlTargetORM) -> CrawlTarget:
         document_id=orm.document_id,
         parent_chunk_id=orm.parent_chunk_id,
         parent_document_id=orm.parent_document_id,
+        log_dir=orm.log_dir,
         error=orm.error,
         skip_reason=orm.skip_reason,
         created_at=orm.created_at,
@@ -48,6 +49,7 @@ class CrawlTargetRepository:
                 document_id=target.document_id,
                 parent_chunk_id=target.parent_chunk_id,
                 parent_document_id=target.parent_document_id,
+                log_dir=target.log_dir,
                 error=target.error,
                 skip_reason=target.skip_reason,
             )
@@ -68,6 +70,7 @@ class CrawlTargetRepository:
                     document_id=t.document_id,
                     parent_chunk_id=t.parent_chunk_id,
                     parent_document_id=t.parent_document_id,
+                    log_dir=t.log_dir,
                     error=t.error,
                     skip_reason=t.skip_reason,
                 )
@@ -135,6 +138,14 @@ class CrawlTargetRepository:
     def get(self, target_id: uuid.UUID) -> Optional[CrawlTarget]:
         with Session(self.engine) as session:
             orm = session.get(CrawlTargetORM, target_id)
+            return _to_crawl_target(orm) if orm else None
+
+    def get_by_document_id(self, document_id: uuid.UUID) -> Optional[CrawlTarget]:
+        with Session(self.engine) as session:
+            stmt = select(CrawlTargetORM).where(
+                CrawlTargetORM.document_id == document_id
+            )
+            orm = session.scalars(stmt).first()
             return _to_crawl_target(orm) if orm else None
 
     def find_active_by_normalized_url(

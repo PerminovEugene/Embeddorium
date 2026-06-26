@@ -70,7 +70,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -92,7 +95,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: "web"
-    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -112,7 +118,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: "web"
-    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -132,7 +141,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: "web"
-    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -152,7 +164,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -172,7 +187,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1 --processes 1 --threads 4
     volumes:
       - .:/app
     env_file:
@@ -181,6 +199,33 @@ services:
       rabbitmq:
         condition: service_started
       postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-embed-chunks:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        # Lightweight extra (qdrant-client only) — the container runs the mock
+        # provider now and a remote-HTTP provider later, so it needs no torch /
+        # sentence-transformers. EMBED_PROVIDER is set in .env.docker.
+        EXTRAS: "embed"
+    # --threads 1: the embedding model is a lazily-initialized module singleton;
+    # a single thread avoids racing on first init and concurrent model.encode.
+    command: dramatiq laws_agent.actors.embed_chunks_actor --queues laws.embed.chunk.generate.v1 --processes 1 --threads 1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_started
+      qdrant:
         condition: service_started
       migrate:
         condition: service_completed_successfully

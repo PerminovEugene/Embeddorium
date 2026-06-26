@@ -20,6 +20,7 @@ import dramatiq
 
 from laws_agent.clients.queue.queue_client import QueueClient
 from laws_agent.logging_config import configure_logging
+from laws_agent.storage.sql.core.engine import SqlPoolConfig
 from laws_agent.storage.sql.sql_store import SqlStore
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,13 @@ def dispatch_once(store: SqlStore, broker, limit: int = DEFAULT_BATCH_LIMIT) -> 
 
 def run_forever(poll_interval: float = DEFAULT_POLL_INTERVAL) -> None:
     configure_logging()
-    store = SqlStore()
+    # Single-threaded poll loop (not dramatiq), so one connection is enough;
+    # keep a tiny overflow for safety margin without contributing
+    # meaningfully to the cluster-wide connection count.
+    store = SqlStore(
+        pool_config=SqlPoolConfig(pool_size=1, max_overflow=2),
+        application_name="outbox_dispatcher",
+    )
     broker = QueueClient().create("outbox_dispatcher")
     logger.info("outbox dispatcher started poll_interval=%s", poll_interval)
     while True:

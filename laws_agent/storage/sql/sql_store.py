@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.engine import Engine
 
-from laws_agent.storage.sql.core.engine import create_sql_engine
+from laws_agent.storage.sql.core.engine import SqlPoolConfig, create_sql_engine
 from laws_agent.storage.sql.core.migrations import run_migrations
 from laws_agent.storage.sql.repositories.chunk_repo import ChunkRepository
 from laws_agent.storage.sql.repositories.crawl_target_repo import CrawlTargetRepository
@@ -16,8 +16,16 @@ from laws_agent.storage.sql.unit_of_work import UnitOfWork
 
 
 class SqlStore:
-    def __init__(self, dsn: str | None = None) -> None:
-        self.engine: Engine = create_sql_engine(dsn)
+    def __init__(
+        self,
+        dsn: str | None = None,
+        *,
+        pool_config: SqlPoolConfig | None = None,
+        application_name: str | None = None,
+    ) -> None:
+        self.engine: Engine = create_sql_engine(
+            dsn, pool_config=pool_config, application_name=application_name
+        )
 
         self.documents = DocumentRepository(self.engine)
         self.chunks = ChunkRepository(self.engine)

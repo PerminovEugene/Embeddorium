@@ -4,7 +4,10 @@ from unittest.mock import MagicMock, call
 import pytest
 
 from laws_agent.models.document_chunk import DocumentChunk
-from laws_agent.actors.embed_chunks_actor import _embed_chunks, BATCH_SIZE, COLLECTION_BASE, MODEL_COLLECTION_POSTFIX
+from laws_agent.actors.embed_chunks_actor.handler import (
+    embed_chunks as _embed_chunks,
+    BATCH_SIZE,
+)
 
 
 def _make_chunk(index: int, document_id: uuid.UUID) -> DocumentChunk:
