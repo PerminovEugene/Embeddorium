@@ -1,10 +1,10 @@
 """Stage 7: embed a batch of chunks and upsert vectors into Qdrant.
 
 Pure logic — no broker/dramatiq concerns. The embedding model is loaded lazily
-on first use and cached as a module singleton. The ``mock`` provider returns
-random vectors without importing torch/sentence-transformers, so this module
-stays import-light in containers that run mock (or, later, a remote HTTP)
-embedding — only the real-model path pulls the heavy ML stack.
+on first use and cached as a module singleton. The ``mock`` and ``ollama``
+providers return/fetch vectors without importing torch/sentence-transformers,
+so this module stays import-light in containers that run those providers —
+only the ``huggingface`` (real local model) path pulls the heavy ML stack.
 """
 
 from __future__ import annotations
@@ -17,6 +17,9 @@ from laws_agent.storage.vector.vector_store import VectorStore
 
 MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
 BATCH_SIZE = 4
+
+# Providers that never need torch (no local model load).
+_NO_TORCH_PROVIDERS = frozenset({"mock", "ollama"})
 
 # Lazy singletons — initialized on first call, not at import time.
 _model = None
@@ -31,9 +34,19 @@ def get_model_and_size():
             # vectors of the configured size, for fast pipeline dry runs.
             _model = MockEmbedClient(config.MOCK_EMBED_DIM)
             _model_size = config.MOCK_EMBED_DIM
+        elif config.EMBED_PROVIDER == "ollama":
+            # Deferred import: avoids pulling langchain_ollama/ollama when
+            # EMBED_PROVIDER is something else.
+            from laws_agent.clients.ollama_embed_client import OllamaEmbedClient
+
+            _model = OllamaEmbedClient(
+                model=config.OLLAMA_EMBED_MODEL,
+                base_url=config.OLLAMA_EMBED_BASE_URL,
+            )
+            _model_size = _model.get_embedding_dimension()
         else:
             # Deferred import: avoids loading torch/sentence-transformers when
-            # EMBED_PROVIDER is "mock" (or, later, a remote HTTP provider).
+            # EMBED_PROVIDER is "mock" or "ollama".
             from laws_agent.clients.hg_client import HgClient
 
             hg_client = HgClient()
@@ -62,13 +75,13 @@ def embed_chunks(
 
     chunks = store.chunks.get_many(payload.chunk_ids)
 
-    is_mock = config.EMBED_PROVIDER == "mock"
+    skip_torch = config.EMBED_PROVIDER in _NO_TORCH_PROVIDERS
 
     for start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[start : start + BATCH_SIZE]
 
-        if is_mock:
-            # Skip torch entirely — no model, no GPU/MPS bookkeeping needed.
+        if skip_torch:
+            # No local model, no GPU/MPS bookkeeping needed.
             embeddings = model.encode(
                 [chunk.text for chunk in batch],
                 batch_size=BATCH_SIZE,

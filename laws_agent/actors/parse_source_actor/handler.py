@@ -1,9 +1,10 @@
 """Stage 2: parse a fetched source into normalized text + a Document.
 
-Acquires the target (FETCHED → PARSING), loads the persisted ``SourceFetch``,
-selects a parser by content type, and in one transaction stores the Document
-(with provenance + ``text_hash``), advances to PARSED and writes the outbox
-event that triggers ``chunk_document``.
+Acquires the target (FETCHED/FILTERED → PARSING; the latter is how the
+local-file XML chain re-joins this stage after ``filter_tax_acts``), loads
+the persisted ``SourceFetch``, selects a parser by content type, and in one
+transaction stores the Document (with provenance + ``text_hash``), advances
+to PARSED and writes the outbox event that triggers ``chunk_document``.
 """
 
 from __future__ import annotations
@@ -36,7 +37,11 @@ def parse_source(*, crawl_target_id: str, group: str, store: SqlStore) -> None:
 
     target = store.crawl_targets.acquire(
         target_id=target_id,
-        from_statuses=[CrawlTargetStatus.FETCHED, CrawlTargetStatus.PARSING],
+        from_statuses=[
+            CrawlTargetStatus.FETCHED,
+            CrawlTargetStatus.PARSING,
+            CrawlTargetStatus.FILTERED,
+        ],
         to_status=CrawlTargetStatus.PARSING,
     )
     if target is None:
