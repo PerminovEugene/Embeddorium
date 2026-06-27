@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<oigusakt id="e8491bb7-b745-4167-8179-3b7aff415e66" xsi:schemaLocation="tyviseadus_1_10.02.2010 http://xmlr.eesti.ee/xml/schemas/oigusakt/tyviseadus_1_10.02.2010.xsd" xmlns="Juurakt" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<metaandmed>
+		<valjaandja>Riigikogu</valjaandja>
+		<dokumentLiik>seadus</dokumentLiik>
+		<globaalID>502062023001</globaalID>
+	</metaandmed>
+	<aktinimi id="3c7e93fa-56ee-4bc4-847d-36769593d2fd">
+		<nimi id="0fd77071-a6b7-4217-a9d4-ac5c3b883c81">
+			<pealkiri id="b2a6663f-a9f3-4429-9694-38cbf429c4f8">Land Tax Act</pealkiri>
+		</nimi>
+	</aktinimi>
+	<sisu id="072528b7-dcd4-409e-801d-ffc608a5347b">
+		<paragrahv id="para1">
+			<paragrahvNr id="00fe6613-7b52-48ae-88bd-7d0ee22ea966">1</paragrahvNr>
+			<kuvatavNr id="64905ee6-9089-4219-880a-177c9059d0a8"><![CDATA[§ 1. ]]></kuvatavNr>
+			<paragrahvPealkiri id="0c745201-ffee-4442-96c7-d37a251b5ac4">Land tax</paragrahvPealkiri>
+			<loige id="para1lg1">
+				<loigeNr id="e562fad2-45f8-486f-b419-22a4be35b874">1</loigeNr>
+				<kuvatavNr id="c039c8b2-2482-44a8-b77b-5a9f56e01d33"><![CDATA[(1)]]></kuvatavNr>
+				<sisuTekst id="03b4f763-b2a1-49b2-91d1-247e6c234cac">
+					<tavatekst id="1de7a0c4-b699-4945-884c-06500dae777d">Land tax is a tax based on the taxable value of land.</tavatekst>
+				</sisuTekst>
+			</loige>
+		</paragrahv>
+		<paragrahv id="para2">
+			<paragrahvNr id="91c5cff9-a0c3-4e11-88d3-cc801f3491a0">2</paragrahvNr>
+			<kuvatavNr id="e0d9115e-9bb1-42fc-a2d4-adacd0960d83"><![CDATA[§ 2. ]]></kuvatavNr>
+			<paragrahvPealkiri id="8a39c7da-0abd-43db-b154-4857579ad6bb">Object of taxation</paragrahvPealkiri>
+			<loige id="para2lg1">
+				<loigeNr id="e12dd0d4-e833-41f2-be5e-3082526994a6"/>
+				<kuvatavNr id="25339759-bdd5-44e4-80f8-2876a76e1ae5"/>
+				<sisuTekst id="9104869a-7702-4556-9cb8-884705a3bcc0">
+					<tavatekst id="dd020846-7cfc-4448-9396-8b7904ae578c">Land tax is imposed on all land, except land specified in § 4 of this Act.</tavatekst>
+				</sisuTekst>
+			</loige>
+		</paragrahv>
+	</sisu>
+</oigusakt>

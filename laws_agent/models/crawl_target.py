@@ -22,6 +22,11 @@ class CrawlTargetStatus(StrEnum):
     SCHEDULING = "scheduling"
     PROCESSED = "processed"
 
+    # Local-file (XML) ingestion chain: tax-relevance gate between fetch and
+    # parse. Web targets never enter these statuses.
+    FILTERING = "filtering"
+    FILTERED = "filtered"
+
     # Terminal / skip states.
     SKIPPED = "skipped"
     SKIPPED_UNSUPPORTED = "skipped_unsupported"

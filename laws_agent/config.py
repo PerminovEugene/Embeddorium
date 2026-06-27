@@ -17,14 +17,28 @@ def _require(name: str) -> str:
 HG_TOKEN: str = os.getenv("HG_TOKEN", "")
 
 # Embedding provider. "huggingface" loads the real (slow) SentenceTransformer
-# model; "mock" returns random vectors instead, so the crawl/embed pipeline can
-# be exercised quickly without loading any model.
+# model; "ollama" calls a remote Ollama server over HTTP (e.g. qwen3-embedding);
+# "mock" returns random vectors instead, so the crawl/embed pipeline can be
+# exercised quickly without loading any model.
 EMBED_PROVIDER: str = os.getenv("EMBED_PROVIDER", "huggingface")
 
 # Vector dimension used by the mock embedding provider. Defaults to the real
 # model's dimension (Qwen/Qwen3-Embedding-8B = 4096) so mock and real
 # collections stay compatible by default.
 MOCK_EMBED_DIM: int = int(os.getenv("MOCK_EMBED_DIM", "4096"))
+
+# Ollama embeddings (EMBED_PROVIDER=ollama). This is the embedding pipeline's
+# OWN Ollama endpoint — deliberately separate from the chat agent's
+# OLLAMA_BASE_URL (laws_agent.agent.config), because the embed worker runs in
+# docker while the agent runs on the host, so they need different URLs.
+# OLLAMA_EMBED_BASE_URL must be reachable from wherever the embed worker runs:
+# - docker compose, Ollama as a compose service: http://ollama:11434
+#   (the service name — not localhost; containers have their own loopback).
+# - docker compose, Ollama on the host (Mac/Windows Docker Desktop):
+#   http://host.docker.internal:11434
+# - process running directly on the host: http://localhost:11434
+OLLAMA_EMBED_BASE_URL: str = os.getenv("OLLAMA_EMBED_BASE_URL", "http://localhost:11434")
+OLLAMA_EMBED_MODEL: str = os.getenv("OLLAMA_EMBED_MODEL", "qwen3-embedding")
 
 # PostgreSQL
 SQL_USER: str = _require("POSTGRES_USER")

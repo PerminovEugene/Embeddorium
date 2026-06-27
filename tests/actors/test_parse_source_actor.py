@@ -5,10 +5,17 @@ import pytest
 from laws_agent.actors.parse_source_actor import parse_source
 from laws_agent.clients.queue.queue_names import CHUNK_DOCUMENT_QUEUE
 from laws_agent.models import CrawlTargetStatus, Document, SourceFetch
-from tests.actors.pipeline_helpers import make_store, make_target, outbox_for_queue, uow_of
+from tests.actors.pipeline_helpers import (
+    make_store,
+    make_target,
+    outbox_for_queue,
+    uow_of,
+)
 
 
-def _fetch(target_id, *, content_type="text/plain", content="Some statute text.") -> SourceFetch:
+def _fetch(
+    target_id, *, content_type="text/plain", content="Some statute text."
+) -> SourceFetch:
     return SourceFetch(
         crawl_target_id=target_id,
         final_url="https://emta.ee/",
@@ -58,13 +65,39 @@ def test_unsupported_content_type_is_skipped():
     store.unit_of_work.assert_not_called()
 
 
+def test_filtered_target_is_acquired_for_the_file_chain():
+    """FILTERED is how the local-file XML chain re-joins this stage after
+    filter_tax_acts; web targets never enter this status."""
+    target = make_target(status=CrawlTargetStatus.FILTERED)
+    store = make_store(acquired=target)
+    store.source_fetches.get_by_crawl_target.return_value = _fetch(
+        target.id, content_type="application/xml", content="<oigusakt/>"
+    )
+    uow = uow_of(store)
+    uow.upsert_document.return_value = Document(
+        id=uuid.uuid4(), source_url=target.original_url
+    )
+
+    parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
+
+    store.crawl_targets.acquire.assert_called_once()
+    assert (
+        CrawlTargetStatus.FILTERED
+        in store.crawl_targets.acquire.call_args.kwargs["from_statuses"]
+    )
+    uow.set_status.assert_called_once()
+    assert uow.set_status.call_args.args[1] == CrawlTargetStatus.PARSED
+
+
 def test_happy_path_saves_document_and_enqueues_chunk():
     target = make_target(status=CrawlTargetStatus.FETCHED)
     store = make_store(acquired=target)
     store.source_fetches.get_by_crawl_target.return_value = _fetch(target.id)
     doc_id = uuid.uuid4()
     uow = uow_of(store)
-    uow.upsert_document.return_value = Document(id=doc_id, source_url=target.original_url)
+    uow.upsert_document.return_value = Document(
+        id=doc_id, source_url=target.original_url
+    )
 
     parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
 

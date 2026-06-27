@@ -12,6 +12,7 @@ from typing import Optional, Protocol
 
 from laws_agent.parsers.html_parser import HtmlParser
 from laws_agent.parsers.plain_text_parser import PlainTextParser
+from laws_agent.parsers.xml_parser import XmlParser
 
 # Bump when parsing output changes in a way that should invalidate provenance.
 PARSER_VERSION = "1"
@@ -23,11 +24,14 @@ class Parser(Protocol):
 
 _HTML = HtmlParser()
 _PLAIN = PlainTextParser()
+_XML = XmlParser()
 
 _REGISTRY: dict[str, Parser] = {
     "text/html": _HTML,
     "application/xhtml+xml": _HTML,
     "text/plain": _PLAIN,
+    "application/xml": _XML,
+    "text/xml": _XML,
 }
 
 

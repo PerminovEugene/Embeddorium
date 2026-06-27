@@ -27,6 +27,11 @@ class _CrawlStagePayload:
 
 
 @dataclass(frozen=True)
+class FilterTaxActsPayload(_CrawlStagePayload):
+    pass
+
+
+@dataclass(frozen=True)
 class ParseSourcePayload(_CrawlStagePayload):
     pass
 

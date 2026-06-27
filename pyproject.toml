@@ -28,11 +28,12 @@ web = [
   "langchain-text-splitters>=0.3",
 ]
 
-# worker-embed-chunks (in docker-compose): lightweight path for the mock and,
-# later, remote-HTTP embedding providers. Qdrant client only — no ML libraries
-# in the container image.
+# worker-embed-chunks (in docker-compose): lightweight path for the mock and
+# remote-HTTP (ollama) embedding providers. No torch/sentence-transformers in
+# the container image — langchain-ollama/ollama are HTTP clients (httpx-based).
 embed = [
   "qdrant-client>=1",
+  "langchain-ollama>=0.3",
 ]
 
 # Real local embedding model (run by hand, not in docker-compose): the heavy ML

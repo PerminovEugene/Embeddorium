@@ -33,6 +33,25 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Optional: Ollama running inside the compose network, reachable by other
+  # services as http://ollama:11434 (set OLLAMA_EMBED_BASE_URL accordingly in
+  # .env.docker). Not started by a plain `docker compose up -d` — opt in with
+  # `docker compose --profile ollama up -d`, or skip this service entirely and
+  # point OLLAMA_EMBED_BASE_URL at an Ollama instance already running on the host
+  # (http://host.docker.internal:11434 on Mac/Windows Docker Desktop).
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
   # One-off migrator. Applies pending SQL migrations and exits. Workers that
   # touch the DB wait for this to complete successfully before starting.
@@ -73,14 +92,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -98,14 +117,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -121,14 +140,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -144,14 +163,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -167,14 +186,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -190,14 +209,62 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1 --processes 1 --threads 4
+    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1 --processes 1 --threads 1
     volumes:
       - .:/app
     env_file:
       - .env.docker
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      postgres:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  # --- local-file (XML) ingestion chain (re-joins parse_source) ---
+
+  worker-fetch-file-source:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.fetch_file_source_actor --queues laws.crawl.file.fetch.v1 --processes 1 --threads 1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  worker-filter-tax-acts:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq laws_agent.actors.filter_tax_acts_actor --queues laws.crawl.file.filter.v1 --processes 1 --threads 1
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -209,9 +276,14 @@ services:
       context: .
       dockerfile: Dockerfile.dev
       args:
-        # Lightweight extra (qdrant-client only) — the container runs the mock
-        # provider now and a remote-HTTP provider later, so it needs no torch /
-        # sentence-transformers. EMBED_PROVIDER is set in .env.docker.
+        # Lightweight extra (qdrant-client + langchain-ollama) — the container
+        # runs the mock or ollama provider, so it needs no torch /
+        # sentence-transformers. EMBED_PROVIDER/OLLAMA_EMBED_BASE_URL are set in
+        # .env.docker. If EMBED_PROVIDER=ollama and Ollama runs as the `ollama`
+        # compose service (profile "ollama"), OLLAMA_EMBED_BASE_URL must be
+        # http://ollama:11434 — not localhost — since each container has its
+        # own loopback interface. If Ollama runs on the host instead, use
+        # http://host.docker.internal:11434 (Mac/Windows Docker Desktop).
         EXTRAS: "embed"
     # --threads 1: the embedding model is a lazily-initialized module singleton;
     # a single thread avoids racing on first init and concurrent model.encode.
@@ -222,7 +294,7 @@ services:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       qdrant:
@@ -244,7 +316,7 @@ services:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
@@ -267,13 +339,66 @@ services:
       - .env.docker
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_started
       migrate:
         condition: service_completed_successfully
 
+  # One-off seeder for the local-file (XML) chain. Not started by `up` (tools
+  # profile); run via scripts/seed_files.sh or:
+  # docker compose run --rm seed-files config.files.json
+  seed-files:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    profiles: ["tools"]
+    entrypoint: ["python", "-m", "laws_agent.runners.add_file_source_job"]
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+  server:
+    build: ./server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - OLLAMA_HOST=host.docker.internal
+      # - OLLAMA_PORT=11434
+    depends_on:
+      - qdrant
+
+  ui:
+    image: node:lts-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./ui:/app
+    command: >
+      sh -c "npm ci &&
+            npm run dev -- --host"
+    environment:
+      - HOST=0.0.0.0
+    # stdin_open: true
+    # tty: true
+
 volumes:
   qdrant_data:
   postgres_data:
   rabbitmq_data:
+  ollama_data:

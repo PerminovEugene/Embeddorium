@@ -1,0 +1,11 @@
+{
+  "groups": [
+    {
+      "name": "Estonia",
+      "attributes": { "code": "EE", "Country": "Estonia" },
+      "sources": [
+        { "description": "Estonian acts XML dump (English).", "type": "xml", "path": "xml.2026.en", "glob": "*.xml" }
+      ]
+    }
+  ]
+}

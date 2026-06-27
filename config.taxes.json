@@ -1,0 +1,11 @@
+{
+  "groups": [
+    {
+      "name": "Estonia",
+      "attributes": { "code": "EE", "Country": "Estonia" },
+      "sources": [
+        { "description": "Single Estonian tax act (Income Tax Act) for testing the file ingestion chain.", "type": "xml", "path": "xml.2026.en", "glob": "508052026001.xml" }
+      ]
+    }
+  ]
+}
