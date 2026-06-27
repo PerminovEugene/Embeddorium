@@ -23,6 +23,12 @@ class QueueClient:
                     "credentials": pika.PlainCredentials(
                         config.RABBITMQ_USER, config.RABBITMQ_PASSWORD
                     ),
+                    # Negotiated heartbeat is min(this, server's suggested value),
+                    # so this only takes effect alongside `heartbeat` in
+                    # rabbitmq/rabbitmq.conf. Kept generous (10 min) so brief
+                    # Docker Desktop VM stalls don't trip "missed heartbeats" and
+                    # churn every worker connection. See rabbitmq.conf for context.
+                    "heartbeat": 600,
                     "client_properties": {"connection_name": connection_name},
                 }]
             )

@@ -45,6 +45,17 @@ embedding = [
   "torch>=2",
 ]
 
+# Embeddings tester API (server/): FastAPI service that embeds source/candidate
+# texts and scores them against each other. Reuses laws_agent's VectorStore +
+# OllamaEmbedClient, so it needs the same vector/embed deps plus the web stack.
+server = [
+  "fastapi>=0.103",
+  "uvicorn>=0.23",
+  "qdrant-client>=1",
+  "langchain-ollama>=0.3",
+  "numpy>=1",
+]
+
 mcp = [
   "fastmcp",
 ]

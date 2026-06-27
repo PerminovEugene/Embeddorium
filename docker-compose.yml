@@ -368,19 +368,30 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Embeddings tester API (server/). Built with the shared Dockerfile.dev so it
+  # can import laws_agent (VectorStore / OllamaEmbedClient / config) — it reuses
+  # the pipeline's Qdrant + embedding code instead of its own. .env.docker
+  # supplies QDRANT_URL and the DB/RabbitMQ vars laws_agent.config requires at
+  # import. Ollama host/port come from the request (UI) + OLLAMA_HOST.
   server:
-    build: ./server
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: "server"
+    working_dir: /app/server
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
-      - ./server:/app
+      - .:/app
+    env_file:
+      - .env.docker
     environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
       - OLLAMA_HOST=host.docker.internal
-      # - OLLAMA_PORT=11434
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
 
   ui:
     image: node:lts-alpine

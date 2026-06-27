@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* Custom Colors */
+  --color-emd-background: #0e1d2e;
+  --color-emd-panel: #eaf4f6;
+  --color-emd-primary: #50bfc2;
+  --color-emd-accent: #4b9aa8;
+  --color-emd-border: #1c2f40;
+  --color-emd-text: #1b2c3b;
+  --color-emd-placeholder: #6c7a89;
+  --color-emd-button-text: #ffffff;
+
+  /* Font Families */
+  --font-display: "Cinzel", serif;
+
+  /* Font Sizes */
+  --text-header-logo: 3rem;
+  --text-header-title: 2.5rem;
+  --text-header-sub: 1rem;
+
+  /* Spacing */
+  --spacing-header-x: 2.5rem;
+  --spacing-header-y: 1.75rem;
+}
+
+body {
+  @apply bg-emd-background text-emd-text;
+}

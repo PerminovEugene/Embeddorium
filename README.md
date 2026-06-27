@@ -322,6 +322,30 @@ Embedding with the real `Qwen/Qwen3-Embedding-8B` model is heavy (multi-GB `torc
 dramatiq laws_agent laws_agent.actors.embed_chunks_actor --processes 1 --threads 1
 ```
 
+## Embeddings tester (UI + API)
+
+A small web tool for **eyeballing how an embedding model scores text against
+text**: enter source and candidate texts, pick one or more Ollama models and
+similarity metrics, and get a ranked table of every source/candidate pair.
+
+- `server/` — FastAPI API (`/compare`). Reuses `laws_agent`'s `VectorStore`,
+  `OllamaEmbedClient`, and `config`, so it embeds and stores vectors exactly
+  like the ingestion pipeline. Built from `Dockerfile.dev` with the `server`
+  extra.
+- `ui/` — React + Vite front end.
+
+```sh
+docker compose up -d --build qdrant server ui
+```
+
+- UI:  http://localhost:5173
+- API: http://localhost:8000 (docs at `/docs`)
+
+Embeddings come from an **Ollama** server (port chosen per request in the UI;
+host via `OLLAMA_HOST`, default `host.docker.internal`). Pull a model first, e.g.
+`ollama pull nomic-embed-text`. See [`server/README.md`](server/README.md) for
+standalone (non-Docker) usage.
+
 ## Dependency management
 
 ```sh
