@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { substituteVariables } from "../utils/helpers";
 import { useFormContext } from "./FormContext";
-import { Match } from "./types";
+import { Match, DbMatch } from "./types";
+import { SERVER_URL } from "./consts";
 import { sectionStyle } from "../styles/styles";
 
 export const inputIdGroupSeparator = "____";
@@ -9,7 +10,8 @@ export const inputIdGroupSeparator = "____";
 const SubmitButton = () => {
   const [errors, setErrors] = useState<string[]>([]);
 
-  const { state, validate, setMatches, saveFormToStorage } = useFormContext();
+  const { state, validate, setMatches, setDbMatches, saveFormToStorage } =
+    useFormContext();
 
   const validateForm = (): boolean => {
     const errors = validate();
@@ -17,10 +19,8 @@ const SubmitButton = () => {
     return errors.length === 0;
   };
 
-  const handleCompare = () => {
-    if (!validateForm()) return;
-
-    const processedSourceInputs = state.sourceInputs
+  const buildProcessedSourceInputs = () =>
+    state.sourceInputs
       .map((input) =>
         state.sourceVariableGroups.length
           ? state.sourceVariableGroups.map((group) => ({
@@ -30,6 +30,53 @@ const SubmitButton = () => {
           : { id: input.id, text: input.text }
       )
       .flat();
+
+  const handleSearch = () => {
+    if (!validateForm()) return;
+
+    const processedSourceInputs = buildProcessedSourceInputs();
+
+    const data = {
+      configuration: {
+        ollamaPort: state.ollamaPort,
+        // The run supplies the collection + embedding model server-side.
+        runId: state.selectedRun?.id,
+      },
+      source: { inputs: processedSourceInputs },
+    };
+
+    fetch(`${SERVER_URL}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        saveFormToStorage();
+        const dbMatches: DbMatch[] = (result.results ?? []).map(
+          (hit: DbMatch) => {
+            const queryText = processedSourceInputs.find(
+              (input) => input.id === hit.source_id
+            )?.text;
+            return { ...hit, queryText: queryText ?? hit.queryText };
+          }
+        );
+        setDbMatches(dbMatches);
+      })
+      .catch((error) => {
+        console.error("Error searching collection:", error);
+      });
+  };
+
+  const handleCompare = () => {
+    if (state.sourceType === "db") {
+      handleSearch();
+      return;
+    }
+
+    if (!validateForm()) return;
+
+    const processedSourceInputs = buildProcessedSourceInputs();
 
     const processedCandidateInputs = state.candidateInputs
       .map((input) =>
@@ -52,7 +99,7 @@ const SubmitButton = () => {
       candidates: { inputs: processedCandidateInputs },
     };
 
-    fetch("http://localhost:8000/compare", {
+    fetch(`${SERVER_URL}/compare`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -109,7 +156,7 @@ const SubmitButton = () => {
           cursor: "pointer",
         }}
       >
-        Compare
+        {state.sourceType === "db" ? "Search" : "Compare"}
       </button>
     </div>
   );

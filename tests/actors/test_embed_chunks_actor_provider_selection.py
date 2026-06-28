@@ -1,6 +1,6 @@
 """get_model_and_size() provider selection — kept separate from
-test_embed_chunks_actor.py since it exercises module-level singleton state
-(_model/_model_size) rather than the pure embed_chunks() logic.
+test_embed_chunks_actor.py since it exercises module-level cache state
+(_models) rather than the pure embed_chunks() logic.
 """
 
 from unittest.mock import MagicMock, patch
@@ -12,13 +12,11 @@ from laws_agent.actors.embed_chunks_actor.handler import get_model_and_size
 
 
 @pytest.fixture(autouse=True)
-def _reset_singleton():
-    """Each test selects its own provider — never reuse the cached model."""
-    handler_module._model = None
-    handler_module._model_size = None
+def _reset_cache():
+    """Each test selects its own provider — never reuse a cached model."""
+    handler_module._models.clear()
     yield
-    handler_module._model = None
-    handler_module._model_size = None
+    handler_module._models.clear()
 
 
 def test_mock_provider_returns_mock_embed_client() -> None:

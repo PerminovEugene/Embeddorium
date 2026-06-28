@@ -7,18 +7,33 @@ from laws_agent import config
 
 VECTOR_SIZE = 1536  # change to match your embedding model output dimension
 
+# Maps the persisted similarity name (see VectorStoreSettings) to a Qdrant
+# distance, so a run's recorded similarity drives how its collection is created.
+_SIMILARITY_TO_DISTANCE = {
+    "cosine": Distance.COSINE,
+    "dot": Distance.DOT,
+    "euclid": Distance.EUCLID,
+}
+
+
+def similarity_to_distance(similarity: str) -> Distance:
+    """Resolve a stored similarity name to a Qdrant ``Distance`` (default cosine)."""
+    return _SIMILARITY_TO_DISTANCE.get(similarity, Distance.COSINE)
+
 
 class VectorStore:
     def __init__(self, collection: str, url: str = config.QDRANT_URL) -> None:
         self.client = QdrantClient(url=url)
         self.collection = collection
 
-    def create_collection(self, vector_size: int = VECTOR_SIZE) -> None:
+    def create_collection(
+        self, vector_size: int = VECTOR_SIZE, distance: Distance = Distance.COSINE
+    ) -> None:
         existing = [c.name for c in self.client.get_collections().collections]
         if self.collection not in existing:
             self.client.create_collection(
                 collection_name=self.collection,
-                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+                vectors_config=VectorParams(size=vector_size, distance=distance),
             )
 
     def upsert(

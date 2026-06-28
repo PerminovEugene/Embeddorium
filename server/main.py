@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
-from models import CompareRequest
+from models import CompareRequest, SearchRequest
 from embedder import get_embeddings
 from vector_store_utils import get_store, store_vectors
 from matcher import match_embeddings
+from db_search import search_db
+from pipeline_runs import list_pipeline_runs
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -38,8 +40,8 @@ async def compare_embeddings(request):
     all_results = []
 
     for model_name in model_names:
-        source_embeddings = await get_embeddings(model_name, ollama_port, [t.text for t in source_texts])
-        candidate_embeddings = await get_embeddings(model_name, ollama_port, [t.text for t in candidate_texts])
+        source_embeddings = await get_embeddings("ollama", model_name, ollama_port, [t.text for t in source_texts])
+        candidate_embeddings = await get_embeddings("ollama", model_name, ollama_port, [t.text for t in candidate_texts])
 
         dim_size = len(source_embeddings[0])
         store = get_store(model_name, dim_size)
@@ -62,6 +64,21 @@ async def compare_embeddings(request):
         "request_uuid": request_uuid,
         "matches": all_results
     }
+
+
+@app.get("/pipeline-runs")
+async def pipeline_runs():
+    """List the recorded ingestion pipeline runs (from Postgres) available to
+    search as a source DB. Each run carries the collection it populated and the
+    embedding provider/model it was built with."""
+    return {"runs": list_pipeline_runs()}
+
+
+@app.post("/search")
+async def search(request: SearchRequest):
+    """Embed each source text and return its nearest vectors from the selected
+    pipeline run's collection, enriched with chunk/document info from Postgres."""
+    return await search_db(request)
 
 
 @app.get("/health")

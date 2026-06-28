@@ -18,11 +18,13 @@ than duplicating it:
 
 | File                   | Purpose                                                        |
 | ---------------------- | ------------------------------------------------------------- |
-| `main.py`              | FastAPI app + `/compare` and `/health` endpoints              |
-| `models.py`            | Pydantic request models (`CompareRequest`)                    |
+| `main.py`              | FastAPI app + `/compare`, `/pipeline-runs`, `/search`, `/health`|
+| `models.py`            | Pydantic request models (`CompareRequest`, `SearchRequest`)   |
 | `embedder.py`          | Embeddings via `OllamaEmbedClient`                            |
-| `vector_store_utils.py`| Qdrant collection + upsert via `VectorStore`                 |
+| `vector_store_utils.py`| Qdrant upsert via `VectorStore`                              |
 | `matcher.py`           | Similarity metrics + pairwise scoring                         |
+| `pipeline_runs.py`     | Lists/loads ingestion pipeline runs from Postgres             |
+| `db_search.py`         | Nearest-vector search over a run's collection + Postgres join |
 
 ## Running with Docker (recommended)
 
@@ -63,4 +65,24 @@ OLLAMA_HOST=localhost uvicorn main:app --reload --port 8000
 ## Endpoints
 
 - `POST /compare` — embed source/candidate texts and return ranked pair scores.
+- `GET /pipeline-runs` — list the ingestion pipeline runs (from Postgres)
+  available as a source DB. Each run carries the collection it populated and the
+  embedding provider/model it was built with.
+- `POST /search` — embed each source text, return its 10 nearest vectors from
+  the selected run's collection (the distance is fixed at collection-creation
+  time, so no metric is passed), and enrich each hit with the chunk/document
+  "batch info" joined from Postgres. The collection and embedding model are read
+  off the run, not the request. Touches Qdrant, Ollama **and** Postgres.
 - `GET /health` — health check.
+
+### `/search` request shape
+
+```jsonc
+{
+  "configuration": {
+    "ollamaPort": "11434",
+    "runId": "3f2c…" // the pipeline run; supplies the collection + embed model
+  },
+  "source": { "inputs": [{ "id": "q1", "text": "your query" }] }
+}
+```

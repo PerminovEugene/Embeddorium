@@ -37,7 +37,7 @@ def config_file(tmp_path: Path) -> Path:
 def test_enqueues_one_message_per_source(config_file: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     assert broker.enqueue.call_count == 3
 
@@ -45,7 +45,7 @@ def test_enqueues_one_message_per_source(config_file: Path) -> None:
 def test_enqueued_messages_have_correct_queue_and_actor(config_file: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     for enqueue_call in broker.enqueue.call_args_list:
         message: dramatiq.Message = enqueue_call.args[0]
@@ -56,7 +56,7 @@ def test_enqueued_messages_have_correct_queue_and_actor(config_file: Path) -> No
 def test_enqueued_messages_have_correct_urls_and_groups(config_file: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     kwargs_list = [
         call.args[0].kwargs for call in broker.enqueue.call_args_list
@@ -87,6 +87,6 @@ def test_does_not_create_real_broker_when_injected(config_file: Path, monkeypatc
     )
 
     broker = MagicMock()
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     assert broker.enqueue.call_count == 3

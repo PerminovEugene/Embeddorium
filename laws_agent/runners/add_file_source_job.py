@@ -18,16 +18,29 @@ from laws_agent.clients.queue.queue_names import (
     FETCH_FILE_SOURCE_QUEUE,
 )
 from laws_agent.parsers.config_parser import parse_sources_config
+from laws_agent.pipeline.run_config import build_pipeline_run
+from laws_agent.storage.sql.sql_store import SqlStore
 
 
-def main(config_path: str, broker=None) -> None:
+def main(config_path: str, broker=None, store=None) -> None:
     if broker is None:
         broker = QueueClient().create("job")
         dramatiq.set_broker(broker)
+    if store is None:
+        store = SqlStore(application_name="add_file_source_job")
 
     sources_config = parse_sources_config(config_path)
 
     for group in sources_config.groups:
+        if any(source.type == "xml" for source in group.sources):
+            # Record this group's launch config (file settings, env fallback)
+            # before seeding its files, so the run row exists when actors run.
+            store.pipeline_runs.ensure_for_group(
+                build_pipeline_run(
+                    group=group.name, source_type="xml", settings=group.settings
+                )
+            )
+
         for source in group.sources:
             if source.type != "xml":
                 continue

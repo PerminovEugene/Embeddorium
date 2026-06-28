@@ -4,6 +4,7 @@ import { useFormContext } from "./FormContext";
 import { options, Similarity } from "./consts";
 import { Match } from "./types";
 import { inputIdGroupSeparator } from "./Submit";
+import DbResultTable from "./DbResultTable";
 
 type SortKey = keyof Match | Similarity;
 type SortDirection = "asc" | "desc";
@@ -139,6 +140,12 @@ const ResultTable: React.FC = () => {
       </th>
     );
   };
+
+  // DB source mode renders Qdrant hits + their Postgres batch info instead of
+  // pairwise similarity scores. Branch after all hooks to keep hook order stable.
+  if (state.sourceType === "db") {
+    return <DbResultTable />;
+  }
 
   return (
     <div>

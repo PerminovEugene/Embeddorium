@@ -185,3 +185,93 @@ def test_backward_compatible_config_without_type_field(tmp_path: Path):
 
     assert len(config.groups[0].sources) == 2
     assert all(s.type == "web" for s in config.groups[0].sources)
+
+
+def test_group_without_settings_has_none(tmp_path: Path):
+    data = {
+        "groups": [
+            {
+                "name": "Estonia",
+                "attributes": {"code": "EE"},
+                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+            }
+        ]
+    }
+    path = _write_config(tmp_path, data)
+
+    config = parse_sources_config(path)
+
+    assert config.groups[0].settings is None
+
+
+def test_group_settings_are_parsed_per_actor(tmp_path: Path):
+    data = {
+        "groups": [
+            {
+                "name": "Estonia",
+                "attributes": {"code": "EE"},
+                "settings": {
+                    "chunk_document": {
+                        "strategy": "markdown",
+                        "chunk_size": 800,
+                        "chunk_overlap": 80,
+                    },
+                    "embed_chunks": {
+                        "provider": "ollama",
+                        "model": "qwen3-embedding",
+                        "mock_dim": None,
+                    },
+                    "vector_store": {"similarity": "dot"},
+                },
+                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+            }
+        ]
+    }
+    path = _write_config(tmp_path, data)
+
+    settings = parse_sources_config(path).groups[0].settings
+
+    assert settings is not None
+    assert settings.chunk_document.chunk_size == 800
+    assert settings.chunk_document.chunk_overlap == 80
+    assert settings.embed_chunks.provider == "ollama"
+    assert settings.embed_chunks.model == "qwen3-embedding"
+    assert settings.vector_store.similarity == "dot"
+
+
+def test_partial_group_settings_leave_omitted_actors_none(tmp_path: Path):
+    data = {
+        "groups": [
+            {
+                "name": "Estonia",
+                "attributes": {"code": "EE"},
+                "settings": {"embed_chunks": {"provider": "mock", "mock_dim": 64}},
+                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+            }
+        ]
+    }
+    path = _write_config(tmp_path, data)
+
+    settings = parse_sources_config(path).groups[0].settings
+
+    assert settings.chunk_document is None
+    assert settings.vector_store is None
+    assert settings.embed_chunks.provider == "mock"
+    assert settings.embed_chunks.mock_dim == 64
+
+
+def test_non_integer_chunk_size_is_rejected(tmp_path: Path):
+    data = {
+        "groups": [
+            {
+                "name": "Estonia",
+                "attributes": {"code": "EE"},
+                "settings": {"chunk_document": {"chunk_size": "big"}},
+                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+            }
+        ]
+    }
+    path = _write_config(tmp_path, data)
+
+    with pytest.raises(ValueError, match="chunk_size"):
+        parse_sources_config(path)

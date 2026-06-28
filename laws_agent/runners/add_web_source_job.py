@@ -5,6 +5,8 @@ from laws_agent.clients.queue.queue_client import QueueClient
 from laws_agent.clients.queue.queue_names import CRAWL_FRONTIER_MANAGER_QUEUE, CRAWL_FRONTIER_MANAGER_ACTOR
 from laws_agent.clients.queue.process_link_payload import ProcessLinkSourcePayload
 from laws_agent.parsers.config_parser import parse_sources_config
+from laws_agent.pipeline.run_config import build_pipeline_run
+from laws_agent.storage.sql.sql_store import SqlStore
 
 
 def ensure_scheme(url: str) -> str:
@@ -13,14 +15,24 @@ def ensure_scheme(url: str) -> str:
     return url
 
 
-def main(config_path: str, broker=None) -> None:
+def main(config_path: str, broker=None, store=None) -> None:
     if broker is None:
         broker = QueueClient().create("job")
         dramatiq.set_broker(broker)
+    if store is None:
+        store = SqlStore(application_name="add_web_source_job")
 
     sources_config = parse_sources_config(config_path)
 
     for group in sources_config.groups:
+        # Record this group's launch config (from the file's settings, env as
+        # fallback) before seeding, so the run row exists when the actors run.
+        store.pipeline_runs.ensure_for_group(
+            build_pipeline_run(
+                group=group.name, source_type="web", settings=group.settings
+            )
+        )
+
         for source in group.sources:
             url = ensure_scheme(source.link)
             payload = ProcessLinkSourcePayload(url=url, group=group.name)

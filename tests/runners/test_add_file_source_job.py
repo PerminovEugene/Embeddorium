@@ -48,7 +48,7 @@ def config_file(tmp_path: Path, xml_dir: Path) -> Path:
 def test_enqueues_one_message_per_xml_file(config_file: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     assert broker.enqueue.call_count == 2
 
@@ -56,7 +56,7 @@ def test_enqueues_one_message_per_xml_file(config_file: Path) -> None:
 def test_enqueued_messages_have_correct_queue_and_actor(config_file: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     for enqueue_call in broker.enqueue.call_args_list:
         message: dramatiq.Message = enqueue_call.args[0]
@@ -69,7 +69,7 @@ def test_enqueued_messages_have_correct_file_paths_and_group(
 ) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     kwargs_list = [call.args[0].kwargs for call in broker.enqueue.call_args_list]
 
@@ -84,7 +84,7 @@ def test_enqueued_messages_have_correct_file_paths_and_group(
 def test_ignores_non_xml_files(config_file: Path, xml_dir: Path) -> None:
     broker = MagicMock()
 
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     kwargs_list = [call.args[0].kwargs for call in broker.enqueue.call_args_list]
     assert all(not kwargs["file_path"].endswith(".txt") for kwargs in kwargs_list)
@@ -104,7 +104,7 @@ def test_does_not_create_real_broker_when_injected(
     )
 
     broker = MagicMock()
-    main(str(config_file), broker=broker)
+    main(str(config_file), broker=broker, store=MagicMock())
 
     assert broker.enqueue.call_count == 2
 
@@ -125,6 +125,6 @@ def test_skips_web_sources(tmp_path: Path) -> None:
     path.write_text(json.dumps(data))
     broker = MagicMock()
 
-    main(str(path), broker=broker)
+    main(str(path), broker=broker, store=MagicMock())
 
     broker.enqueue.assert_not_called()

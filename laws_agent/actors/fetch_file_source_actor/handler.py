@@ -26,6 +26,7 @@ from laws_agent.clients.queue.queue_names import (
 from laws_agent.log_routing import build_log_dir, log_to
 from laws_agent.models import CrawlTarget, CrawlTargetStatus, OutboxEvent, SourceFetch
 from laws_agent.pipeline.hashing import sha256_hex
+from laws_agent.pipeline.run_config import build_pipeline_run
 from laws_agent.storage.sql.sql_store import SqlStore
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,12 @@ def fetch_file_source(
 
     abs_path = str(Path(payload.file_path).resolve())
     normalized_url = f"file://{abs_path}"
+
+    # This actor is the start of the local-XML chain: record the run's launch
+    # config once per group (idempotent no-op for every file after the first).
+    store.pipeline_runs.ensure_for_group(
+        build_pipeline_run(group=payload.group, source_type="xml")
+    )
 
     existing_target = store.crawl_targets.find_active_by_normalized_url(
         group=payload.group,

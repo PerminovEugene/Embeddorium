@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from "react";
 import { Input, VariableGroup, Variable, Model } from "./types";
-import { Match } from "./types";
+import { Match, DbMatch, SourceType, PipelineRun } from "./types";
 import { Similarity } from "./consts";
 
 export interface Errors {
@@ -22,7 +22,14 @@ export interface FormState {
   similarities: Similarity[];
   ollamaPort: string;
 
+  // Source mode: "manual" compares user inputs against user candidates;
+  // "db" searches the collection of the selected pipeline run for each source
+  // input (the run also supplies the embedding model used for the query).
+  sourceType: SourceType;
+  selectedRun: PipelineRun | null;
+
   matches: Match[];
+  dbMatches: DbMatch[];
 }
 
 interface FormContextType {
@@ -60,11 +67,15 @@ interface FormContextType {
   checkSimilarity: (similarity: Similarity) => void;
   changeOllamaPort: (value: string) => void;
 
+  setSourceType: (sourceType: SourceType) => void;
+  setSelectedRun: (run: PipelineRun | null) => void;
+
   // Reset
   resetForm: () => void;
 
   validate: () => string[];
   setMatches: (matches: Match[]) => void;
+  setDbMatches: (matches: DbMatch[]) => void;
   saveFormToStorage: () => void;
 }
 
@@ -102,26 +113,34 @@ const createModel = (): Model => ({
 export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const getDefaultState = (): FormState => ({
+    sourceVariableGroups: [],
+    sourceInputs: [createInput()],
+    candidateVariableGroups: [],
+    candidateInputs: [createInput()],
+    models: [createModel()],
+    similarities: [Similarity.COSINE],
+    ollamaPort: "11434",
+    sourceType: "manual",
+    selectedRun: null,
+    matches: [],
+    dbMatches: [],
+  });
+
   const getInitialState = (): FormState => {
+    const defaults = getDefaultState();
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        const parsed = JSON.parse(stored) as FormState;
-        return parsed;
+        const parsed = JSON.parse(stored) as Partial<FormState>;
+        // Merge over defaults so state persisted before newer fields existed
+        // (e.g. dbMatches/sourceType) is still hydrated with valid values.
+        return { ...defaults, ...parsed };
       } catch (e) {
         console.error("Failed to parse stored form state", e);
       }
     }
-    return {
-      sourceVariableGroups: [],
-      sourceInputs: [createInput()],
-      candidateVariableGroups: [],
-      candidateInputs: [createInput()],
-      models: [createModel()],
-      similarities: [Similarity.COSINE],
-      ollamaPort: "11434",
-      matches: [],
-    };
+    return defaults;
   };
   const [state, setState] = useState<FormState>(getInitialState());
 
@@ -281,6 +300,27 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
   };
 
+  const setDbMatches = (dbMatches: DbMatch[]) => {
+    setState((prev) => ({
+      ...prev,
+      dbMatches,
+    }));
+  };
+
+  const setSourceType = (sourceType: SourceType) => {
+    setState((prev) => ({
+      ...prev,
+      sourceType,
+    }));
+  };
+
+  const setSelectedRun = (selectedRun: PipelineRun | null) => {
+    setState((prev) => ({
+      ...prev,
+      selectedRun,
+    }));
+  };
+
   const checkSimilarity = (similarity: Similarity) => {
     setState((prev) => {
       console.log("context prev similarities", prev.similarities);
@@ -297,25 +337,35 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const validate = (): string[] => {
     const errors: string[] = [];
+    const isDb = state.sourceType === "db";
 
     state.sourceInputs.forEach((input) => {
       if (input.text.trim() === "")
         errors.push("Source inputs should not be empty");
     });
-    state.candidateInputs.forEach((input) => {
-      if (input.text.trim() === "")
-        errors.push("Candidate inputs should not be empty");
-    });
     if (state.ollamaPort.trim() === "")
       errors.push("Ollama port should not be empty");
-    if (state.similarities.length === 0)
-      errors.push("Please select at least one similarity metric");
-    if (state.models.length === 0)
-      errors.push("Please add name for at least one model");
-    state.models.forEach((model) => {
-      if (model.name.trim() === "")
-        errors.push("Model name should not be empty");
-    });
+
+    if (isDb) {
+      // The embedding model comes from the selected run, and candidates /
+      // similarity metrics are irrelevant: Qdrant ranks the nearest vectors
+      // with the distance fixed at collection-creation time.
+      if (!state.selectedRun)
+        errors.push("Please select a pipeline run to search");
+    } else {
+      if (state.models.length === 0)
+        errors.push("Please add name for at least one model");
+      state.models.forEach((model) => {
+        if (model.name.trim() === "")
+          errors.push("Model name should not be empty");
+      });
+      state.candidateInputs.forEach((input) => {
+        if (input.text.trim() === "")
+          errors.push("Candidate inputs should not be empty");
+      });
+      if (state.similarities.length === 0)
+        errors.push("Please select at least one similarity metric");
+    }
 
     return errors;
   };
@@ -323,16 +373,7 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
   // Reset all
   const resetForm = () => {
     localStorage.removeItem(STORAGE_KEY);
-    setState({
-      sourceVariableGroups: [],
-      sourceInputs: [createInput()],
-      candidateVariableGroups: [],
-      candidateInputs: [createInput()],
-      models: [createModel()],
-      similarities: [Similarity.COSINE],
-      ollamaPort: "11434",
-      matches: [],
-    });
+    setState(getDefaultState());
   };
 
   return (
@@ -356,8 +397,12 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         checkSimilarity,
         changeOllamaPort,
 
+        setSourceType,
+        setSelectedRun,
+
         validate,
         setMatches,
+        setDbMatches,
         saveFormToStorage,
       }}
     >

@@ -6,6 +6,11 @@
         "code": "EE",
         "Country": "Estonia"
       },
+      "settings": {
+        "chunk_document": { "strategy": "markdown", "chunk_size": 1200, "chunk_overlap": 150 },
+        "embed_chunks": { "provider": "ollama", "model": "qwen3-embedding", "mock_dim": null },
+        "vector_store": { "similarity": "cosine" }
+      },
       "sources": [
         {
           "description": "Main website.",

@@ -6,6 +6,9 @@ import ModelSelector from "./ModelSelector";
 import SimilaritySelector from "./SimilaritySelector";
 import OllamaPortInput from "./llmPort";
 import SubmitButton from "./Submit";
+import SourceModeSelector from "./SourceModeSelector";
+import RunSelector from "./RunSelector";
+import { useFormContext } from "./FormContext";
 
 const H2 = ({ children }) => (
   <h2
@@ -20,6 +23,9 @@ const H2 = ({ children }) => (
 );
 
 const CompareComponent = () => {
+  const { state } = useFormContext();
+  const isDb = state.sourceType === "db";
+
   return (
     <>
       <div
@@ -33,29 +39,36 @@ const CompareComponent = () => {
           <div className="flex flex-col justify-between">
             <div className="flex flex-row gap-3 mb-5">
               <OllamaPortInput />
-              <SimilaritySelector />
+              <SourceModeSelector />
+              {isDb ? <RunSelector /> : <SimilaritySelector />}
             </div>
-            <div>
-              <ModelSelector />
-            </div>
+            {/* In DB mode the embedding model comes from the selected run, so
+                the manual model picker is hidden. */}
+            {!isDb && (
+              <div>
+                <ModelSelector />
+              </div>
+            )}
           </div>
         </section>
 
         <section style={sectionStyle} className="bg-emd-panel">
-          <H2>Sources</H2>
+          <H2>{isDb ? "Queries" : "Sources"}</H2>
 
           <VariablesSection type="source" />
           <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
           <InputsSection type="source" />
         </section>
 
-        <section style={sectionStyle} className="bg-emd-panel">
-          <H2>Candidates</H2>
+        {!isDb && (
+          <section style={sectionStyle} className="bg-emd-panel">
+            <H2>Candidates</H2>
 
-          <VariablesSection type="candidate" />
-          <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
-          <InputsSection type="candidate" />
-        </section>
+            <VariablesSection type="candidate" />
+            <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
+            <InputsSection type="candidate" />
+          </section>
+        )}
 
         <SubmitButton />
       </div>

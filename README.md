@@ -44,6 +44,8 @@ add_file_source_job (seed)  ->  fetch_file_source  ->  filter_tax_acts  ->  pars
 
 See [Local XML file ingestion](#local-xml-file-ingestion) below for the runner, config, and Docker service details.
 
+At the **start of each chain** the entry actor records the run's launch configuration to the `pipeline_runs` table (`crawl_frontier_manager` for web seeds, `fetch_file_source` for XML files), via `laws_agent.pipeline.run_config.build_pipeline_run`. It captures the group, source type, Qdrant collection, and per-actor settings (chunking, embedding provider/model, similarity) read from the same config the actors use. The write is idempotent (one row per group, `ON CONFLICT DO NOTHING`), so the many entry-actor invocations of one run collapse to a single row. The embeddings-tester UI lists these runs so a DB search reuses exactly a run's collection + embedding model.
+
 The **outbox dispatcher** (`python -m laws_agent.outbox.dispatcher`) publishes committed outbox events to RabbitMQ; delivery is at-least-once and every stage is idempotent.
 
 ## Project structure
@@ -154,6 +156,11 @@ The config file must be a JSON file with this structure:
     {
       "name": "Estonia",
       "attributes": { "code": "EE" },
+      "settings": {
+        "chunk_document": { "strategy": "markdown", "chunk_size": 1200, "chunk_overlap": 150 },
+        "embed_chunks": { "provider": "ollama", "model": "qwen3-embedding", "mock_dim": null },
+        "vector_store": { "similarity": "cosine" }
+      },
       "sources": [
         { "description": "Tax authority", "link": "emta.ee" },
         { "description": "Laws", "link": "https://riigiteataja.ee" }
@@ -167,7 +174,7 @@ The unit is a **group**; each group lists one or more `sources`. To crawl **diff
 
 - Each `sources[].link` becomes one seed crawl target tagged with its group `name`. The group flows through the whole pipeline and becomes the Qdrant collection suffix (e.g. `LAWS_Estonia_qwen_embed_8b`).
 - A link without a scheme (`emta.ee`) is treated as `https://emta.ee`.
-- `name`, `attributes` (object), and `sources` (list of `{description, link}`) are all required.
+- `name`, `attributes` (object), and `sources` (list of `{description, link}`) are all required. `settings` is **optional** and grouped by pipeline actor: the seed runner records it as the group's `pipeline_runs` row (the launch configuration the chunk/embed stages then read back). Any field a group omits — or the whole `settings` block — falls back to the global env/constant default (`EMBED_PROVIDER`, `OLLAMA_EMBED_MODEL`, the `TextSplitter` sizes, `Distance.COSINE`). **A value set here overrides env**, so e.g. `embed_chunks.provider` decides whether that group is embedded with Ollama, the real HuggingFace model, or `mock`.
 - Re-running with the same URLs is safe — the frontier manager dedups by normalized URL, so already-crawled targets aren't re-queued.
 - You only seed entry points: each seed fans out automatically as discovered same-origin links loop back into the frontier.
 

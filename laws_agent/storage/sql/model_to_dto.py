@@ -7,12 +7,15 @@ from laws_agent.models import (
     DocumentChunk,
     OutboxEvent,
     OutboxStatus,
+    PipelineRun,
+    PipelineSettings,
     SourceFetch,
 )
 from laws_agent.storage.sql.models.discovered_link import DiscoveredLinkORM
 from laws_agent.storage.sql.models.document import DocumentORM
 from laws_agent.storage.sql.models.chunk import DocumentChunkORM
 from laws_agent.storage.sql.models.outbox_event import OutboxEventORM
+from laws_agent.storage.sql.models.pipeline_run import PipelineRunORM
 from laws_agent.storage.sql.models.source_fetch import SourceFetchORM
 
 
@@ -88,4 +91,15 @@ def _to_outbox_event(orm: OutboxEventORM) -> OutboxEvent:
         attempts=orm.attempts,
         created_at=orm.created_at,
         sent_at=orm.sent_at,
+    )
+
+
+def _to_pipeline_run(orm: PipelineRunORM) -> PipelineRun:
+    return PipelineRun(
+        id=orm.id,
+        group=orm.group,
+        source_type=orm.source_type,
+        collection_name=orm.collection_name,
+        settings=PipelineSettings.model_validate(orm.settings),
+        created_at=orm.created_at,
     )

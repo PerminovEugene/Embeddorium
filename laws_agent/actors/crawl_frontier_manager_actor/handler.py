@@ -14,6 +14,7 @@ from laws_agent.clients.queue.queue_names import (
 )
 from laws_agent.log_routing import build_log_dir, log_to
 from laws_agent.models import CrawlTarget, CrawlTargetStatus
+from laws_agent.pipeline.run_config import build_pipeline_run
 from laws_agent.storage.sql.sql_store import SqlStore
 
 import dramatiq
@@ -65,7 +66,20 @@ def handle(
         payload=payload, normalized_url=normalized_url, store=store
     )
 
+    # A seed (no parent) is the start of a pipeline run for its group: record
+    # its launch configuration once. Discovered links loop back here with a
+    # parent set, so they don't re-trigger it (and ensure_for_group is a no-op
+    # anyway once the group's row exists).
+    is_seed = (
+        payload.parent_document_id is None and payload.parent_chunk_id is None
+    )
+
     with log_to(log_dir):
+        if is_seed:
+            store.pipeline_runs.ensure_for_group(
+                build_pipeline_run(group=payload.group, source_type="web")
+            )
+
         existing_target = store.crawl_targets.find_active_by_normalized_url(
             group=payload.group,
             normalized_url=normalized_url,

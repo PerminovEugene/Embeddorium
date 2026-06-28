@@ -21,38 +21,56 @@ BATCH_SIZE = 4
 # Providers that never need torch (no local model load).
 _NO_TORCH_PROVIDERS = frozenset({"mock", "ollama"})
 
-# Lazy singletons — initialized on first call, not at import time.
-_model = None
-_model_size: int | None = None
+# Loaded embedding models, keyed by (provider, model) — a single worker can now
+# serve several runs/providers, so the cache is keyed instead of a lone
+# singleton. Populated lazily on first use, never at import time.
+_models: dict[tuple[str, str], tuple] = {}
 
 
-def get_model_and_size():
-    global _model, _model_size
-    if _model is None:
-        if config.EMBED_PROVIDER == "mock":
+def get_model_and_size(
+    provider: str | None = None,
+    model: str | None = None,
+    mock_dim: int | None = None,
+):
+    """Return ``(model, size)`` for *provider*/*model*, loading + caching once.
+
+    Arguments come from a run's recorded embed config; each falls back to the
+    global env default when omitted, preserving the original single-provider
+    behavior for callers that don't pass them.
+    """
+    provider = provider or config.EMBED_PROVIDER
+    if provider == "ollama":
+        model = model or config.OLLAMA_EMBED_MODEL
+    elif provider == "mock":
+        model = model or "mock"
+    else:
+        model = model or MODEL_NAME
+
+    key = (provider, model)
+    if key not in _models:
+        if provider == "mock":
             # No model load, no torch/sentence-transformers work — just random
             # vectors of the configured size, for fast pipeline dry runs.
-            _model = MockEmbedClient(config.MOCK_EMBED_DIM)
-            _model_size = config.MOCK_EMBED_DIM
-        elif config.EMBED_PROVIDER == "ollama":
-            # Deferred import: avoids pulling langchain_ollama/ollama when
-            # EMBED_PROVIDER is something else.
+            dim = mock_dim if mock_dim is not None else config.MOCK_EMBED_DIM
+            _models[key] = (MockEmbedClient(dim), dim)
+        elif provider == "ollama":
+            # Deferred import: avoids pulling langchain_ollama/ollama when the
+            # provider is something else.
             from laws_agent.clients.ollama_embed_client import OllamaEmbedClient
 
-            _model = OllamaEmbedClient(
-                model=config.OLLAMA_EMBED_MODEL,
+            client = OllamaEmbedClient(
+                model=model,
                 base_url=config.OLLAMA_EMBED_BASE_URL,
             )
-            _model_size = _model.get_embedding_dimension()
+            _models[key] = (client, client.get_embedding_dimension())
         else:
             # Deferred import: avoids loading torch/sentence-transformers when
-            # EMBED_PROVIDER is "mock" or "ollama".
+            # the provider is "mock" or "ollama".
             from laws_agent.clients.hg_client import HgClient
 
             hg_client = HgClient()
-            _model = hg_client.get_model(MODEL_NAME)
-            _model_size = hg_client.get_model_size(MODEL_NAME)
-    return _model, _model_size
+            _models[key] = (hg_client.get_model(model), hg_client.get_model_size(model))
+    return _models[key]
 
 
 def embed_chunks(
@@ -64,6 +82,8 @@ def embed_chunks(
     vector_store: VectorStore,
     model,
     model_size: int,
+    provider: str | None = None,
+    distance=None,
 ) -> None:
     payload = EmbedChunksPayload.from_actor_kwargs(
         document_id=document_id,
@@ -71,11 +91,18 @@ def embed_chunks(
         group=group,
     )
 
-    vector_store.create_collection(model_size)
+    # provider/distance come from the run's recorded config; both fall back so
+    # direct callers (and tests) that omit them keep the original behavior.
+    provider = provider or config.EMBED_PROVIDER
+
+    if distance is None:
+        vector_store.create_collection(model_size)
+    else:
+        vector_store.create_collection(model_size, distance)
 
     chunks = store.chunks.get_many(payload.chunk_ids)
 
-    skip_torch = config.EMBED_PROVIDER in _NO_TORCH_PROVIDERS
+    skip_torch = provider in _NO_TORCH_PROVIDERS
 
     for start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[start : start + BATCH_SIZE]
