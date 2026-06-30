@@ -1,7 +1,14 @@
 import uuid
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from backend.shared import config
 
@@ -57,11 +64,32 @@ class VectorStore:
         ]
         self.client.upsert(collection_name=self.collection, points=points)
 
-    def search(self, query_vector: list[float], top_k: int = 5) -> list[dict]:
+    def search(
+        self,
+        query_vector: list[float],
+        top_k: int = 5,
+        pipeline_id: str | None = None,
+    ) -> list[dict]:
+        # When a pipeline_id is supplied, restrict hits to vectors whose payload
+        # ``pipeline_run_id`` field matches exactly.  A single collection can
+        # hold vectors from several pipeline runs, so without this filter a query
+        # returns results from every run that ever wrote to the collection.
+        query_filter = (
+            Filter(
+                must=[
+                    FieldCondition(
+                        key="pipeline_run_id", match=MatchValue(value=pipeline_id)
+                    )
+                ]
+            )
+            if pipeline_id
+            else None
+        )
         results = self.client.query_points(
             collection_name=self.collection,
             query=query_vector,
             limit=top_k,
+            query_filter=query_filter,
         )
         return [
             {"score": hit.score, **hit.payload}

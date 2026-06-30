@@ -84,11 +84,13 @@ def embed_chunks(
     model_size: int,
     provider: str | None = None,
     distance=None,
+    pipeline_id: str | None = None,
 ) -> None:
     payload = EmbedChunksPayload.from_actor_kwargs(
         document_id=document_id,
         chunk_ids=chunk_ids,
         group=group,
+        pipeline_id=pipeline_id,
     )
 
     # provider/distance come from the run's recorded config; both fall back so
@@ -138,6 +140,9 @@ def embed_chunks(
                     "document_id": str(payload.document_id),
                     "chunk_index": chunk.chunk_index,
                     "group": payload.group,
+                    # Lets DB search filter hits to a single pipeline run when
+                    # several runs share one collection.
+                    "pipeline_run_id": payload.pipeline_id,
                 }
                 for chunk in batch
             ],

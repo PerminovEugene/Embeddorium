@@ -9,6 +9,7 @@ export const inputIdGroupSeparator = "____";
 
 const SubmitButton = () => {
   const [errors, setErrors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const { state, validate, setMatches, setDbMatches, saveFormToStorage } =
     useFormContext();
@@ -45,6 +46,7 @@ const SubmitButton = () => {
       source: { inputs: processedSourceInputs },
     };
 
+    setLoading(true);
     fetch(`${SERVER_URL}/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -65,7 +67,8 @@ const SubmitButton = () => {
       })
       .catch((error) => {
         console.error("Error searching collection:", error);
-      });
+      })
+      .finally(() => setLoading(false));
   };
 
   const handleCompare = () => {
@@ -99,6 +102,7 @@ const SubmitButton = () => {
       candidates: { inputs: processedCandidateInputs },
     };
 
+    setLoading(true);
     fetch(`${SERVER_URL}/compare`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -120,7 +124,8 @@ const SubmitButton = () => {
       })
       .catch((error) => {
         console.error("Error sending data to server:", error);
-      });
+      })
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -146,17 +151,18 @@ const SubmitButton = () => {
 
       <button
         onClick={handleCompare}
+        disabled={loading}
         style={{
           padding: "0.75rem 2rem",
-          backgroundColor: "#10b981",
+          backgroundColor: loading ? "#6ee7b7" : "#10b981",
           color: "white",
           borderRadius: "0.375rem",
           border: "none",
           fontWeight: "600",
-          cursor: "pointer",
+          cursor: loading ? "not-allowed" : "pointer",
         }}
       >
-        {state.sourceType === "db" ? "Search" : "Compare"}
+        {loading ? "Searching…" : "Search"}
       </button>
     </div>
   );

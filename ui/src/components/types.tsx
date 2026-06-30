@@ -62,6 +62,7 @@ export interface PipelineRun {
   embedProvider: string;
   embedModel: string;
   similarity: string;
+  chunkStrategy: string;
   chunkSize: number;
   chunkOverlap: number;
   createdAt: string | null;

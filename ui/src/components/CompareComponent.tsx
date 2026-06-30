@@ -38,7 +38,9 @@ const CompareComponent = () => {
           <H2>Configuration</H2>
           <div className="flex flex-col justify-between">
             <div className="flex flex-row gap-3 mb-5">
-              <OllamaPortInput />
+              {/* In DB mode the embedding provider/model come from the selected
+                  pipeline run, so the Ollama port picker is hidden. */}
+              {!isDb && <OllamaPortInput />}
               <SourceModeSelector />
               {isDb ? <RunSelector /> : <SimilaritySelector />}
             </div>

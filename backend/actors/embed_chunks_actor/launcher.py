@@ -161,4 +161,5 @@ def embed_chunks(
             model_size=model_size,
             provider=embed_provider,
             distance=distance,
+            pipeline_id=pipeline_id,
         )

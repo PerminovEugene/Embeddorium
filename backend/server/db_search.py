@@ -60,13 +60,21 @@ async def search_db(request) -> dict:
     mock_dim: Optional[int] = provider_snap.get("mock_dim")
     ollama_port = request.configuration.get("ollamaPort")
 
+    # A single Qdrant collection can hold vectors from several pipeline runs, so
+    # an unfiltered query would return hits from every run that ever wrote to it.
+    # Each vector's payload carries the ``pipeline_id`` of the run that embedded
+    # it (written by the embed_chunks actor), so we filter on the selected run's
+    # id to keep results scoped to this pipeline alone.
+    pipeline_id = str(run.id)
+
     queries = request.source.inputs
     logging.info(
-        "DB search: run=%s collection=%s provider=%s model=%s queries=%d",
+        "DB search: run=%s collection=%s provider=%s model=%s pipeline=%s queries=%d",
         run_id,
         collection,
         provider_type,
         model_name,
+        pipeline_id,
         len(queries),
     )
 
@@ -84,7 +92,7 @@ async def search_db(request) -> dict:
     results: List[dict] = []
     try:
         for query, embedding in zip(queries, query_embeddings):
-            hits = store.search(embedding, top_k=TOP_K)
+            hits = store.search(embedding, top_k=TOP_K, pipeline_id=pipeline_id)
 
             # One batched Postgres round-trip per query instead of one per hit.
             chunk_ids = [

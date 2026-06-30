@@ -17,6 +17,7 @@ interface PipelineRunRaw {
   dataset?: { name?: string; source_type?: string };
   actorConfigs?: {
     chunk_document?: {
+      strategy?: string;
       chunk_size?: number;
       chunk_overlap?: number;
     };
@@ -46,6 +47,7 @@ const toRun = (raw: PipelineRunRaw): PipelineRun => {
     embedProvider: provider.name ?? provider.provider_type ?? "",
     embedModel: provider.model_name ?? provider.model ?? "",
     similarity: vector.similarity ?? "",
+    chunkStrategy: chunk.strategy ?? "",
     chunkSize: chunk.chunk_size ?? 0,
     chunkOverlap: chunk.chunk_overlap ?? 0,
     createdAt: raw.createdAt ?? null,
@@ -147,8 +149,14 @@ const RunSelector: React.FC = () => {
           <div>
             <span className="font-medium">Similarity:</span>{" "}
             {selectedRun.similarity} ·{" "}
-            <span className="font-medium">Chunk:</span> {selectedRun.chunkSize}/
-            {selectedRun.chunkOverlap}
+            <span className="font-medium">Chunk:</span>{" "}
+            {selectedRun.chunkStrategy === "section" ? (
+              "By section"
+            ) : (
+              <>
+                {selectedRun.chunkSize}/{selectedRun.chunkOverlap}
+              </>
+            )}
           </div>
         </div>
       )}
