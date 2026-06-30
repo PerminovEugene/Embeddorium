@@ -27,6 +27,24 @@
   --spacing-header-y: 1.75rem;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  @apply bg-emd-background text-emd-text;
+  @apply text-emd-text antialiased;
+  /* Soft vertical gradient so the deep navy reads less flat. */
+  background-color: #0e1d2e;
+  background-image: radial-gradient(
+      1200px 600px at 50% -10%,
+      rgba(80, 191, 194, 0.12),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0e1d2e 0%, #0b1726 100%);
+  background-attachment: fixed;
+}
+
+/* Reusable elevated card used across resource pages. */
+.emd-panel {
+  @apply bg-emd-panel rounded-2xl border border-white/40 shadow-lg shadow-black/20;
 }

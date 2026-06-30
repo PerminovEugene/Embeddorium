@@ -55,6 +55,7 @@ export type SourceType = "manual" | "db";
 // collection was built with).
 export interface PipelineRun {
   id: string;
+  name: string;
   group: string;
   sourceType: string;
   collection: string;

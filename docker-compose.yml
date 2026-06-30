@@ -27,8 +27,8 @@ services:
       - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -61,9 +61,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: python -m laws_agent.storage.sql.migrate
+    command: python -m backend.shared.storage.sql.migrate
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -92,9 +93,14 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.crawl_frontier_manager_actor --queues laws.crawl.frontier.manage.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      # Per-pipeline-run logs (PIPELINE_RUNS_DIR, default /tmp/pipeline_runs) are
+      # written *inside* the container. Bind-mount a shared host folder so every
+      # stage's per-source log files land in ./pipeline_runs on the host and
+      # survive container restarts.
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -117,9 +123,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.fetch_source_actor --queues laws.crawl.source.fetch.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -140,9 +147,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.parse_source_actor --queues laws.crawl.source.parse.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.parse_source_actor --queues laws.crawl.source.parse.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -163,9 +171,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.chunk_document_actor --queues laws.crawl.document.chunk.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -186,9 +195,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.schedule_embeddings_actor --queues laws.crawl.embeddings.schedule.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -209,9 +219,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.schedule_discovered_links_actor --queues laws.crawl.links.schedule.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -234,9 +245,13 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.fetch_file_source_actor --queues laws.crawl.file.fetch.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.fetch_file_source_actor --queues laws.crawl.file.fetch.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
+      # Local source-files mount: XML dumps read by the file-ingestion chain
+      # (this actor reads each .xml file from disk and stores its content into the DB).
+      - ./sources:/app/sources
     env_file:
       - .env.docker
     depends_on:
@@ -257,9 +272,10 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq laws_agent.actors.filter_tax_acts_actor --queues laws.crawl.file.filter.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.filter_tax_acts_actor --queues laws.crawl.file.filter.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -287,9 +303,10 @@ services:
         EXTRAS: "embed"
     # --threads 1: the embedding model is a lazily-initialized module singleton;
     # a single thread avoids racing on first init and concurrent model.encode.
-    command: dramatiq laws_agent.actors.embed_chunks_actor --queues laws.embed.chunk.generate.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.embed_chunks_actor --queues laws.embed.chunk.generate.v1 --processes 1 --threads 1
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -309,9 +326,10 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: ""
-    command: python -m laws_agent.outbox.dispatcher
+    command: python -m backend.outbox.dispatcher
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
     env_file:
       - .env.docker
     depends_on:
@@ -323,55 +341,10 @@ services:
         condition: service_completed_successfully
     restart: on-failure
 
-  # One-off seeder. Not started by `up` (tools profile); run via scripts/seed.sh
-  # or: docker compose run --rm seed config.json
-  seed:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-      args:
-        EXTRAS: ""
-    profiles: ["tools"]
-    entrypoint: ["python", "-m", "laws_agent.runners.add_web_source_job"]
-    volumes:
-      - .:/app
-    env_file:
-      - .env.docker
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres:
-        condition: service_started
-      migrate:
-        condition: service_completed_successfully
-
-  # One-off seeder for the local-file (XML) chain. Not started by `up` (tools
-  # profile); run via scripts/seed_files.sh or:
-  # docker compose run --rm seed-files config.files.json
-  seed-files:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-      args:
-        EXTRAS: ""
-    profiles: ["tools"]
-    entrypoint: ["python", "-m", "laws_agent.runners.add_file_source_job"]
-    volumes:
-      - .:/app
-    env_file:
-      - .env.docker
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres:
-        condition: service_started
-      migrate:
-        condition: service_completed_successfully
-
-  # Embeddings tester API (server/). Built with the shared Dockerfile.dev so it
-  # can import laws_agent (VectorStore / OllamaEmbedClient / config) — it reuses
+  # Embeddings tester API (backend/server/). Built with the shared Dockerfile.dev
+  # so it can import backend (VectorStore / OllamaEmbedClient / config) — it reuses
   # the pipeline's Qdrant + embedding code instead of its own. .env.docker
-  # supplies QDRANT_URL and the DB/RabbitMQ vars laws_agent.config requires at
+  # supplies QDRANT_URL and the DB/RabbitMQ vars backend.shared.config requires at
   # import. Ollama host/port come from the request (UI) + OLLAMA_HOST.
   server:
     build:
@@ -379,12 +352,19 @@ services:
       dockerfile: Dockerfile.dev
       args:
         EXTRAS: "server"
-    working_dir: /app/server
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /app
+    # --reload-dir backend: scope the reload watcher to the backend package so
+    # it never scans ui/node_modules (which churns during `npm ci`/builds and
+    # would otherwise crash the reloader with a FileNotFoundError mid-scan).
+    command: uvicorn backend.server.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - ./pipeline_runs:/tmp/pipeline_runs
+      # Local source-files mount: XML dumps read by the file-ingestion chain
+      # (pipeline_launch.py::_seed_local enumerates *.xml files from dataset paths here).
+      - ./sources:/app/sources
     env_file:
       - .env.docker
     environment:

@@ -5,7 +5,52 @@ import { SERVER_URL } from "./consts";
 import { PipelineRun } from "./types";
 
 const runLabel = (run: PipelineRun): string =>
-  `${run.group} · ${run.collection} (${run.embedProvider}/${run.embedModel})`;
+  `${run.name} · ${run.group} (${run.embedProvider}/${run.embedModel})`;
+
+// Raw shape of GET /pipeline-runs: a bare array whose top-level keys are
+// camelCase, but whose nested dataset/actorConfigs snapshots are raw model
+// dumps (snake_case). The flat PipelineRun the selector renders is reconstructed
+// from those snapshots here.
+interface PipelineRunRaw {
+  id: string;
+  name?: string | null;
+  dataset?: { name?: string; source_type?: string };
+  actorConfigs?: {
+    chunk_document?: {
+      chunk_size?: number;
+      chunk_overlap?: number;
+    };
+    vector_store?: { collection?: string; similarity?: string };
+    embed_chunks?: {
+      provider?: {
+        name?: string;
+        provider_type?: string;
+        model_name?: string;
+        model?: string;
+      };
+    };
+  };
+  createdAt?: string | null;
+}
+
+const toRun = (raw: PipelineRunRaw): PipelineRun => {
+  const chunk = raw.actorConfigs?.chunk_document ?? {};
+  const vector = raw.actorConfigs?.vector_store ?? {};
+  const provider = raw.actorConfigs?.embed_chunks?.provider ?? {};
+  return {
+    id: raw.id,
+    name: raw.name?.trim() || raw.dataset?.name || "(unnamed pipeline)",
+    group: raw.dataset?.name ?? "(unnamed dataset)",
+    sourceType: raw.dataset?.source_type ?? "",
+    collection: vector.collection ?? "",
+    embedProvider: provider.name ?? provider.provider_type ?? "",
+    embedModel: provider.model_name ?? provider.model ?? "",
+    similarity: vector.similarity ?? "",
+    chunkSize: chunk.chunk_size ?? 0,
+    chunkOverlap: chunk.chunk_overlap ?? 0,
+    createdAt: raw.createdAt ?? null,
+  };
+};
 
 const RunSelector: React.FC = () => {
   const { state, setSelectedRun } = useFormContext();
@@ -19,9 +64,16 @@ const RunSelector: React.FC = () => {
     setLoading(true);
     setError(null);
     fetch(`${SERVER_URL}/pipeline-runs`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return res.json();
+      })
       .then((result) => {
-        const loaded: PipelineRun[] = result.runs ?? [];
+        // The endpoint returns a bare array; tolerate a {runs: [...]} wrapper too.
+        const raw: PipelineRunRaw[] = Array.isArray(result)
+          ? result
+          : result?.runs ?? [];
+        const loaded: PipelineRun[] = raw.map(toRun);
         setRuns(loaded);
         // Re-sync the selected run with the freshly loaded list (its config may
         // have changed), or clear it if it no longer exists.

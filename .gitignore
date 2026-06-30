@@ -28,12 +28,20 @@ env/
 # Logs
 *.log
 logs/
+# Per-pipeline-run logs bind-mounted from the worker containers
+pipeline_runs/
 
 # pytest / coverage
 .pytest_cache/
 .coverage
 htmlcov/
 
-.ruff_cache
+# Linters
+**/.ruff_cache/
 
-xml.2026.en
+# Node
+node_modules/
+
+# Local data dumps (e.g. Estonian acts XML)
+xml.2026.en/
+sources

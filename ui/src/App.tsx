@@ -1,26 +1,23 @@
-import Header from "./components/Header";
-import CompareComponent from "./components/CompareComponent";
-import { FormProvider } from "./components/FormContext";
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import HomePage from "./pages/HomePage";
+import ProvidersPage from "./pages/ProvidersPage";
+import DatasetsPage from "./pages/DatasetsPage";
+import IngestionPipelinesPage from "./pages/IngestionPipelinesPage";
 
 function App() {
   return (
-    <div
-      style={{ minHeight: "100vh" }}
-      className="bg-emd-background text-emd-text"
-    >
-      <Header />
-      <main
-        style={{
-          margin: "0 auto",
-          paddingLeft: 10,
-          paddingRight: 10,
-        }}
-      >
-        <FormProvider>
-          <CompareComponent />
-        </FormProvider>
-      </main>
-    </div>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<HomePage />} />
+        <Route path="providers" element={<ProvidersPage />} />
+        <Route path="datasets" element={<DatasetsPage />} />
+        <Route
+          path="ingestion-pipelines"
+          element={<IngestionPipelinesPage />}
+        />
+      </Route>
+    </Routes>
   );
 }
 

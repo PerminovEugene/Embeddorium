@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["laws_agent*"]
+include = ["backend*"]
 
 [project]
 name = "laws-agent"
@@ -46,7 +46,7 @@ embedding = [
 ]
 
 # Embeddings tester API (server/): FastAPI service that embeds source/candidate
-# texts and scores them against each other. Reuses laws_agent's VectorStore +
+# texts and scores them against each other. Reuses backend's VectorStore +
 # OllamaEmbedClient, so it needs the same vector/embed deps plus the web stack.
 server = [
   "fastapi>=0.103",
@@ -76,4 +76,4 @@ dev = [
 ]
 
 [project.scripts]
-laws-generate = "laws_agent.agent.generate:main"
+laws-generate = "backend.agent.generate:main"

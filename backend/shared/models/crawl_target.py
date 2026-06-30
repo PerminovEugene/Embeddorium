@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from enum import StrEnum
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class CrawlTargetStatus(StrEnum):
+    DISCOVERED = "discovered"
+    QUEUED = "queued"
+
+    # Pipeline stages (each owned by one actor via a compare-and-set lock).
+    FETCHING = "fetching"
+    FETCHED = "fetched"
+    PARSING = "parsing"
+    PARSED = "parsed"
+    CHUNKING = "chunking"
+    CHUNKED = "chunked"
+    SCHEDULING = "scheduling"
+    PROCESSED = "processed"
+
+    # Local-file (XML) ingestion chain: tax-relevance gate between fetch and
+    # parse. Web targets never enter these statuses.
+    FILTERING = "filtering"
+    FILTERED = "filtered"
+
+    # Terminal / skip states.
+    SKIPPED = "skipped"
+    SKIPPED_UNSUPPORTED = "skipped_unsupported"
+    FAILED_TRANSIENT = "failed_transient"
+    FAILED_PERMANENT = "failed_permanent"
+
+    # Legacy statuses kept for backwards compatibility with existing rows.
+    PROCESSING = "processing"
+    FAILED = "failed"
+
+
+# Statuses from which a URL should NOT be re-queued by the frontier manager.
+# Transient failures (and the legacy FAILED) stay re-queueable.
+TERMINAL_OR_ACTIVE_STATUSES = frozenset(
+    s
+    for s in CrawlTargetStatus
+    if s not in (CrawlTargetStatus.FAILED_TRANSIENT, CrawlTargetStatus.FAILED)
+)
+
+
+class CrawlTarget(BaseModel):
+    id: Optional[uuid.UUID] = None
+
+    group: str
+    original_url: str
+    normalized_url: str
+
+    # Scopes dedup to a single pipeline run so different runs can re-process
+    # the same source independently. NULL for legacy rows pre-migration 017.
+    pipeline_id: Optional[uuid.UUID] = None
+
+    status: CrawlTargetStatus = CrawlTargetStatus.DISCOVERED
+
+    depth: int = 0
+
+    document_id: Optional[uuid.UUID] = None
+
+    parent_chunk_id: Optional[uuid.UUID] = None
+    parent_document_id: Optional[uuid.UUID] = None
+
+    # Relative path of this target's per-URL log folder, nested under its
+    # parent's (e.g. "emta_ee-a1b2/some-subpage-c3d4"). See log_routing.py.
+    log_dir: Optional[str] = None
+
+    error: Optional[str] = None
+    skip_reason: Optional[str] = None
+
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
