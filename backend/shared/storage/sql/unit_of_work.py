@@ -145,6 +145,8 @@ class UnitOfWork:
                 "document_id": c.document_id,
                 "text": c.text,
                 "chunk_index": c.chunk_index,
+                "chunk_type": c.chunk_type,
+                "chunk_metadata": c.chunk_metadata,
             }
             for c in chunks
         ]
@@ -154,7 +156,11 @@ class UnitOfWork:
                 DocumentChunkORM.document_id,
                 DocumentChunkORM.chunk_index,
             ],
-            set_={"text": stmt.excluded.text},
+            set_={
+                "text": stmt.excluded.text,
+                "chunk_type": stmt.excluded.chunk_type,
+                "chunk_metadata": stmt.excluded.chunk_metadata,
+            },
         ).returning(DocumentChunkORM)
         orms = (
             self._session.scalars(

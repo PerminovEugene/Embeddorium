@@ -29,8 +29,42 @@ from backend.shared.models import (
     DocumentChunk,
     OutboxEvent,
 )
-from backend.shared.parsers.text_splitter import TextSplitter
+from backend.shared.parsers.legal_pipeline import LegalXmlChunker
+from backend.shared.parsers.text_splitter import Chunk, TextSplitter
 from backend.shared.storage.sql.sql_store import SqlStore
+
+# Content types routed through the legal XML chunker (structure-aware) instead
+# of the generic text splitter.
+_XML_CONTENT_TYPES = {"application/xml", "text/xml"}
+
+
+def _build_raw_chunks(
+    *,
+    document,
+    target_id: UUID,
+    store: SqlStore,
+    splitter: TextSplitter,
+    legal_chunker: Optional[LegalXmlChunker],
+) -> list[Chunk]:
+    """Legal XML docs are chunked by legal structure; everything else by text.
+
+    The legal chunker needs the raw XML (the structured tree is lost once the
+    parse stage flattens it into ``document.text``), so it is re-read from the
+    persisted source fetch. Falls back to the text splitter when the content is
+    not XML or cannot be parsed as a Juurakt act.
+    """
+    content_type = (document.content_type or "").split(";")[0].strip().lower()
+    if legal_chunker is not None and content_type in _XML_CONTENT_TYPES:
+        fetch = store.source_fetches.get_by_crawl_target(target_id)
+        if fetch is not None and fetch.raw_content:
+            legal_chunks = legal_chunker.split_xml(
+                fetch.raw_content,
+                source_url=document.source_url,
+                language=document.language or "en",
+            )
+            if legal_chunks:
+                return legal_chunks
+    return splitter.split(document.text or "")
 
 
 def chunk_document(
@@ -40,6 +74,7 @@ def chunk_document(
     pipeline_id: Optional[str] = None,
     store: SqlStore,
     splitter: TextSplitter,
+    legal_chunker: Optional[LegalXmlChunker] = None,
 ) -> None:
     payload = ChunkDocumentPayload.from_actor_kwargs(
         crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
@@ -69,9 +104,21 @@ def chunk_document(
         )
         raise RuntimeError(f"document missing for target {target_id}")
 
-    raw_chunks = splitter.split(document.text or "")
+    raw_chunks = _build_raw_chunks(
+        document=document,
+        target_id=target_id,
+        store=store,
+        splitter=splitter,
+        legal_chunker=legal_chunker,
+    )
     chunk_models = [
-        DocumentChunk(document_id=document.id, text=raw.text, chunk_index=index)
+        DocumentChunk(
+            document_id=document.id,
+            text=raw.text,
+            chunk_index=index,
+            chunk_type=raw.chunk_type,
+            chunk_metadata=raw.metadata,
+        )
         for index, raw in enumerate(raw_chunks)
     ]
 

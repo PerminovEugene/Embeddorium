@@ -55,6 +55,8 @@ def _to_chunk(orm: DocumentChunkORM) -> DocumentChunk:
         document_id=orm.document_id,
         text=orm.text,
         chunk_index=orm.chunk_index,
+        chunk_type=orm.chunk_type,
+        chunk_metadata=orm.chunk_metadata or {},
         created_at=orm.created_at,
     )
 

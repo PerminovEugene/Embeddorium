@@ -140,6 +140,10 @@ def embed_chunks(
                     "document_id": str(payload.document_id),
                     "chunk_index": chunk.chunk_index,
                     "group": payload.group,
+                    # Chunk classification (legal_body/act_title/...) so retrieval
+                    # can prefer legal_body and gate amendment_history behind
+                    # history/date queries.
+                    "chunk_type": chunk.chunk_type,
                     # Lets DB search filter hits to a single pipeline run when
                     # several runs share one collection.
                     "pipeline_run_id": payload.pipeline_id,

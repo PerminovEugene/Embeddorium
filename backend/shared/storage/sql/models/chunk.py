@@ -16,7 +16,7 @@ from sqlalchemy import (
     Text,
     text as sql_text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
@@ -44,6 +44,18 @@ class DocumentChunkORM(Base):
     chunk_index: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+    # Legal chunk classification + structured legal metadata. Defaults keep
+    # rows written by the generic text splitter (and pre-migration rows) valid.
+    chunk_type: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=sql_text("'passage'"),
+    )
+    chunk_metadata: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sql_text("'{}'"),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

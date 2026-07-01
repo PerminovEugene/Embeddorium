@@ -22,6 +22,7 @@ from backend.shared.parsers.chunking_config import (
     CHUNK_SIZE,
     CHUNK_STRATEGY,
 )
+from backend.shared.parsers.legal_pipeline import LegalXmlChunker
 from backend.shared.parsers.text_splitter import TextSplitter
 from backend.shared.storage.sql.core.engine import SqlPoolConfig
 from backend.shared.storage.sql.sql_store import SqlStore
@@ -44,6 +45,9 @@ sql_store = SqlStore(
 # Splitters keyed by (strategy, chunk_size, chunk_overlap) so each distinct
 # run config builds its TextSplitter once and reuses it across messages.
 _splitters: dict = {}
+
+# Legal XML chunker (structure-aware) is stateless across messages; build once.
+_legal_chunker = LegalXmlChunker()
 
 # Chunk settings keyed by pipeline_id. The PipelineRun snapshot is immutable
 # after creation, so it is read from the DB once per pipeline and reused for
@@ -123,4 +127,5 @@ def chunk_document(
             pipeline_id=pipeline_id,
             store=sql_store,
             splitter=splitter,
+            legal_chunker=_legal_chunker,
         )

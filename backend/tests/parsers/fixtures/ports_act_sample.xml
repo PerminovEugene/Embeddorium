@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<oigusakt id="doc-ports-1" xsi:schemaLocation="tyviseadus_1_10.02.2010 http://xmlr.eesti.ee/xml/schemas/oigusakt/tyviseadus_1_10.02.2010.xsd" xmlns="Juurakt" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<metaandmed>
+		<valjaandja>Riigikogu</valjaandja>
+		<dokumentLiik>seadus</dokumentLiik>
+		<globaalID>517062026001</globaalID>
+		<avaldamismarge>
+			<RTosa>RT I</RTosa>
+			<avaldamineKuupaev>2009-12-30</avaldamineKuupaev>
+			<RTartikkel>4</RTartikkel>
+		</avaldamismarge>
+	</metaandmed>
+	<aktinimi id="name-1">
+		<nimi id="name-2">
+			<pealkiri id="title-1">Ports Act</pealkiri>
+		</nimi>
+	</aktinimi>
+	<sisu id="sisu-1">
+		<peatykk id="ch1">
+			<peatykkNr>1</peatykkNr>
+			<peatykkPealkiri>General provisions</peatykkPealkiri>
+			<paragrahv id="p1">
+				<paragrahvNr>1</paragrahvNr>
+				<kuvatavNr><![CDATA[§ 1. ]]></kuvatavNr>
+				<paragrahvPealkiri>Scope of Act</paragrahvPealkiri>
+				<loige id="p1l1">
+					<loigeNr>1</loigeNr>
+					<kuvatavNr><![CDATA[(1)]]></kuvatavNr>
+					<sisuTekst><tavatekst>This Act regulates ports.</tavatekst></sisuTekst>
+				</loige>
+			</paragrahv>
+			<paragrahv id="p2">
+				<paragrahvNr>2</paragrahvNr>
+				<kuvatavNr><![CDATA[§ 2. ]]></kuvatavNr>
+				<paragrahvPealkiri>Application</paragrahvPealkiri>
+				<loige id="p2l1">
+					<loigeNr>1</loigeNr>
+					<kuvatavNr><![CDATA[(1)]]></kuvatavNr>
+					<sisuTekst><tavatekst>This Act applies to all ports.</tavatekst></sisuTekst>
+				</loige>
+			</paragrahv>
+		</peatykk>
+		<peatykk id="ch2">
+			<peatykkNr>2</peatykkNr>
+			<peatykkPealkiri>Water traffic safety requirements for provision of port services</peatykkPealkiri>
+			<paragrahv id="p4">
+				<paragrahvNr>4</paragrahvNr>
+				<kuvatavNr><![CDATA[§ 4. ]]></kuvatavNr>
+				<paragrahvPealkiri>Waters and entrances</paragrahvPealkiri>
+				<muutmismarge>
+					<avaldamismarge>
+						<RTosa>RT I</RTosa>
+						<avaldamineKuupaev>2021-05-31</avaldamineKuupaev>
+						<RTartikkel>1</RTartikkel>
+						<aktViide>131052021001</aktViide>
+					</avaldamismarge>
+					<joustumine>2021-06-01</joustumine>
+				</muutmismarge>
+				<loige id="p4l1">
+					<loigeNr>1</loigeNr>
+					<kuvatavNr><![CDATA[(1)]]></kuvatavNr>
+					<sisuTekst><tavatekst>A port shall have waters to enable the organisation of safe water traffic upon provision of port services and the depths shall be sufficient for the largest vessels expected to call at the port under normal operating conditions.</tavatekst></sisuTekst>
+				</loige>
+				<loige id="p4l2">
+					<loigeNr>2</loigeNr>
+					<kuvatavNr><![CDATA[(2)]]></kuvatavNr>
+					<sisuTekst><tavatekst>A port authority shall ensure the depths published in the navigational information in the waters and entrances and the measurement of the depths according to the procedure established on the basis of the Maritime Safety Act and shall keep the records up to date.</tavatekst></sisuTekst>
+				</loige>
+				<loige id="p4l3">
+					<loigeNr>3</loigeNr>
+					<kuvatavNr><![CDATA[(3)]]></kuvatavNr>
+					<sisuTekst><tavatekst>A port authority organises the administration and maintenance of entrance roads, waters and port structures necessary for berthing and for the safe movement of vessels within the port area at all times.</tavatekst></sisuTekst>
+				</loige>
+				<loige id="p4l4">
+					<loigeNr>4</loigeNr>
+					<kuvatavNr><![CDATA[(4)]]></kuvatavNr>
+					<sisuTekst><tavatekst>The minister responsible for the area may establish requirements for waters and entrances and for the maintenance of the depths and the navigational marking of the waters of a port by a regulation.</tavatekst></sisuTekst>
+				</loige>
+			</paragrahv>
+			<paragrahv id="p5">
+				<paragrahvNr>5</paragrahvNr>
+				<kuvatavNr><![CDATA[§ 5. ]]></kuvatavNr>
+				<paragrahvPealkiri>Port services</paragrahvPealkiri>
+				<loige id="p5l1">
+					<loigeNr>1</loigeNr>
+					<kuvatavNr><![CDATA[(1)]]></kuvatavNr>
+					<sisuTekst><tavatekst>Port services are considered to include the following port activities:</tavatekst></sisuTekst>
+					<alampunkt id="p5l1a1">
+						<alampunktNr>1</alampunktNr>
+						<kuvatavNr><![CDATA[1) ]]></kuvatavNr>
+						<sisuTekst><tavatekst>enabling berthing of water craft;</tavatekst></sisuTekst>
+					</alampunkt>
+					<alampunkt id="p5l1a2">
+						<alampunktNr>2</alampunktNr>
+						<kuvatavNr><![CDATA[2) ]]></kuvatavNr>
+						<sisuTekst><tavatekst>loading and unloading of water craft;</tavatekst></sisuTekst>
+					</alampunkt>
+					<alampunkt id="p5l1a3">
+						<alampunktNr>3</alampunktNr>
+						<kuvatavNr><![CDATA[3<sup>1</sup>) ]]></kuvatavNr>
+						<sisuTekst><tavatekst>reception of waste from ships.</tavatekst></sisuTekst>
+						<muutmismarge>
+							<avaldamismarge>
+								<RTosa>RT I</RTosa>
+								<avaldamineKuupaev>2022-01-03</avaldamineKuupaev>
+								<RTartikkel>3</RTartikkel>
+								<aktViide>103012022003</aktViide>
+							</avaldamismarge>
+							<joustumine>2022-01-13</joustumine>
+						</muutmismarge>
+					</alampunkt>
+				</loige>
+			</paragrahv>
+		</peatykk>
+	</sisu>
+</oigusakt>

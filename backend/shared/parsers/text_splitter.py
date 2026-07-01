@@ -12,7 +12,7 @@ from backend.shared.parsers.chunking_config import (
 from backend.shared.parsers.link_extractor import LinkExtractor, LinkInfo
 
 # Bump when chunking parameters/algorithm change.
-CHUNKER_VERSION = "2"
+CHUNKER_VERSION = "3"
 
 _SECTION_HEADERS = [("#", "h1"), ("##", "h2"), ("###", "h3")]
 _PARAGRAPH_RE = re.compile(r"\n{2,}")
@@ -22,6 +22,10 @@ _PARAGRAPH_RE = re.compile(r"\n{2,}")
 class Chunk:
     text: str
     links: List[LinkInfo] = field(default_factory=list)
+    # chunk_type/metadata are populated by the legal XML chunker; the generic
+    # text strategies leave the defaults (a plain searchable "passage").
+    chunk_type: str = "passage"
+    metadata: dict = field(default_factory=dict)
 
 
 class TextSplitter:
