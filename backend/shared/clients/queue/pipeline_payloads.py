@@ -67,3 +67,23 @@ class ScheduleEmbeddingsPayload(_CrawlStagePayload):
 @dataclass(frozen=True)
 class ScheduleDiscoveredLinksPayload(_CrawlStagePayload):
     pass
+
+
+@dataclass(frozen=True)
+class TrackPipelineStatusPayload:
+    """Message that pokes ``track_pipeline_status`` to re-check a run.
+
+    Unlike the crawl-stage payloads above this carries no target/group — the
+    tracker only needs the run id to re-derive completion from the DB
+    (``crawl_targets`` + the run's own embed counters), so the wire message
+    stays minimal.
+    """
+
+    pipeline_id: UUID
+
+    def to_actor_kwargs(self) -> dict:
+        return {"pipeline_id": str(self.pipeline_id)}
+
+    @classmethod
+    def from_actor_kwargs(cls, *, pipeline_id: str) -> "TrackPipelineStatusPayload":
+        return cls(pipeline_id=UUID(pipeline_id))

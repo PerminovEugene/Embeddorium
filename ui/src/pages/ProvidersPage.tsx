@@ -8,7 +8,6 @@ import {
 import ProviderList from "../components/providers/ProviderList";
 import ProviderForm from "../components/providers/ProviderForm";
 import { Provider, ProviderFormValues } from "../components/providers/types";
-import PageHeader from "../components/common/PageHeader";
 import Card from "../components/common/Card";
 
 const ProvidersPage = () => {
@@ -39,7 +38,7 @@ const ProvidersPage = () => {
 
   const selectedProvider = useMemo(
     () => providers.find((p) => p.id === selectedId) ?? null,
-    [providers, selectedId]
+    [providers, selectedId],
   );
 
   const handleCreateNew = () => setSelectedId(null);
@@ -51,7 +50,7 @@ const ProvidersPage = () => {
       if (selectedProvider) {
         const updated = await updateProvider(selectedProvider.id, values);
         setProviders((prev) =>
-          prev.map((p) => (p.id === updated.id ? updated : p))
+          prev.map((p) => (p.id === updated.id ? updated : p)),
         );
       } else {
         const created = await createProvider(values);
@@ -86,8 +85,6 @@ const ProvidersPage = () => {
 
   return (
     <section>
-      <PageHeader eyebrow="Connections" title="Providers" />
-
       {error && (
         <p className="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 shadow-sm">
           {error}

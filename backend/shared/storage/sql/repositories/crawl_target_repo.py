@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,24 @@ from backend.shared.models.crawl_target import (
     CrawlTargetStatus,
     TERMINAL_OR_ACTIVE_STATUSES,
 )
+from backend.shared.storage.sql.models.chunk import DocumentChunkORM
 from backend.shared.storage.sql.models.crawl_target import CrawlTargetORM
+
+# Statuses from which no further embed batches will ever be scheduled for a
+# target. This is deliberately narrower than TERMINAL_OR_ACTIVE_STATUSES
+# (which governs re-queue dedup): here FAILED_TRANSIENT/FAILED are counted as
+# terminal too, because track_pipeline_status only cares whether a target can
+# still *produce* work, not whether the frontier manager would re-queue it.
+_EMBEDDING_TERMINAL_STATUSES = frozenset(
+    {
+        CrawlTargetStatus.PROCESSED,
+        CrawlTargetStatus.SKIPPED,
+        CrawlTargetStatus.SKIPPED_UNSUPPORTED,
+        CrawlTargetStatus.FAILED_TRANSIENT,
+        CrawlTargetStatus.FAILED_PERMANENT,
+        CrawlTargetStatus.FAILED,
+    }
+)
 
 
 def _to_crawl_target(orm: CrawlTargetORM) -> CrawlTarget:
@@ -198,3 +215,64 @@ class CrawlTargetRepository:
                 .limit(limit)
             )
             return [_to_crawl_target(orm) for orm in session.scalars(stmt).all()]
+
+    def count_by_pipeline(self, pipeline_id: uuid.UUID) -> int:
+        """Total number of ``crawl_targets`` rows belonging to *pipeline_id*."""
+        with Session(self.engine) as session:
+            stmt = select(func.count(CrawlTargetORM.id)).where(
+                CrawlTargetORM.pipeline_id == pipeline_id,
+            )
+            return int(session.scalar(stmt) or 0)
+
+    def list_by_pipeline(
+        self,
+        pipeline_id: uuid.UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> List[Tuple[CrawlTarget, int]]:
+        """Return a paginated page of targets for *pipeline_id*, oldest first.
+
+        Each element is a ``(CrawlTarget, chunk_count)`` tuple. The chunk count
+        is computed in a single LEFT JOIN against ``document_chunks`` (keyed on
+        ``document_id``) so the method never issues N+1 queries. Targets whose
+        ``document_id`` is NULL produce a chunk count of 0.
+
+        Ordering by ``created_at ASC`` gives a stable, deterministic page order
+        that reflects the sequence in which the frontier discovered URLs.
+        """
+        stmt = (
+            select(
+                CrawlTargetORM,
+                func.count(DocumentChunkORM.id).label("chunk_count"),
+            )
+            .outerjoin(
+                DocumentChunkORM,
+                CrawlTargetORM.document_id == DocumentChunkORM.document_id,
+            )
+            .where(CrawlTargetORM.pipeline_id == pipeline_id)
+            .group_by(CrawlTargetORM.id)
+            .order_by(CrawlTargetORM.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        with Session(self.engine) as session:
+            rows = session.execute(stmt).all()
+            return [(_to_crawl_target(row[0]), int(row[1])) for row in rows]
+
+    def count_active_for_pipeline(self, pipeline_id: uuid.UUID) -> int:
+        """Count targets for *pipeline_id* that can still produce embed work.
+
+        "Active" means not yet in one of ``_EMBEDDING_TERMINAL_STATUSES`` — a
+        target sitting in e.g. ``chunked`` or ``scheduling`` may still cause
+        ``schedule_embeddings`` to emit more batches, so ``track_pipeline_status``
+        must wait for this to reach zero before it can safely compare the
+        embed counters.
+        """
+        terminal = [str(s) for s in _EMBEDDING_TERMINAL_STATUSES]
+        with Session(self.engine) as session:
+            stmt = select(func.count(CrawlTargetORM.id)).where(
+                CrawlTargetORM.pipeline_id == pipeline_id,
+                CrawlTargetORM.status.notin_(terminal),
+            )
+            return int(session.scalar(stmt) or 0)

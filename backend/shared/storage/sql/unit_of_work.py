@@ -41,6 +41,7 @@ from backend.shared.storage.sql.models.crawl_target import CrawlTargetORM
 from backend.shared.storage.sql.models.discovered_link import DiscoveredLinkORM
 from backend.shared.storage.sql.models.document import DocumentORM
 from backend.shared.storage.sql.models.outbox_event import OutboxEventORM
+from backend.shared.storage.sql.models.pipeline_run import PipelineRunORM
 from backend.shared.storage.sql.models.source_fetch import SourceFetchORM
 
 
@@ -226,8 +227,18 @@ class UnitOfWork:
 
     # --- outbox ---------------------------------------------------------
 
-    def add_outbox(self, event: OutboxEvent) -> None:
-        """Insert an outbox event, ignoring duplicates on ``dedup_key``."""
+    def add_outbox(self, event: OutboxEvent) -> bool:
+        """Insert an outbox event, ignoring duplicates on ``dedup_key``.
+
+        Returns ``True`` iff a row was actually inserted (i.e. this call was
+        the first to use *event*'s ``dedup_key``) and ``False`` when it
+        conflicted with an existing row. Most callers ignore the return
+        value, but it is what makes the ``embeddings_scheduled`` /
+        ``embeddings_completed`` counters exactly-once under at-least-once
+        redelivery: a caller increments a counter only when the outbox event
+        backing that increment was newly inserted, so a re-delivered message
+        that finds its event already present skips the increment too.
+        """
         stmt = (
             pg_insert(OutboxEventORM)
             .values(
@@ -237,5 +248,38 @@ class UnitOfWork:
                 dedup_key=event.dedup_key,
             )
             .on_conflict_do_nothing(index_elements=[OutboxEventORM.dedup_key])
+            .returning(OutboxEventORM.id)
         )
-        self._session.execute(stmt)
+        inserted_id = self._session.execute(stmt).scalar()
+        return inserted_id is not None
+
+    # --- pipeline run counters -------------------------------------------
+
+    def increment_embeddings_scheduled(self, pipeline_id: uuid.UUID, n: int) -> None:
+        """Add *n* newly-scheduled embed batches to the run's counter.
+
+        No-op when ``n <= 0`` so callers can call this unconditionally after
+        counting how many outbox events were newly inserted in a batch.
+        """
+        if n <= 0:
+            return
+        self._session.execute(
+            update(PipelineRunORM)
+            .where(PipelineRunORM.id == pipeline_id)
+            .values(embeddings_scheduled=PipelineRunORM.embeddings_scheduled + n)
+        )
+
+    def increment_embeddings_completed(self, pipeline_id: uuid.UUID, n: int) -> None:
+        """Add *n* newly-completed embed batches to the run's counter.
+
+        Mirrors :meth:`increment_embeddings_scheduled`; see that method's
+        docstring and the module docstring for why this must only be called
+        for outbox events that were newly inserted.
+        """
+        if n <= 0:
+            return
+        self._session.execute(
+            update(PipelineRunORM)
+            .where(PipelineRunORM.id == pipeline_id)
+            .values(embeddings_completed=PipelineRunORM.embeddings_completed + n)
+        )

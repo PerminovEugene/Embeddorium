@@ -3,11 +3,13 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
+from backend.shared.clients.queue.queue_names import TRACK_PIPELINE_STATUS_QUEUE
 from backend.shared.models.document_chunk import DocumentChunk
 from backend.actors.embed_chunks_actor.handler import (
     embed_chunks as _embed_chunks,
     BATCH_SIZE,
 )
+from backend.tests.actors.pipeline_helpers import outbox_for_queue, uow_of
 
 
 def _make_chunk(index: int, document_id: uuid.UUID) -> DocumentChunk:
@@ -50,6 +52,7 @@ def _call(
     document_id: uuid.UUID | None = None,
     group: str = "Estonia",
     model_size: int = 4,
+    pipeline_id: str | None = None,
 ) -> tuple[MagicMock, MagicMock, MagicMock]:
     """Run _embed_chunks with mocked deps, return (store, vector_store, model)."""
     doc_id = document_id or uuid.uuid4()
@@ -67,6 +70,7 @@ def _call(
         vector_store=vector_store,
         model=model,
         model_size=model_size,
+        pipeline_id=pipeline_id,
     )
 
     return store, vector_store, model
@@ -207,3 +211,77 @@ def test_batch_payloads_reference_correct_chunks() -> None:
 
     assert [p["chunk_id"] for p in first_payloads] == [str(c.id) for c in chunks[:BATCH_SIZE]]
     assert [p["chunk_id"] for p in second_payloads] == [str(c.id) for c in chunks[BATCH_SIZE:]]
+
+
+# --- pipeline status tracking ---
+
+def test_pipeline_id_emits_tracker_event_and_increments_counter() -> None:
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(2, doc_id)
+    pipeline_id = str(uuid.uuid4())
+
+    store, _, _ = _call(chunks=chunks, document_id=doc_id, pipeline_id=pipeline_id)
+
+    uow = uow_of(store)
+    tracker_events = outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE)
+    assert len(tracker_events) == 1
+    assert tracker_events[0].payload["pipeline_id"] == pipeline_id
+    assert tracker_events[0].dedup_key == (
+        f"track:{pipeline_id}:embed:{doc_id}:{chunks[0].id}"
+    )
+
+    # add_outbox on a plain MagicMock returns a MagicMock (truthy), so the
+    # newly-inserted branch runs and increments the counter by exactly one
+    # batch, regardless of how many chunks/sub-batches the batch contained.
+    uow.increment_embeddings_completed.assert_called_once_with(
+        uuid.UUID(pipeline_id), 1
+    )
+
+
+def test_pipeline_id_emits_exactly_one_tracker_event_across_sub_batches() -> None:
+    # A single embed_chunks message re-splits into BATCH_SIZE sub-batches for
+    # encoding, but is still exactly one "batch" for scheduling purposes.
+    n = BATCH_SIZE + 5
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(n, doc_id)
+    pipeline_id = str(uuid.uuid4())
+
+    store, _, _ = _call(chunks=chunks, document_id=doc_id, pipeline_id=pipeline_id)
+
+    uow = uow_of(store)
+    tracker_events = outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE)
+    assert len(tracker_events) == 1
+
+
+def test_no_pipeline_id_skips_tracking_entirely() -> None:
+    chunks = _make_chunks(2)
+    store, _, _ = _call(chunks=chunks, pipeline_id=None)
+
+    store.unit_of_work.assert_not_called()
+
+
+def test_redelivered_batch_does_not_double_count() -> None:
+    # A redelivered message finds its tracker event already present:
+    # add_outbox returns False, so the counter must not be incremented again.
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(2, doc_id)
+    pipeline_id = str(uuid.uuid4())
+
+    store = _make_store(chunks)
+    uow = uow_of(store)
+    uow.add_outbox.return_value = False
+    vector_store = _make_vector_store()
+    model = _make_model()
+
+    _embed_chunks(
+        document_id=str(doc_id),
+        chunk_ids=[str(c.id) for c in chunks],
+        group="Estonia",
+        store=store,
+        vector_store=vector_store,
+        model=model,
+        model_size=4,
+        pipeline_id=pipeline_id,
+    )
+
+    uow.increment_embeddings_completed.assert_not_called()

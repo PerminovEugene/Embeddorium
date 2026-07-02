@@ -5,6 +5,14 @@ one frontier outbox event per pending discovered link (deduped per link), marks
 those links scheduled, and only then sets the target to PROCESSED. Because the
 frontier events live in the same committed transaction as the PROCESSED status,
 downstream work is durable/recoverable before the target is considered done.
+
+This is also one of the two triggers for ``track_pipeline_status`` (the other
+is ``embed_chunks``): a target reaching PROCESSED means it will never schedule
+another embed batch, which is half of what the tracker needs to know a run is
+complete. Embeddings for earlier targets may still be in flight when this
+target's link event fires, or may have already finished before it — either
+order is fine because the tracker re-derives completion from the DB rather
+than trusting message order.
 """
 
 from __future__ import annotations
@@ -13,12 +21,17 @@ from typing import Optional
 from uuid import UUID
 
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
-from backend.shared.clients.queue.pipeline_payloads import ScheduleDiscoveredLinksPayload
+from backend.shared.clients.queue.pipeline_payloads import (
+    ScheduleDiscoveredLinksPayload,
+    TrackPipelineStatusPayload,
+)
 from backend.shared.clients.queue.queue_names import (
     CRAWL_FRONTIER_MANAGER_ACTOR,
     CRAWL_FRONTIER_MANAGER_QUEUE,
     SCHEDULE_DISCOVERED_LINKS_ACTOR,
     SCHEDULE_DISCOVERED_LINKS_QUEUE,
+    TRACK_PIPELINE_STATUS_ACTOR,
+    TRACK_PIPELINE_STATUS_QUEUE,
 )
 from backend.shared.models import (
     CrawlTargetStatus,
@@ -92,3 +105,16 @@ def schedule_discovered_links(
 
         uow.mark_links_scheduled(scheduled_ids)
         uow.set_status(target_id, CrawlTargetStatus.PROCESSED)
+
+        if payload.pipeline_id is not None:
+            track_payload = TrackPipelineStatusPayload(
+                pipeline_id=UUID(payload.pipeline_id)
+            )
+            uow.add_outbox(
+                OutboxEvent(
+                    queue_name=TRACK_PIPELINE_STATUS_QUEUE,
+                    actor_name=TRACK_PIPELINE_STATUS_ACTOR,
+                    payload=track_payload.to_actor_kwargs(),
+                    dedup_key=f"track:{payload.pipeline_id}:links:{target_id}",
+                )
+            )

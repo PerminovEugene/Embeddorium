@@ -110,6 +110,36 @@ class PipelineRunRepository:
             orm = session.get(PipelineRunORM, run_id)
             return _to_pipeline_run(orm) if orm else None
 
+    def complete_if_running(
+        self, run_id: uuid.UUID, finished_at: datetime
+    ) -> Optional[PipelineRun]:
+        """Atomically flip a running run to ``completed``.
+
+        The ``WHERE status = 'running'`` guard makes this the idempotent
+        completion primitive that ``track_pipeline_status`` relies on: both
+        its triggers (``embed_chunks`` and ``schedule_discovered_links``) can
+        race to detect completion for the same run, and duplicate/redelivered
+        messages can call this repeatedly, but only the first caller that
+        finds the row still ``running`` performs the transition — everyone
+        else gets ``None`` back and treats it as a no-op.
+        """
+        with Session(self.engine) as session:
+            stmt = (
+                update(PipelineRunORM)
+                .where(
+                    PipelineRunORM.id == run_id,
+                    PipelineRunORM.status == "running",
+                )
+                .values(status="completed", finished_at=finished_at)
+                .returning(PipelineRunORM)
+            )
+            orm = session.execute(stmt).scalars().first()
+            if orm is None:
+                return None
+            session.commit()
+            orm = session.get(PipelineRunORM, run_id)
+            return _to_pipeline_run(orm) if orm else None
+
     def list_recent(self, limit: int = 100) -> List[PipelineRun]:
         """Return pipeline runs ordered newest first, up to *limit* rows."""
         with Session(self.engine) as session:

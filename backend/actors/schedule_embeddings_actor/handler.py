@@ -4,10 +4,16 @@ Acquires the target (CHUNKED → SCHEDULING) and, in one transaction, writes one
 embed outbox event per batch of chunks (deduped per batch) plus the outbox
 event that triggers ``schedule_discovered_links``. Idempotent: re-running emits
 the same dedup keys, so no duplicate embedding jobs.
+
+Each batch whose outbox event is newly inserted also bumps the run's
+``embeddings_scheduled`` counter, which ``track_pipeline_status`` compares
+against ``embeddings_completed`` (bumped by ``embed_chunks``) to detect when a
+run has no more embed work outstanding.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 from uuid import UUID
 
@@ -86,6 +92,10 @@ def schedule_embeddings(
     )
 
     with store.unit_of_work() as uow:
+        # Only newly-inserted events (not re-deliveries) bump the run's
+        # embeddings_scheduled counter, so track_pipeline_status sees an
+        # exact batch count even if this message is redelivered.
+        newly_scheduled = 0
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start : start + batch_size]
             embed_payload = EmbedChunksPayload(
@@ -94,13 +104,20 @@ def schedule_embeddings(
                 group=payload.group,
                 pipeline_id=payload.pipeline_id,
             )
-            uow.add_outbox(
+            inserted = uow.add_outbox(
                 OutboxEvent(
                     queue_name=EMBED_CHUNKS_QUEUE,
                     actor_name=EMBED_CHUNKS_ACTOR,
                     payload=embed_payload.to_actor_kwargs(),
                     dedup_key=f"embed:{document.id}:{start}",
                 )
+            )
+            if inserted:
+                newly_scheduled += 1
+
+        if payload.pipeline_id is not None and newly_scheduled > 0:
+            uow.increment_embeddings_scheduled(
+                uuid.UUID(payload.pipeline_id), newly_scheduled
             )
 
         uow.add_outbox(

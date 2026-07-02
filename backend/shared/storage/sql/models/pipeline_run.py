@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     DateTime,
+    Integer,
     Text,
     text as sql_text,
 )
@@ -50,4 +51,16 @@ class PipelineRunORM(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=sql_text("now()"),
+    )
+    # Embed-batch progress counters read by track_pipeline_status to detect
+    # completion. See migration 022 and PipelineRun's docstring.
+    embeddings_scheduled: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=sql_text("0"),
+    )
+    embeddings_completed: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=sql_text("0"),
     )

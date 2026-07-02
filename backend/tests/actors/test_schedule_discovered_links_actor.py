@@ -1,7 +1,10 @@
 import uuid
 
 from backend.actors.schedule_discovered_links_actor import schedule_discovered_links
-from backend.shared.clients.queue.queue_names import CRAWL_FRONTIER_MANAGER_QUEUE
+from backend.shared.clients.queue.queue_names import (
+    CRAWL_FRONTIER_MANAGER_QUEUE,
+    TRACK_PIPELINE_STATUS_QUEUE,
+)
 from backend.shared.models import (
     CrawlTargetStatus,
     DiscoveredLink,
@@ -70,3 +73,42 @@ def test_no_pending_links_still_marks_processed():
     uow = uow_of(store)
     assert outbox_for_queue(uow, CRAWL_FRONTIER_MANAGER_QUEUE) == []
     uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.PROCESSED)
+
+
+# --- pipeline status tracking ---
+
+def test_pipeline_id_emits_tracker_event_with_links_dedup_key():
+    target = make_target(status=CrawlTargetStatus.SCHEDULING)
+    pipeline_id = str(uuid.uuid4())
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = Document(
+        id=uuid.uuid4(), source_url=target.original_url
+    )
+    store.discovered_links.list_pending_by_document.return_value = []
+
+    schedule_discovered_links(
+        crawl_target_id=str(target.id),
+        group="Estonia",
+        pipeline_id=pipeline_id,
+        store=store,
+    )
+
+    uow = uow_of(store)
+    tracker_events = outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE)
+    assert len(tracker_events) == 1
+    assert tracker_events[0].payload["pipeline_id"] == pipeline_id
+    assert tracker_events[0].dedup_key == f"track:{pipeline_id}:links:{target.id}"
+
+
+def test_no_pipeline_id_emits_no_tracker_event():
+    target = make_target(status=CrawlTargetStatus.SCHEDULING)
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = Document(
+        id=uuid.uuid4(), source_url=target.original_url
+    )
+    store.discovered_links.list_pending_by_document.return_value = []
+
+    schedule_discovered_links(crawl_target_id=str(target.id), group="Estonia", store=store)
+
+    uow = uow_of(store)
+    assert outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE) == []

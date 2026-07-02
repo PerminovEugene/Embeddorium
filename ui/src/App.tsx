@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import ProvidersPage from "./pages/ProvidersPage";
 import DatasetsPage from "./pages/DatasetsPage";
 import IngestionPipelinesPage from "./pages/IngestionPipelinesPage";
+import PipelineRunsPage from "./pages/PipelineRunsPage";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           path="ingestion-pipelines"
           element={<IngestionPipelinesPage />}
         />
+        <Route path="pipeline-runs" element={<PipelineRunsPage />} />
       </Route>
     </Routes>
   );

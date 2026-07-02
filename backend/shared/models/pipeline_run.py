@@ -200,9 +200,17 @@ class PipelineRun(BaseModel):
     started_at
         Set to ``now()`` when the first seed message is published.
     finished_at
-        Reserved for future completion tracking; not set by the current flow.
+        Set by ``track_pipeline_status`` when the run auto-completes (all
+        embed batches finished and no crawl targets remain active).
     created_at
         Set by the database server on insert.
+    embeddings_scheduled
+        Total embed batches emitted by ``schedule_embeddings`` for this run,
+        incremented exactly once per batch (see ``UnitOfWork.add_outbox``).
+    embeddings_completed
+        Total embed batches finished by ``embed_chunks`` for this run,
+        incremented exactly once per batch. ``track_pipeline_status`` compares
+        this against ``embeddings_scheduled`` to detect completion.
     """
 
     id: Optional[uuid.UUID] = None
@@ -220,3 +228,10 @@ class PipelineRun(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+
+    # Embed-batch progress counters used by track_pipeline_status to detect
+    # run completion; see the class docstring. Old rows lack these columns
+    # pre-migration 022, so the DB server default and this model default both
+    # fall back to 0.
+    embeddings_scheduled: int = 0
+    embeddings_completed: int = 0

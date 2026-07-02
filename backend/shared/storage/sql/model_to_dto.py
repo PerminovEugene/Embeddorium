@@ -116,6 +116,8 @@ def _to_pipeline_run(orm: PipelineRunORM) -> PipelineRun:
         started_at=orm.started_at,
         finished_at=orm.finished_at,
         created_at=orm.created_at,
+        embeddings_scheduled=orm.embeddings_scheduled,
+        embeddings_completed=orm.embeddings_completed,
     )
 
 

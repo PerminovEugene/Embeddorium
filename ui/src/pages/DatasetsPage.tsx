@@ -8,7 +8,6 @@ import {
 import DatasetList from "../components/datasets/DatasetList";
 import DatasetForm from "../components/datasets/DatasetForm";
 import { Dataset, DatasetFormValues } from "../components/datasets/types";
-import PageHeader from "../components/common/PageHeader";
 import Card from "../components/common/Card";
 
 const DatasetsPage = () => {
@@ -86,8 +85,6 @@ const DatasetsPage = () => {
 
   return (
     <section>
-      <PageHeader eyebrow="Knowledge base" title="Datasets" />
-
       {error && (
         <p className="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 shadow-sm">
           {error}

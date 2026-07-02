@@ -17,7 +17,6 @@ import {
 } from "../components/ingestion-pipelines/types";
 import { Provider } from "../components/providers/types";
 import { Dataset } from "../components/datasets/types";
-import PageHeader from "../components/common/PageHeader";
 import Card from "../components/common/Card";
 
 const IngestionPipelinesPage = () => {
@@ -35,7 +34,7 @@ const IngestionPipelinesPage = () => {
 
   const selectedPipeline = useMemo(
     () => pipelines.find((p) => p.id === selectedId) ?? null,
-    [pipelines, selectedId]
+    [pipelines, selectedId],
   );
 
   const handleCreateNew = () => setSelectedId(null);
@@ -89,7 +88,9 @@ const IngestionPipelinesPage = () => {
     } catch (err) {
       console.error("Failed to create ingestion pipeline:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create ingestion pipeline"
+        err instanceof Error
+          ? err.message
+          : "Failed to create ingestion pipeline",
       );
     } finally {
       setSubmitting(false);
@@ -102,11 +103,13 @@ const IngestionPipelinesPage = () => {
     try {
       const updated = await launchIngestionPipeline(pipeline.id);
       setPipelines((prev) =>
-        prev.map((p) => (p.id === updated.id ? updated : p))
+        prev.map((p) => (p.id === updated.id ? updated : p)),
       );
     } catch (err) {
       console.error("Failed to launch pipeline:", err);
-      setError(err instanceof Error ? err.message : "Failed to launch pipeline");
+      setError(
+        err instanceof Error ? err.message : "Failed to launch pipeline",
+      );
     } finally {
       setBusyId(null);
     }
@@ -131,8 +134,6 @@ const IngestionPipelinesPage = () => {
 
   return (
     <section>
-      <PageHeader eyebrow="Orchestration" title="Ingestion pipelines" />
-
       {error && (
         <p className="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 shadow-sm">
           {error}

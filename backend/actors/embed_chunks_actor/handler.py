@@ -1,17 +1,31 @@
-"""Stage 7: embed a batch of chunks and upsert vectors into Qdrant.
+"""Stage 7 (terminal): embed a batch of chunks and upsert vectors into Qdrant.
 
 Pure logic — no broker/dramatiq concerns. The embedding model is loaded lazily
 on first use and cached as a module singleton. The ``mock`` and ``ollama``
 providers return/fetch vectors without importing torch/sentence-transformers,
 so this module stays import-light in containers that run those providers —
 only the ``huggingface`` (real local model) path pulls the heavy ML stack.
+
+Once a batch's vectors are upserted, this is also one of the two triggers for
+``track_pipeline_status`` (the other is ``schedule_discovered_links``): it
+writes a tracker outbox event and bumps the run's ``embeddings_completed``
+counter, so the tracker can eventually see that every scheduled batch has
+finished. See ``track_pipeline_status_actor`` for the completion condition.
 """
 
 from __future__ import annotations
 
+import uuid
+
 from backend.shared import config
 from backend.shared.clients.mock_embed_client import MockEmbedClient
 from backend.shared.clients.queue.embed_chunks_payload import EmbedChunksPayload
+from backend.shared.clients.queue.pipeline_payloads import TrackPipelineStatusPayload
+from backend.shared.clients.queue.queue_names import (
+    TRACK_PIPELINE_STATUS_ACTOR,
+    TRACK_PIPELINE_STATUS_QUEUE,
+)
+from backend.shared.models import OutboxEvent
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
 
@@ -151,3 +165,30 @@ def embed_chunks(
                 for chunk in batch
             ],
         )
+
+    # This whole invocation is one "batch" as far as schedule_embeddings and
+    # track_pipeline_status are concerned (the BATCH_SIZE re-splitting above is
+    # purely an internal encode-call chunking detail). Emit the tracker event
+    # once, after every sub-batch has been upserted, so a partial failure never
+    # reports a batch as complete. The dedup key is keyed off the first chunk
+    # id of the whole message, which is stable and unique per scheduled batch.
+    if payload.pipeline_id is not None and payload.chunk_ids:
+        with store.unit_of_work() as uow:
+            track_payload = TrackPipelineStatusPayload(
+                pipeline_id=uuid.UUID(payload.pipeline_id)
+            )
+            inserted = uow.add_outbox(
+                OutboxEvent(
+                    queue_name=TRACK_PIPELINE_STATUS_QUEUE,
+                    actor_name=TRACK_PIPELINE_STATUS_ACTOR,
+                    payload=track_payload.to_actor_kwargs(),
+                    dedup_key=(
+                        f"track:{payload.pipeline_id}:embed:"
+                        f"{payload.document_id}:{payload.chunk_ids[0]}"
+                    ),
+                )
+            )
+            if inserted:
+                uow.increment_embeddings_completed(
+                    uuid.UUID(payload.pipeline_id), 1
+                )

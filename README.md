@@ -60,9 +60,13 @@ POST /pipeline-runs
       │
       ▼
 crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► embed_chunks ─► Qdrant
-                                              ▲
-   fetch_file_source ─► filter_documents ─────┘   (local XML files rejoin here)
+                                              ▲                                                          │
+   fetch_file_source ─► filter_documents ─────┘                                          track_pipeline_status
 ```
+
+Once every embedding batch a run scheduled has finished (and no crawl target
+can schedule any more), `track_pipeline_status` flips the run to `completed`
+and stamps `finished_at` automatically — no polling required.
 
 The full walk-through — both chains, the outbox, the status machine, and where
 data lives — is in **[docs/architecture.md](docs/architecture.md)**.

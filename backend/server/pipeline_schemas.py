@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from backend.shared.models import PipelineRun
+from backend.shared.models.crawl_target import CrawlTarget
 
 
 class _CamelModel(BaseModel):
@@ -72,6 +73,55 @@ class PipelineRunStatusIn(_CamelModel):
     """
 
     status: Literal["pending", "running", "completed", "failed"]
+
+
+class PipelineRunTargetOut(_CamelModel):
+    """One crawl target row in a pipeline run's processed-files response.
+
+    ``url`` is mapped from ``original_url`` on the domain model; the alias
+    generator produces camelCase wire names for all multi-word fields
+    (e.g. ``normalizedUrl``, ``skipReason``, ``chunkCount``).
+    """
+
+    id: uuid.UUID
+    # original_url is exposed as the shorter "url" key to keep the wire schema
+    # clean; normalizedUrl carries the full canonical form.
+    url: str
+    normalized_url: str
+    status: str
+    skip_reason: Optional[str] = None
+    error: Optional[str] = None
+    chunk_count: int
+    document_id: Optional[uuid.UUID] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class PipelineRunTargetsPage(_CamelModel):
+    """Paginated list of crawl targets for a single pipeline run."""
+
+    items: List[PipelineRunTargetOut]
+    total: int
+    limit: int
+    offset: int
+
+
+def pipeline_run_target_to_out(
+    target: CrawlTarget, chunk_count: int
+) -> PipelineRunTargetOut:
+    """Map a domain ``CrawlTarget`` + its chunk count to the response schema."""
+    return PipelineRunTargetOut(
+        id=target.id,
+        url=target.original_url,
+        normalized_url=target.normalized_url,
+        status=str(target.status),
+        skip_reason=target.skip_reason,
+        error=target.error,
+        chunk_count=chunk_count,
+        document_id=target.document_id,
+        created_at=target.created_at,
+        updated_at=target.updated_at,
+    )
 
 
 def pipeline_run_to_out(run: PipelineRun) -> PipelineRunOut:

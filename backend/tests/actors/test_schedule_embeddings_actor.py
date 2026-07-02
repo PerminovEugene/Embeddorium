@@ -63,3 +63,45 @@ def test_multiple_batches_emit_distinct_dedup_keys():
         f"embed:{doc_id}:0",
         f"embed:{doc_id}:{BATCH_SIZE}",
     ]
+
+
+# --- pipeline status tracking ---
+
+def test_pipeline_id_increments_embeddings_scheduled_by_batch_count():
+    target = make_target(status=CrawlTargetStatus.CHUNKED)
+    doc_id = uuid.uuid4()
+    pipeline_id = str(uuid.uuid4())
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = Document(
+        id=doc_id, source_url=target.original_url
+    )
+    store.chunks.list_by_document.return_value = _chunks(doc_id, BATCH_SIZE + 1)
+
+    schedule_embeddings(
+        crawl_target_id=str(target.id),
+        group="Estonia",
+        pipeline_id=pipeline_id,
+        store=store,
+    )
+
+    uow = uow_of(store)
+    # Two batches were emitted (BATCH_SIZE + 1 chunks), so the scheduled
+    # counter advances by exactly two.
+    uow.increment_embeddings_scheduled.assert_called_once_with(
+        uuid.UUID(pipeline_id), 2
+    )
+
+
+def test_no_pipeline_id_skips_scheduled_counter():
+    target = make_target(status=CrawlTargetStatus.CHUNKED)
+    doc_id = uuid.uuid4()
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = Document(
+        id=doc_id, source_url=target.original_url
+    )
+    store.chunks.list_by_document.return_value = _chunks(doc_id, 2)
+
+    schedule_embeddings(crawl_target_id=str(target.id), group="Estonia", store=store)
+
+    uow = uow_of(store)
+    uow.increment_embeddings_scheduled.assert_not_called()

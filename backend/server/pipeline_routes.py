@@ -45,6 +45,8 @@ from backend.server.pipeline_schemas import (
     PipelineRunIn,
     PipelineRunOut,
     PipelineRunStatusIn,
+    PipelineRunTargetsPage,
+    pipeline_run_target_to_out,
     pipeline_run_to_out,
 )
 from backend.shared.models import PipelineActorConfigs, PipelineRun
@@ -344,6 +346,51 @@ async def update_pipeline_run_status(
         if updated is None:
             raise HTTPException(status_code=404, detail="Pipeline run not found")
         return pipeline_run_to_out(updated)
+    finally:
+        store.close()
+
+
+@router.get(
+    "/{run_id}/targets",
+    response_model=PipelineRunTargetsPage,
+    response_model_by_alias=True,
+)
+async def list_pipeline_run_targets(
+    run_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> PipelineRunTargetsPage:
+    """Paginated list of crawl targets (processed files/URLs) for a run.
+
+    Query params
+    ------------
+    limit:  Page size (clamped to 200; default 50).
+    offset: Row offset for the current page (floored at 0; default 0).
+
+    Each item includes the source URL, its pipeline status, any skip/error
+    detail, and the number of document chunks produced. A chunk count of 0
+    means the target was skipped, failed, or is still in flight.
+    """
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    parsed = _parse_id(run_id)
+    store = SqlStore(application_name="embeddorium-pipeline-runs")
+    try:
+        run = store.pipeline_runs.get(parsed)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Pipeline run not found")
+
+        total = store.crawl_targets.count_by_pipeline(parsed)
+        pairs = store.crawl_targets.list_by_pipeline(
+            parsed, limit=limit, offset=offset
+        )
+        items = [pipeline_run_target_to_out(t, n) for t, n in pairs]
+        return PipelineRunTargetsPage(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
     finally:
         store.close()
 

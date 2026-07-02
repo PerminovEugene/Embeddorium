@@ -320,6 +320,30 @@ services:
         condition: service_completed_successfully
     restart: on-failure
 
+  worker-track-pipeline-status:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: ""
+    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
+    # one process per CPU core x 8 threads each) so the SqlStore pool size in
+    # the launcher can be sized against a known, bounded concurrency.
+    command: dramatiq backend.actors.track_pipeline_status_actor --queues ingest.pipeline.status.track.v1 --processes 1 --threads 1
+    volumes:
+      - .:/app
+      - ./tmp/pipeline_run:/tmp/pipeline_runs
+    env_file:
+      - .env.docker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
   worker-outbox-dispatcher:
     build:
       context: .

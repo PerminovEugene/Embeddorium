@@ -16,8 +16,10 @@ POST /pipeline-runs
       │  server creates the pipeline_runs row + publishes a seed message (carries pipeline_id)
       ▼
 crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► schedule_discovered_links
-      ▲                                                          │                                          │
-      └──────────────── discovered links loop back ─────────────┘                                    embed_chunks
+      ▲                                                          │                                          │        │
+      └──────────────── discovered links loop back ─────────────┘                                    embed_chunks   │
+                                                                                                              │       │
+                                                                                                              └───► track_pipeline_status ◄───┘
 ```
 
 1. **crawl_frontier_manager** — the dedup gate. Normalizes the URL, skips it if
@@ -40,6 +42,16 @@ crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_docu
 7. **embed_chunks** — embeds each chunk with the run's configured provider and
    upserts the vectors into Qdrant, using the chunk id as the point id (so
    re-embedding overwrites instead of duplicating).
+8. **track_pipeline_status** — not a numbered stage of its own, but a listener
+   triggered from the tail of the chain: `embed_chunks` pokes it after every
+   finished batch, and `schedule_discovered_links` pokes it after every target
+   reaches `processed`. Both are needed because the last embed can finish
+   either before or after its target reaches `processed`; relying on only one
+   trigger leaves a race where the run never gets marked complete. It flips
+   the run to `completed` (and stamps `finished_at`) once `crawl_targets` has
+   no more active targets for the run *and* every scheduled embed batch has
+   finished — see "Runs are self-contained" below for the counters that back
+   this check.
 
 ## The file chain (local XML)
 
@@ -113,6 +125,15 @@ overlap, embedding provider and model, the Qdrant collection — from that row,
 never from global env config. That means two runs with different settings can
 coexist, and the UI can point a search at exactly the collection and model a
 given run produced.
+
+Completion is also tracked on the row itself: `embeddings_scheduled` and
+`embeddings_completed` count embed batches emitted / finished, each
+incremented exactly once per batch via the outbox's dedup-on-insert (see
+`UnitOfWork.add_outbox`), so redelivered messages never double-count. Once
+`schedule_discovered_links` or `embed_chunks` pokes `track_pipeline_status`
+and it finds no active crawl targets left for the run and
+`embeddings_completed >= embeddings_scheduled`, it sets `status="completed"`
+and `finished_at` — no external poller needed.
 
 ## Services
 

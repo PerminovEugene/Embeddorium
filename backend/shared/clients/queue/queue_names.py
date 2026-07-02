@@ -20,6 +20,14 @@ SCHEDULE_DISCOVERED_LINKS_ACTOR = "schedule_discovered_links"
 EMBED_CHUNKS_QUEUE = "ingest.embed.chunk.generate.v1"
 EMBED_CHUNKS_ACTOR = "embed_chunks"
 
+# Terminal, cross-cutting actor: not a pipeline "stage" of its own, but a
+# listener triggered from the tail of both the crawl chain
+# (schedule_discovered_links, when a target reaches "processed") and the embed
+# chain (embed_chunks, when a batch finishes), so it can detect the moment a
+# run has no more work coming and flip it to "completed".
+TRACK_PIPELINE_STATUS_QUEUE = "ingest.pipeline.status.track.v1"
+TRACK_PIPELINE_STATUS_ACTOR = "track_pipeline_status"
+
 # Local-file (XML) ingestion pipeline. Re-joins the web chain at
 # parse_source: fetch_file_source -> filter_documents -> parse_source -> ...
 FETCH_FILE_SOURCE_QUEUE = "ingest.crawl.file.fetch.v1"
