@@ -10,6 +10,7 @@ from backend.server.datasets_routes import router as datasets_router
 from backend.server.providers_routes import router as providers_router
 from backend.server.pipeline_routes import router as pipeline_router
 from backend.server.source_files_routes import router as source_files_router
+from backend.server.chunkers_routes import router as chunkers_router
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,7 @@ app.include_router(datasets_router)
 app.include_router(providers_router)
 app.include_router(pipeline_router)
 app.include_router(source_files_router)
+app.include_router(chunkers_router)
 
 @app.post("/compare")
 async def compare(request: CompareRequest):

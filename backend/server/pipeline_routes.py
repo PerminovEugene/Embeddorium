@@ -39,6 +39,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from pydantic.alias_generators import to_snake
 
+from backend.plugins.chunkers.registry import DEFAULT_CHUNKER
 from backend.server.pipeline_launch import seed_pipeline
 from backend.server.pipeline_schemas import (
     PipelineRunIn,
@@ -58,11 +59,6 @@ from backend.shared.models.pipeline_run import (
     ScheduleDiscoveredLinksSettings,
     ScheduleEmbeddingsSettings,
     VectorStoreSettings,
-)
-from backend.shared.parsers.chunking_config import (
-    CHUNK_OVERLAP,
-    CHUNK_SIZE,
-    CHUNK_STRATEGY,
 )
 from backend.shared.pipeline.source_files import delete_run_files
 from backend.shared.storage.sql.sql_store import SqlStore
@@ -184,14 +180,15 @@ async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
         # Resolve the three actor blocks the pipeline already consumes from the
         # request overrides + global defaults.
         collection = build_collection_name(dataset.name)
-        chunk_strategy = chunk_block.get("strategy")
-        chunk_size = chunk_block.get("chunkSize")
-        chunk_overlap = chunk_block.get("chunkOverlap")
+        # chunk_block now arrives as {"chunker": <name>, "settings": {...}};
+        # "settings" is the chunker's own declared field values and is stored
+        # verbatim — its keys are chunker-declared snake_case, not form
+        # camelCase, so (unlike every other block here) they must NOT be
+        # run through to_snake.
         similarity = embed_block.get("similarity")
         chunk_cfg = ChunkDocumentSettings(
-            strategy=chunk_strategy or CHUNK_STRATEGY,
-            chunk_size=chunk_size if chunk_size is not None else CHUNK_SIZE,
-            chunk_overlap=chunk_overlap if chunk_overlap is not None else CHUNK_OVERLAP,
+            chunker=chunk_block.get("chunker") or DEFAULT_CHUNKER,
+            settings=chunk_block.get("settings") or {},
         )
         vector_cfg = VectorStoreSettings(
             collection=collection,

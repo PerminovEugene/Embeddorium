@@ -2,7 +2,11 @@ import { SelectOption } from "../common/Select";
 import { DatasetSourceType } from "../datasets/types";
 import { options as SIMILARITY_OPTIONS } from "../consts";
 import { Provider } from "../providers/types";
-import { SettingValue } from "./types";
+import { ChunkerConfig, ChunkerFieldDef, SettingValue } from "./types";
+
+// Chunker used when none is selected / recorded. Must match the backend
+// registry's DEFAULT_CHUNKER (backend/plugins/chunkers/registry.py).
+export const DEFAULT_CHUNKER = "text_markdown";
 
 // Descriptor for a single (mock) actor setting field. The form renders the
 // right control based on `type`. The optional `hidden` predicate receives the
@@ -22,11 +26,14 @@ export type SettingField =
 
 // One stage of the ingestion pipeline. `name`/`description` come straight from
 // the README's pipeline-flow section; `settings` are placeholder config for now.
+// `note` is an optional extra hint shown under the description (used to surface
+// the selected chunker's restrictions on the chunk_document actor).
 export interface ActorDef {
   key: string;
   name: string;
   description: string;
   settings: SettingField[];
+  note?: string;
 }
 
 const similaritySelectOptions: SelectOption[] = SIMILARITY_OPTIONS.map((o) => ({
@@ -57,40 +64,15 @@ const parseSource: ActorDef = {
   ],
 };
 
+// The chunk_document actor's settings are NOT static: the chunker options and
+// their per-chunker fields are discovered from the backend at runtime (GET
+// /chunkers) and injected by the form via `chunkDocumentFields`. The base def
+// carries no settings; the form replaces them for this actor key.
 const chunkDocument: ActorDef = {
   key: "chunk_document",
   name: "chunk_document",
-  description: "Splits text into chunks and persists discovered links.",
-  settings: [
-    {
-      key: "strategy",
-      label: "Strategy",
-      type: "select",
-      options: [
-        { value: "section", label: "By section (headings)" },
-        { value: "markdown", label: "Markdown" },
-        { value: "recursive", label: "Recursive" },
-        { value: "fixed", label: "Fixed size" },
-      ],
-      default: "markdown",
-    },
-    {
-      key: "chunkSize",
-      label: "Chunk size",
-      type: "number",
-      default: 1200,
-      min: 1,
-      hidden: (s) => s["strategy"] === "section",
-    },
-    {
-      key: "chunkOverlap",
-      label: "Chunk overlap",
-      type: "number",
-      default: 150,
-      min: 0,
-      hidden: (s) => s["strategy"] === "section",
-    },
-  ],
+  description: "Splits text into chunks (via the selected chunker plugin) and persists discovered links.",
+  settings: [],
 };
 
 const scheduleEmbeddings: ActorDef = {
@@ -256,3 +238,78 @@ export function providerOptions(providers: Provider[]): SelectOption[] {
 
 // The default value for a single setting field.
 export const settingDefault = (field: SettingField): SettingValue => field.default;
+
+// ---- Dynamic chunk_document fields (from discovered chunkers) -----------
+
+// Map one backend-declared chunker field to the form's SettingField. The
+// field `key` is preserved verbatim (snake_case) so the submitted value
+// round-trips into the server's ChunkDocumentSettings.settings.
+function toSettingField(field: ChunkerFieldDef): SettingField {
+  switch (field.type) {
+    case "number":
+      return {
+        key: field.key,
+        label: field.label,
+        type: "number",
+        default: Number(field.default ?? 0),
+        min: field.min ?? undefined,
+      };
+    case "checkbox":
+      return {
+        key: field.key,
+        label: field.label,
+        type: "checkbox",
+        default: Boolean(field.default),
+      };
+    case "select":
+      return {
+        key: field.key,
+        label: field.label,
+        type: "select",
+        options: (field.options ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+        })),
+        default: String(field.default ?? ""),
+      };
+    default:
+      return {
+        key: field.key,
+        label: field.label,
+        type: "text",
+        default: String(field.default ?? ""),
+        placeholder: field.placeholder ?? undefined,
+      };
+  }
+}
+
+// Build the chunk_document actor's settings for the currently-selected chunker:
+// a "chunker" picker (options from the discovered plugins) followed by that
+// chunker's own declared fields. Falls back to the default chunker when the
+// selection is unknown (e.g. the list is still loading).
+export function chunkDocumentFields(
+  chunkers: ChunkerConfig[],
+  selected: string
+): SettingField[] {
+  const chunkerField: SettingField = {
+    key: "chunker",
+    label: "Chunker",
+    type: "select",
+    options: chunkers.map((c) => ({ value: c.name, label: c.label || c.name })),
+    default: DEFAULT_CHUNKER,
+  };
+  const active =
+    chunkers.find((c) => c.name === selected) ??
+    chunkers.find((c) => c.name === DEFAULT_CHUNKER);
+  const fields = (active?.fields ?? []).map(toSettingField);
+  return [chunkerField, ...fields];
+}
+
+// The selected chunker's free-text restrictions, for display under the actor
+// description. Empty string when none / not found.
+export function chunkerRestrictions(
+  chunkers: ChunkerConfig[],
+  selected: string
+): string {
+  return chunkers.find((c) => c.name === selected)?.restrictions ?? "";
+}

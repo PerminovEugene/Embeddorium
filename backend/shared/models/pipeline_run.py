@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,13 +10,19 @@ from pydantic import BaseModel, Field
 class ChunkDocumentSettings(BaseModel):
     """Settings consumed by the ``chunk_document`` actor.
 
-    Mirror of ``TextSplitter``'s ``MarkdownTextSplitter(chunk_size=...,
-    chunk_overlap=...)`` configuration.
+    ``chunker`` selects a chunker plugin by its registry name (see
+    ``backend/plugins/chunkers``, discovered by
+    ``backend.plugins.chunkers.registry``). ``settings`` carries that
+    chunker's declared field values verbatim — snake_case keys, shape is
+    entirely chunker-specific — and is handed straight to
+    ``registry.build_chunker`` without reinterpretation. Old runs recorded
+    the pre-plugin ``strategy``/``chunk_size``/``chunk_overlap`` shape;
+    pydantic silently drops those unknown keys and falls back to these
+    defaults, which is acceptable while the product is in beta.
     """
 
-    strategy: str
-    chunk_size: int
-    chunk_overlap: int
+    chunker: str = "text_markdown"
+    settings: Dict[str, Any] = Field(default_factory=dict)
 
 
 class VectorStoreSettings(BaseModel):

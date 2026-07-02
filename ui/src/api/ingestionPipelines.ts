@@ -2,7 +2,9 @@ import { SERVER_URL } from "../components/consts";
 import {
   IngestionPipeline,
   IngestionPipelineFormValues,
+  SettingValue,
 } from "../components/ingestion-pipelines/types";
+import { DEFAULT_CHUNKER } from "../components/ingestion-pipelines/actors";
 
 // REST client for ingestion pipelines, backed by the `/pipeline-runs` API.
 // A backend "pipeline run" is a self-contained snapshot of one dataset plus its
@@ -32,7 +34,10 @@ interface PipelineRunOut {
   name?: string | null;
   dataset: { id?: string; name?: string; source_type?: string; [k: string]: unknown };
   actorConfigs: {
-    chunk_document?: { strategy?: string; chunk_size?: number; chunk_overlap?: number };
+    chunk_document?: {
+      chunker?: string;
+      settings?: Record<string, SettingValue>;
+    };
     vector_store?: { collection?: string; similarity?: string };
     embed_chunks?: { provider?: { id?: string; model_name?: string; model?: string } };
     parse_source?: { parser?: string };
@@ -71,10 +76,11 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
   const vector = cfg.vector_store ?? {};
   const provider = cfg.embed_chunks?.provider ?? {};
   const actorSettings: IngestionPipeline["actorSettings"] = {
+    // The stored { chunker, settings } is flattened into the form's per-actor
+    // scalar map ({ chunker, ...fieldValues }); the form re-nests it on submit.
     chunk_document: {
-      strategy: chunk.strategy ?? "",
-      chunkSize: chunk.chunk_size ?? 0,
-      chunkOverlap: chunk.chunk_overlap ?? 0,
+      chunker: chunk.chunker ?? DEFAULT_CHUNKER,
+      ...(chunk.settings ?? {}),
     },
     embed_chunks: {
       providerId: provider.id ?? "",
@@ -143,15 +149,36 @@ export async function fetchIngestionPipelines(): Promise<IngestionPipeline[]> {
   return runs.map(toPipeline);
 }
 
-// Build the create body for a single dataset. The whole per-actor settings map
-// is forwarded verbatim (camelCase keys, keyed by actor); the server resolves
-// it into a typed PipelineActorConfigs snapshot and fills any gaps with
-// defaults. embed_chunks.providerId is required (validated server-side).
+// Re-nest the flat chunk_document form block ({ chunker, ...fieldValues }) into
+// the server's stored shape ({ chunker, settings: {...fieldValues} }). The
+// server stores settings verbatim (no camel/snake conversion), and the field
+// keys are already the snake_case keys the chunker declared, so they pass
+// through untouched. Other actors are forwarded unchanged.
+function reshapeActorSettings(
+  actorSettings: IngestionPipelineFormValues["actorSettings"]
+): Record<string, unknown> {
+  const chunk = actorSettings["chunk_document"];
+  if (!chunk) return actorSettings;
+  const { chunker, ...fields } = chunk;
+  return {
+    ...actorSettings,
+    chunk_document: {
+      chunker: String(chunker ?? DEFAULT_CHUNKER),
+      settings: fields,
+    },
+  };
+}
+
+// Build the create body for a single dataset. Per-actor settings are forwarded
+// keyed by actor; the server resolves them into a typed PipelineActorConfigs
+// snapshot and fills any gaps with defaults. The chunk_document block is
+// re-nested into { chunker, settings }. embed_chunks.providerId is required
+// (validated server-side).
 function toCreateBody(datasetId: string, values: IngestionPipelineFormValues) {
   return {
     name: values.name,
     datasetId,
-    actorSettings: values.actorSettings,
+    actorSettings: reshapeActorSettings(values.actorSettings),
   };
 }
 

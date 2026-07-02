@@ -22,11 +22,7 @@ from backend.shared.models import (
     PipelineSettings,
     VectorStoreSettings,
 )
-from backend.shared.parsers.chunking_config import (
-    CHUNK_OVERLAP,
-    CHUNK_SIZE,
-    CHUNK_STRATEGY,
-)
+from backend.shared.parsers.chunking_config import CHUNK_OVERLAP, CHUNK_SIZE
 from backend.shared.parsers.config_parser import (
     EmbedChunksSettingsConfig,
     PipelineSettingsConfig,
@@ -97,21 +93,19 @@ def build_pipeline_run(
         collection_name=collection,
         settings=PipelineSettings(
             chunk_document=ChunkDocumentSettings(
-                strategy=(
-                    chunk_cfg.strategy
-                    if chunk_cfg and chunk_cfg.strategy
-                    else CHUNK_STRATEGY
-                ),
-                chunk_size=(
-                    chunk_cfg.chunk_size
-                    if chunk_cfg and chunk_cfg.chunk_size is not None
-                    else CHUNK_SIZE
-                ),
-                chunk_overlap=(
-                    chunk_cfg.chunk_overlap
-                    if chunk_cfg and chunk_cfg.chunk_overlap is not None
-                    else CHUNK_OVERLAP
-                ),
+                chunker="text_markdown",
+                settings={
+                    "chunk_size": (
+                        chunk_cfg.chunk_size
+                        if chunk_cfg and chunk_cfg.chunk_size is not None
+                        else CHUNK_SIZE
+                    ),
+                    "chunk_overlap": (
+                        chunk_cfg.chunk_overlap
+                        if chunk_cfg and chunk_cfg.chunk_overlap is not None
+                        else CHUNK_OVERLAP
+                    ),
+                },
             ),
             embed_chunks=_embed_settings(embed_cfg),
             vector_store=VectorStoreSettings(

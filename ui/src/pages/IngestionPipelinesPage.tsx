@@ -7,9 +7,11 @@ import {
 } from "../api/ingestionPipelines";
 import { fetchProviders } from "../api/providers";
 import { fetchDatasets } from "../api/datasets";
+import { fetchChunkers } from "../api/chunkers";
 import IngestionPipelineList from "../components/ingestion-pipelines/IngestionPipelineList";
 import IngestionPipelineForm from "../components/ingestion-pipelines/IngestionPipelineForm";
 import {
+  ChunkerConfig,
   IngestionPipeline,
   IngestionPipelineFormValues,
 } from "../components/ingestion-pipelines/types";
@@ -22,6 +24,7 @@ const IngestionPipelinesPage = () => {
   const [pipelines, setPipelines] = useState<IngestionPipeline[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [chunkers, setChunkers] = useState<ChunkerConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // Id of the pipeline whose launch/delete request is in flight, if any.
@@ -51,12 +54,17 @@ const IngestionPipelinesPage = () => {
         console.error("Failed to load datasets:", err);
         return [] as Dataset[];
       }),
+      fetchChunkers().catch((err) => {
+        console.error("Failed to load chunkers:", err);
+        return [] as ChunkerConfig[];
+      }),
     ])
-      .then(([pipelineData, providerData, datasetData]) => {
+      .then(([pipelineData, providerData, datasetData, chunkerData]) => {
         if (!active) return;
         setPipelines(pipelineData);
         setProviders(providerData);
         setDatasets(datasetData);
+        setChunkers(chunkerData);
       })
       .catch((err) => {
         console.error("Failed to load ingestion pipelines:", err);
@@ -166,6 +174,7 @@ const IngestionPipelinesPage = () => {
             pipeline={selectedPipeline}
             providers={providers}
             datasets={datasets}
+            chunkers={chunkers}
             onSubmit={handleSubmit}
             submitting={submitting}
             disabled={selectedPipeline !== null}

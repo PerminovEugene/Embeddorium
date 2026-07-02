@@ -8,12 +8,16 @@ import { Provider } from "../providers/types";
 import { Dataset, DatasetSourceType } from "../datasets/types";
 import {
   ActorDef,
+  DEFAULT_CHUNKER,
   SettingField,
+  chunkDocumentFields,
+  chunkerRestrictions,
   providerOptions,
   resolveActorChain,
 } from "./actors";
 import {
   ActorSettings,
+  ChunkerConfig,
   IngestionPipeline,
   IngestionPipelineFormValues,
   SettingValue,
@@ -25,6 +29,9 @@ interface IngestionPipelineFormProps {
   // Available providers/datasets to choose from.
   providers: Provider[];
   datasets: Dataset[];
+  // Chunker plugins discovered from the backend; feed the chunk_document
+  // actor's chunker picker and its per-chunker settings fields.
+  chunkers: ChunkerConfig[];
   onSubmit: (values: IngestionPipelineFormValues) => void;
   // Delete the pipeline being edited. Only rendered when editing.
   onDelete?: () => void;
@@ -54,6 +61,7 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
   pipeline,
   providers,
   datasets,
+  chunkers,
   onSubmit,
   onDelete,
   submitting = false,
@@ -81,6 +89,30 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
     return resolveActorChain(sourceTypes);
   }, [values.datasetIds, datasets]);
 
+  // Currently-selected chunker (defaults to the backend default). Drives which
+  // dynamic settings fields the chunk_document actor renders.
+  const selectedChunker = String(
+    values.actorSettings["chunk_document"]?.["chunker"] ?? DEFAULT_CHUNKER
+  );
+
+  // chunk_document's settings are discovered at runtime, so replace this
+  // actor's static (empty) settings with the picker + the selected chunker's
+  // fields. All other actors pass through unchanged. Used for both rendering
+  // and submit so the persisted payload matches exactly what's shown.
+  const resolvedChain = useMemo<ActorDef[]>(
+    () =>
+      actorChain.map((actor) =>
+        actor.key === "chunk_document"
+          ? {
+              ...actor,
+              settings: chunkDocumentFields(chunkers, selectedChunker),
+              note: chunkerRestrictions(chunkers, selectedChunker) || undefined,
+            }
+          : actor
+      ),
+    [actorChain, chunkers, selectedChunker]
+  );
+
   const getSetting = (actorKey: string, field: SettingField): SettingValue =>
     values.actorSettings[actorKey]?.[field.key] ?? field.default;
 
@@ -104,9 +136,10 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
       return;
     }
     // Persist only the settings for actors currently in the chain, filling in
-    // defaults so the payload is fully resolved.
+    // defaults so the payload is fully resolved. Uses the resolved chain so the
+    // chunk_document block carries the selected chunker + its dynamic fields.
     const actorSettings: ActorSettings = {};
-    for (const actor of actorChain) {
+    for (const actor of resolvedChain) {
       actorSettings[actor.key] = Object.fromEntries(
         actor.settings.map((f) => [f.key, getSetting(actor.key, f)])
       );
@@ -152,12 +185,12 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
         <h4 className="text-emd-text font-semibold text-sm uppercase tracking-wide">
           Pipeline actors
         </h4>
-        {actorChain.length === 0 ? (
+        {resolvedChain.length === 0 ? (
           <p className="text-emd-placeholder text-sm">
             Select at least one dataset to configure its actor chain.
           </p>
         ) : (
-          actorChain.map((actor) => (
+          resolvedChain.map((actor) => (
             <ActorSection
               key={actor.key}
               actor={actor}
@@ -232,6 +265,11 @@ const ActorSection: React.FC<ActorSectionProps> = ({
         {actor.name}
       </summary>
       <p className="text-xs text-emd-placeholder mt-1 mb-3">{actor.description}</p>
+      {actor.note && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-3">
+          {actor.note}
+        </p>
+      )}
       <div className="flex flex-col gap-3">
         {actor.settings
           .filter((field) => !field.hidden?.(currentValues))

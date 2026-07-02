@@ -48,11 +48,17 @@ embedding = [
 # Embeddings tester API (server/): FastAPI service that embeds source/candidate
 # texts and scores them against each other. Reuses backend's VectorStore +
 # OllamaEmbedClient, so it needs the same vector/embed deps plus the web stack.
+# langchain-text-splitters: GET /chunkers imports every chunker plugin to
+# build its registry (backend.plugins.chunkers.registry), and the built-in
+# text_markdown/text_section/text_recursive/text_fixed/legal_xml chunkers all
+# depend on it at module level — without it here, every plugin fails to
+# import and the endpoint silently returns an empty list.
 server = [
   "fastapi>=0.103",
   "uvicorn>=0.23",
   "qdrant-client>=1",
   "langchain-ollama>=0.3",
+  "langchain-text-splitters>=0.3",
   "numpy>=1",
 ]
 

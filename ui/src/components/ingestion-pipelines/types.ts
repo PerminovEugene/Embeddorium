@@ -36,3 +36,34 @@ export interface IngestionPipelineFormValues {
   datasetIds: string[];
   actorSettings: ActorSettings;
 }
+
+// ---- Chunker plugins ---------------------------------------------------
+// A chunker is a backend plugin (see backend/plugins/chunkers/). The server
+// discovers them dynamically and exposes their config metadata via GET
+// /chunkers. Each config declares the settings fields the form should render
+// for that chunker; the chosen chunker + its field values are stored under
+// actorSettings["chunk_document"] as { chunker, settings }.
+
+// One configurable field a chunker declares. Field `key` values are snake_case
+// (they round-trip verbatim into ChunkDocumentSettings.settings on the server).
+export interface ChunkerFieldDef {
+  key: string;
+  label: string;
+  type: "text" | "number" | "checkbox" | "select";
+  default: SettingValue;
+  min?: number | null;
+  max?: number | null;
+  options?: { value: string; label: string }[] | null;
+  placeholder?: string | null;
+}
+
+// Metadata for one discovered chunker plugin.
+export interface ChunkerConfig {
+  name: string;
+  label: string;
+  description: string;
+  // Free-text usage constraints (e.g. "Requires raw XML act content"). May be
+  // empty.
+  restrictions: string;
+  fields: ChunkerFieldDef[];
+}

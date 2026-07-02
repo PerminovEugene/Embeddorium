@@ -71,9 +71,8 @@ def _make_run(status: str = "pending") -> PipelineRun:
         },
         actor_configs={
             "chunk_document": {
-                "strategy": "markdown",
-                "chunk_size": 1200,
-                "chunk_overlap": 150,
+                "chunker": "text_markdown",
+                "settings": {"chunk_size": 1200, "chunk_overlap": 150},
             },
             "vector_store": {"collection": "test-dataset", "similarity": "cosine"},
             "embed_chunks": {
@@ -160,9 +159,8 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
         "datasetId": str(_DATASET_ID),
         "actorSettings": {
             "chunk_document": {
-                "strategy": "section",
-                "chunkSize": 800,
-                "chunkOverlap": 80,
+                "chunker": "text_section",
+                "settings": {"chunk_size": 800, "chunk_overlap": 80},
             },
             "embed_chunks": {"providerId": str(_PROVIDER_ID), "similarity": "dot"},
             "parse_source": {"parser": "html"},
@@ -184,11 +182,10 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
 
     created_run = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0]
     cfg = created_run.actor_configs
-    # camelCase form keys are resolved into the snake_case domain snapshot.
+    # The chunk_document block is stored verbatim: {chunker, settings}.
     assert cfg["chunk_document"] == {
-        "strategy": "section",
-        "chunk_size": 800,
-        "chunk_overlap": 80,
+        "chunker": "text_section",
+        "settings": {"chunk_size": 800, "chunk_overlap": 80},
     }
     assert cfg["vector_store"]["similarity"] == "dot"
     assert cfg["parse_source"]["parser"] == "html"

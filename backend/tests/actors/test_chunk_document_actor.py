@@ -4,14 +4,14 @@ from unittest.mock import MagicMock
 from backend.actors.chunk_document_actor import chunk_document
 from backend.shared.clients.queue.queue_names import SCHEDULE_EMBEDDINGS_QUEUE
 from backend.shared.models import CrawlTargetStatus, Document, DocumentChunk
-from backend.shared.parsers.text_splitter import Chunk
+from backend.plugins.chunkers.base import Chunk
 from backend.tests.actors.pipeline_helpers import make_store, make_target, outbox_for_queue, uow_of
 
 
-def _splitter(chunks: list[Chunk]) -> MagicMock:
-    splitter = MagicMock()
-    splitter.split.return_value = chunks
-    return splitter
+def _chunker(chunks: list[Chunk]) -> MagicMock:
+    chunker = MagicMock()
+    chunker.chunk.return_value = chunks
+    return chunker
 
 
 def _store_with_document(target, *, doc_id, saved_chunks):
@@ -19,6 +19,7 @@ def _store_with_document(target, *, doc_id, saved_chunks):
     store.documents.get_by_crawl_target.return_value = Document(
         id=doc_id, source_url=target.original_url, text_path=None
     )
+    store.source_fetches.get_by_crawl_target.return_value = None
     uow_of(store).upsert_chunks.return_value = saved_chunks
     return store
 
@@ -29,7 +30,7 @@ def test_lock_not_acquired_skips():
         crawl_target_id=str(uuid.uuid4()),
         group="Estonia",
         store=store,
-        splitter=_splitter([]),
+        chunker=_chunker([]),
     )
     store.documents.get_by_crawl_target.assert_not_called()
     store.unit_of_work.assert_not_called()
@@ -43,12 +44,12 @@ def test_happy_path_upserts_chunks_links_and_enqueues_embeddings():
         DocumentChunk(id=chunk_id, document_id=doc_id, text="c0", chunk_index=0)
     ]
     store = _store_with_document(target, doc_id=doc_id, saved_chunks=saved_chunks)
-    splitter = _splitter(
-        [Chunk(text="c0", links=[{"label": "Decl", "url": "https://emta.ee/decl"}])]
+    chunker = _chunker(
+        [Chunk(text="c0 [Decl](https://emta.ee/decl)")]
     )
 
     chunk_document(
-        crawl_target_id=str(target.id), group="Estonia", store=store, splitter=splitter
+        crawl_target_id=str(target.id), group="Estonia", store=store, chunker=chunker
     )
 
     uow = uow_of(store)
@@ -80,10 +81,10 @@ def test_no_links_still_advances_and_schedules():
         DocumentChunk(id=uuid.uuid4(), document_id=doc_id, text="c0", chunk_index=0)
     ]
     store = _store_with_document(target, doc_id=doc_id, saved_chunks=saved_chunks)
-    splitter = _splitter([Chunk(text="c0", links=[])])
+    chunker = _chunker([Chunk(text="c0")])
 
     chunk_document(
-        crawl_target_id=str(target.id), group="Estonia", store=store, splitter=splitter
+        crawl_target_id=str(target.id), group="Estonia", store=store, chunker=chunker
     )
 
     uow = uow_of(store)
