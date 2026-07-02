@@ -33,6 +33,10 @@ from backend.shared.models import (
 from backend.shared.parsers.registry import is_supported, normalize_content_type
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
+from backend.shared.pipeline.source_files import (
+    extension_for_content_type,
+    write_source_file,
+)
 from backend.shared.storage.sql.sql_store import SqlStore
 
 
@@ -129,13 +133,20 @@ def fetch_source(
         )
         return
 
+    raw_path = write_source_file(
+        pipeline_id=payload.pipeline_id,
+        source_id=str(target_id),
+        kind="raw",
+        content=result.content,
+        extension=extension_for_content_type(result.content_type),
+    )
     fetch = SourceFetch(
         crawl_target_id=target_id,
         final_url=result.final_url,
         http_status=result.status_code,
         content_type=result.content_type,
         content_hash=sha256_hex(result.content),
-        raw_content=result.content,
+        raw_content_path=raw_path,
         redirect_chain=result.redirect_chain,
     )
 

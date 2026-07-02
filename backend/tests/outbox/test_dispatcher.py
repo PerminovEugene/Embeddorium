@@ -10,9 +10,9 @@ from backend.outbox.dispatcher import dispatch_once
 def _event(**kw) -> OutboxEvent:
     return OutboxEvent(
         id=kw.get("id", uuid.uuid4()),
-        queue_name=kw.get("queue_name", "laws.crawl.source.parse.v1"),
+        queue_name=kw.get("queue_name", "ingest.crawl.source.parse.v1"),
         actor_name=kw.get("actor_name", "parse_source"),
-        payload=kw.get("payload", {"crawl_target_id": "t", "group": "Estonia"}),
+        payload=kw.get("payload", {"crawl_target_id": "t", "group": "example"}),
         dedup_key=kw.get("dedup_key", "parse:t"),
     )
 

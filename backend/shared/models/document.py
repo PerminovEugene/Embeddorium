@@ -30,8 +30,9 @@ class Document(BaseModel):
     chunker_version: Optional[str] = None
     retrieved_at: Optional[datetime] = None
 
-    # Normalized parsed text (carried from parse_source to chunk_document).
-    text: Optional[str] = None
+    # Path (relative to PIPELINE_RUNS_DIR) of the normalised parsed-text file,
+    # written by parse_source and read by chunk_document.
+    text_path: Optional[str] = None
 
     created_at: Optional[datetime] = None
     chunks: list[DocumentChunk] = Field(default_factory=list)

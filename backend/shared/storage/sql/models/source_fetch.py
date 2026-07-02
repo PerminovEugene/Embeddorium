@@ -35,7 +35,7 @@ class SourceFetchORM(Base):
     http_status: Mapped[int] = mapped_column(Integer, nullable=False)
     content_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    raw_content: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_content_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     redirect_chain: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=sql_text("'[]'::jsonb")
     )

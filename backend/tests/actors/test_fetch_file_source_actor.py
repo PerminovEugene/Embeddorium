@@ -4,7 +4,7 @@ from typing import List
 from unittest.mock import MagicMock
 
 from backend.actors.fetch_file_source_actor import fetch_file_source
-from backend.shared.clients.queue.queue_names import FILTER_TAX_ACTS_QUEUE
+from backend.shared.clients.queue.queue_names import FILTER_DOCUMENTS_QUEUE
 from backend.shared.models import CrawlTarget, CrawlTargetStatus
 from backend.tests.actors.pipeline_helpers import outbox_for_queue, uow_of
 
@@ -32,29 +32,33 @@ def _make_store(*, existing_target=None) -> MagicMock:
 
 def test_reads_file_and_saves_target_and_fetch(tmp_path: Path) -> None:
     file_path = tmp_path / "501012020001.xml"
-    file_path.write_text("<oigusakt><pealkiri>Income Tax Act</pealkiri></oigusakt>")
+    file_path.write_text("<doc><pealkiri>Sample Document</pealkiri></doc>")
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(file_path), group="example", store=store)
 
     store.crawl_targets.save.assert_called_once()
     saved = store.saved_targets[-1]
     assert saved.original_url == str(file_path.resolve())
     assert saved.normalized_url == f"file://{file_path.resolve()}"
-    assert saved.group == "Estonia"
+    assert saved.group == "example"
     assert saved.status == CrawlTargetStatus.FETCHING
     assert saved.log_dir is not None
 
 
 def test_writes_source_fetch_advances_status_and_enqueues_filter(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch
 ) -> None:
+    import backend.shared.pipeline.source_files as sf
+
+    monkeypatch.setattr(sf, "PIPELINE_RUNS_DIR", tmp_path)
+
     file_path = tmp_path / "501012020001.xml"
-    content = "<oigusakt><pealkiri>Income Tax Act</pealkiri></oigusakt>"
+    content = "<doc><pealkiri>Sample Document</pealkiri></doc>"
     file_path.write_text(content)
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(file_path), group="example", store=store)
 
     saved = store.saved_targets[-1]
 
@@ -62,30 +66,31 @@ def test_writes_source_fetch_advances_status_and_enqueues_filter(
     uow.upsert_source_fetch.assert_called_once()
     fetch = uow.upsert_source_fetch.call_args.args[0]
     assert fetch.crawl_target_id == saved.id
-    assert fetch.raw_content == content
+    assert fetch.raw_content_path is not None
+    assert (tmp_path / fetch.raw_content_path).read_text(encoding="utf-8") == content
     assert fetch.content_type == "application/xml"
     assert fetch.http_status == 0
     assert fetch.content_hash
 
     uow.set_status.assert_called_once_with(saved.id, CrawlTargetStatus.FETCHED)
 
-    filter_events = outbox_for_queue(uow, FILTER_TAX_ACTS_QUEUE)
+    filter_events = outbox_for_queue(uow, FILTER_DOCUMENTS_QUEUE)
     assert len(filter_events) == 1
     assert filter_events[0].dedup_key == f"filter:{saved.id}"
 
 
 def test_dedup_skips_when_target_already_active(tmp_path: Path) -> None:
     file_path = tmp_path / "501012020001.xml"
-    file_path.write_text("<oigusakt/>")
+    file_path.write_text("<doc/>")
     existing = CrawlTarget(
-        group="Estonia",
+        group="example",
         original_url=str(file_path.resolve()),
         normalized_url=f"file://{file_path.resolve()}",
         status=CrawlTargetStatus.FETCHED,
     )
     store = _make_store(existing_target=existing)
 
-    fetch_file_source(file_path=str(file_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(file_path), group="example", store=store)
 
     store.crawl_targets.save.assert_not_called()
     store.unit_of_work.assert_not_called()
@@ -94,17 +99,17 @@ def test_dedup_skips_when_target_already_active(tmp_path: Path) -> None:
 def test_second_run_with_same_path_is_deduped(tmp_path: Path) -> None:
     """End-to-end-ish: simulate the second call seeing the first call's save."""
     file_path = tmp_path / "501012020001.xml"
-    file_path.write_text("<oigusakt><pealkiri>Customs Act</pealkiri></oigusakt>")
+    file_path.write_text("<doc><pealkiri>Sample Document</pealkiri></doc>")
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(file_path), group="example", store=store)
     first_saved = store.saved_targets[-1]
 
     # Second message for the same file: dedup lookup now returns the target
     # created by the first call.
     store.crawl_targets.find_active_by_normalized_url.return_value = first_saved
 
-    fetch_file_source(file_path=str(file_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(file_path), group="example", store=store)
 
     assert store.crawl_targets.save.call_count == 1
 
@@ -113,7 +118,7 @@ def test_missing_file_marks_failed_permanent(tmp_path: Path) -> None:
     missing_path = tmp_path / "does-not-exist.xml"
     store = _make_store()
 
-    fetch_file_source(file_path=str(missing_path), group="Estonia", store=store)
+    fetch_file_source(file_path=str(missing_path), group="example", store=store)
 
     saved = store.saved_targets[-1]
     store.crawl_targets.update_status.assert_called_once()
@@ -127,11 +132,11 @@ def test_missing_file_marks_failed_permanent(tmp_path: Path) -> None:
 
 def test_relative_path_is_normalized_to_absolute(tmp_path: Path, monkeypatch) -> None:
     file_path = tmp_path / "501012020001.xml"
-    file_path.write_text("<oigusakt/>")
+    file_path.write_text("<doc/>")
     monkeypatch.chdir(tmp_path)
     store = _make_store()
 
-    fetch_file_source(file_path=file_path.name, group="Estonia", store=store)
+    fetch_file_source(file_path=file_path.name, group="example", store=store)
 
     saved = store.saved_targets[-1]
     assert saved.original_url == str(file_path.resolve())

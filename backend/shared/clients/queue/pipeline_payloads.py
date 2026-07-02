@@ -45,7 +45,7 @@ class _CrawlStagePayload:
 
 
 @dataclass(frozen=True)
-class FilterTaxActsPayload(_CrawlStagePayload):
+class FilterDocumentsPayload(_CrawlStagePayload):
     pass
 
 

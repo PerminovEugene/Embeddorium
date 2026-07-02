@@ -7,7 +7,7 @@ name and similarity a run will use, without importing the launcher (which builds
 a RabbitMQ broker at import time).
 """
 
-COLLECTION_BASE = "LAWS"
+COLLECTION_BASE = "BASE"
 MODEL_COLLECTION_POSTFIX = "qwen_embed_8b"
 
 # Distance metric collections are created with — mirrors ``Distance.COSINE`` in

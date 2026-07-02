@@ -28,6 +28,7 @@ import uuid
 from typing import List, Optional
 
 from backend.server.embedder import get_embeddings
+from backend.shared import config
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
 from backend.server.pipeline_runs import get_pipeline_run
@@ -57,7 +58,13 @@ async def search_db(request) -> dict:
     collection = vector_store_cfg.get("collection", "")
     provider_type = provider_snap.get("provider_type", "")
     model_name: Optional[str] = provider_snap.get("model_name") or provider_snap.get("model")
-    mock_dim: Optional[int] = provider_snap.get("mock_dim")
+    # The embed_chunks actor built the collection with the same fallback: when
+    # the mock provider snapshot carries no explicit dimension it uses
+    # config.MOCK_EMBED_DIM. Mirror that here so the query is embedded at the
+    # dimension the collection was indexed with, rather than erroring out.
+    mock_dim: Optional[int] = None
+    if provider_type == "mock":
+        mock_dim = provider_snap.get("mock_dim", config.MOCK_EMBED_DIM)
     ollama_port = request.configuration.get("ollamaPort")
 
     # A single Qdrant collection can hold vectors from several pipeline runs, so

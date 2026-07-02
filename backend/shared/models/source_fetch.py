@@ -17,6 +17,6 @@ class SourceFetch(BaseModel):
     http_status: int
     content_type: Optional[str] = None
     content_hash: str
-    raw_content: str
+    raw_content_path: Optional[str] = None
     redirect_chain: list[str] = Field(default_factory=list)
     fetched_at: Optional[datetime] = None

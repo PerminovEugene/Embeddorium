@@ -17,7 +17,7 @@ def _splitter(chunks: list[Chunk]) -> MagicMock:
 def _store_with_document(target, *, doc_id, saved_chunks):
     store = make_store(acquired=target)
     store.documents.get_by_crawl_target.return_value = Document(
-        id=doc_id, source_url=target.original_url, text="body"
+        id=doc_id, source_url=target.original_url, text_path=None
     )
     uow_of(store).upsert_chunks.return_value = saved_chunks
     return store

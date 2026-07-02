@@ -1,7 +1,7 @@
 """Stage 2: parse a fetched source into normalized text + a Document.
 
 Acquires the target (FETCHED/FILTERED → PARSING; the latter is how the
-local-file XML chain re-joins this stage after ``filter_tax_acts``), loads
+local-file XML chain re-joins this stage after ``filter_documents``), loads
 the persisted ``SourceFetch``, selects a parser by content type, and in one
 transaction stores the Document (with provenance + ``text_hash``), advances
 to PARSED and writes the outbox event that triggers ``chunk_document``.
@@ -37,6 +37,7 @@ from backend.shared.parsers.registry import (
 from backend.shared.parsers.text_splitter import CHUNKER_VERSION
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
+from backend.shared.pipeline.source_files import read_source_file, write_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
 
 
@@ -94,7 +95,16 @@ def parse_source(
         )
         return
 
-    text = parser.parse(fetch.raw_content, fetch.final_url)
+    raw = read_source_file(fetch.raw_content_path)
+    text = parser.parse(raw, fetch.final_url)
+
+    text_path = write_source_file(
+        pipeline_id=payload.pipeline_id,
+        source_id=str(target_id),
+        kind="parsed",
+        content=text,
+        extension="txt",
+    )
 
     document = Document(
         source_url=target.original_url,
@@ -110,7 +120,7 @@ def parse_source(
         parser_version=PARSER_VERSION,
         chunker_version=CHUNKER_VERSION,
         retrieved_at=fetch.fetched_at,
-        text=text,
+        text_path=text_path,
     )
 
     chunk_payload = ChunkDocumentPayload(

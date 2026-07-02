@@ -171,7 +171,7 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
             "crawl_frontier_manager": {"normalizeUrls": False, "dedup": False},
             "schedule_discovered_links": {"followChildLinks": False},
             "fetch_file_source": {"glob": "*.html", "dedup": False},
-            "filter_tax_acts": {"enabled": False, "keywords": "vat, customs"},
+            "filter_documents": {"enabled": False, "keywords": "vat, customs"},
         },
     }
     with patch(
@@ -199,7 +199,7 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
     assert cfg["crawl_frontier_manager"]["dedup"] is False
     assert cfg["schedule_discovered_links"]["follow_child_links"] is False
     assert cfg["fetch_file_source"] == {"glob": "*.html", "dedup": False}
-    assert cfg["filter_tax_acts"] == {"enabled": False, "keywords": "vat, customs"}
+    assert cfg["filter_documents"] == {"enabled": False, "keywords": "vat, customs"}
 
 
 def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
@@ -221,7 +221,7 @@ def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
     cfg = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0].actor_configs
     assert cfg["fetch_source"]["verify_tls"] is True
     assert cfg["schedule_embeddings"]["batch_size"] == 32
-    assert cfg["filter_tax_acts"]["enabled"] is True
+    assert cfg["filter_documents"]["enabled"] is True
 
 
 def test_create_400_when_provider_id_missing() -> None:

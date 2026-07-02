@@ -114,12 +114,14 @@ class FetchFileSourceSettings(BaseModel):
     dedup: bool = True
 
 
-class FilterTaxActsSettings(BaseModel):
-    """Settings consumed by the ``filter_tax_acts`` actor.
+class FilterDocumentsSettings(BaseModel):
+    """Settings consumed by the ``filter_documents`` actor.
 
-    ``enabled`` toggles the tax-relevance gate (when off, every act passes
-    through); ``keywords`` is an optional comma-separated override of the
-    default tax keyword set.
+    ``enabled`` toggles the relevance gate (when off, every document passes
+    through). ``keywords`` is an optional comma-separated list of keywords; an
+    empty string means no keyword restriction — all documents pass through.
+    When enabled with a non-empty keyword list, only documents whose title (or
+    body when the title is absent) contains at least one keyword are advanced.
     """
 
     enabled: bool = True
@@ -157,8 +159,8 @@ class PipelineActorConfigs(BaseModel):
     fetch_file_source: FetchFileSourceSettings = Field(
         default_factory=FetchFileSourceSettings
     )
-    filter_tax_acts: FilterTaxActsSettings = Field(
-        default_factory=FilterTaxActsSettings
+    filter_documents: FilterDocumentsSettings = Field(
+        default_factory=FilterDocumentsSettings
     )
 
 

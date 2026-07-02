@@ -27,7 +27,7 @@ WORKERS=(
   worker-schedule-embeddings
   worker-schedule-links
   worker-fetch-file-source
-  worker-filter-tax-acts
+  worker-filter-documents
   worker-embed-chunks
   worker-outbox-dispatcher
 )

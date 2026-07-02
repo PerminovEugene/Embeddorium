@@ -5,7 +5,7 @@ no link-discovery/origin dedup loop (each message names an exact file on
 disk). Normalizes the path, dedups against an existing active target, creates
 the ``CrawlTarget``, reads the file, and in one transaction stores the
 ``SourceFetch`` provenance row, advances to FETCHED and writes the outbox
-event that triggers ``filter_tax_acts``.
+event that triggers ``filter_documents``.
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ from typing import Optional
 from uuid import UUID
 
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
-from backend.shared.clients.queue.pipeline_payloads import FilterTaxActsPayload
+from backend.shared.clients.queue.pipeline_payloads import FilterDocumentsPayload
 from backend.shared.clients.queue.process_file_payload import ProcessFileSourcePayload
 from backend.shared.clients.queue.queue_names import (
     FETCH_FILE_SOURCE_ACTOR,
     FETCH_FILE_SOURCE_QUEUE,
-    FILTER_TAX_ACTS_ACTOR,
-    FILTER_TAX_ACTS_QUEUE,
+    FILTER_DOCUMENTS_ACTOR,
+    FILTER_DOCUMENTS_QUEUE,
 )
 from backend.shared.log_routing import build_log_dir, log_to
 from backend.shared.models import (
@@ -35,6 +35,7 @@ from backend.shared.models import (
 )
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
+from backend.shared.pipeline.source_files import write_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
 
 logger = logging.getLogger(__name__)
@@ -122,17 +123,25 @@ def fetch_file_source(
 
         logger.info("file_read path=%s bytes=%d", abs_path, len(text.encode("utf-8")))
 
+        raw_path = write_source_file(
+            pipeline_id=payload.pipeline_id,
+            source_id=str(target_id),
+            kind="raw",
+            content=text,
+            extension="xml",
+        )
+
         fetch = SourceFetch(
             crawl_target_id=target_id,
             final_url=normalized_url,
             http_status=0,
             content_type="application/xml",
             content_hash=sha256_hex(text),
-            raw_content=text,
+            raw_content_path=raw_path,
             redirect_chain=[],
         )
 
-        filter_payload = FilterTaxActsPayload(
+        filter_payload = FilterDocumentsPayload(
             crawl_target_id=target_id,
             group=payload.group,
             pipeline_id=payload.pipeline_id,
@@ -143,8 +152,8 @@ def fetch_file_source(
             uow.set_status(target_id, CrawlTargetStatus.FETCHED)
             uow.add_outbox(
                 OutboxEvent(
-                    queue_name=FILTER_TAX_ACTS_QUEUE,
-                    actor_name=FILTER_TAX_ACTS_ACTOR,
+                    queue_name=FILTER_DOCUMENTS_QUEUE,
+                    actor_name=FILTER_DOCUMENTS_ACTOR,
                     payload=filter_payload.to_actor_kwargs(),
                     dedup_key=f"filter:{target_id}",
                 )
@@ -153,5 +162,5 @@ def fetch_file_source(
         logger.info(
             "advanced_to_fetched id=%s enqueued=%s",
             target_id,
-            FILTER_TAX_ACTS_QUEUE,
+            FILTER_DOCUMENTS_QUEUE,
         )

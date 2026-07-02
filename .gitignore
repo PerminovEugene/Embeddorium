@@ -29,7 +29,7 @@ env/
 *.log
 logs/
 # Per-pipeline-run logs bind-mounted from the worker containers
-pipeline_runs/
+tmp/logs/
 
 # pytest / coverage
 .pytest_cache/

@@ -1,4 +1,4 @@
-# Laws Agent
+# Embeddorium
 
 A Python agent for fetching, parsing, embedding, and querying legislative documents.
 
@@ -29,23 +29,23 @@ crawl_frontier_manager  ->  fetch_source  ->  parse_source  ->  chunk_document  
 
 ### Local XML file chain
 
-A parallel chain ingests a local dump of legal-act XML files (e.g. the Estonian `xml.2026.en/` export) instead of crawling links, and keeps only **tax-related** acts. It re-joins the web chain at `parse_source`, so everything downstream is shared:
+A parallel chain ingests a local dump of XML files instead of crawling links, and optionally filters documents by keyword. It re-joins the web chain at `parse_source`, so everything downstream is shared:
 
 ```
 UI → POST /pipeline-runs → server creates row + publishes seed(s) → fetch_file_source
                                  (one message per *.xml file)
                                                   |
-                            fetch_file_source  ->  filter_tax_acts  ->  parse_source  ->  chunk_document  ->  schedule_embeddings  ->  embed_chunks
-                            (read file →           (tax act?          (shared with the web chain from here on)
-                             SourceFetch)            yes/no)
+                            fetch_file_source  ->  filter_documents  ->  parse_source  ->  chunk_document  ->  schedule_embeddings  ->  embed_chunks
+                            (read file →           (relevant?           (shared with the web chain from here on)
+                             SourceFetch)           yes/no)
                                                        |
                                                        v
-                                                skipped (not_tax_related)
+                                                skipped (not_relevant)
 ```
 
 1. **UI / API** — `POST /pipeline-runs` with a local dataset. The server creates the run row and enumerates `*.xml` files from the dataset's `paths`, publishing one `fetch_file_source` message per file carrying `pipeline_id`.
 2. **fetch_file_source** — merges "frontier create" + "fetch" for local files: normalizes the path to `file://<abs_path>`, dedups against an already-queued target, reads the file, stores the raw content as a `SourceFetch`. Passes `pipeline_id` forward.
-3. **filter_tax_acts** — extracts the act title from the XML and classifies it with a keyword-based tax classifier. Non-tax acts are marked `skipped` (`skip_reason="not_tax_related"`) and the chain stops there; tax-related acts advance to `filtered` and re-join the web chain at `parse_source`.
+3. **filter_documents** — extracts the document title from the XML and checks it against a configurable keyword list. When no keywords are configured every document passes through. Documents that do not match any keyword are marked `skipped` (`skip_reason="not_relevant"`) and the chain stops there; matching documents advance to `filtered` and re-join the web chain at `parse_source`.
 4. **parse_source** onward — unchanged from the web chain (`XmlParser` is picked by content type `application/xml`/`text/xml`); `chunk_document`, `schedule_embeddings`, and `embed_chunks` are reused as-is. `schedule_discovered_links` finds zero links for XML documents, which is expected.
 
 The **`pipeline_runs` row** is created by the server before any seed message is published. Every actor receives `pipeline_id` in its payload and loads its configuration (chunk size/overlap, embedding provider/model, Qdrant collection) from that row. The embeddings-tester UI lists these runs so a DB search reuses exactly a run's collection + embedding model.
@@ -60,7 +60,7 @@ backend/                        # all Python code (importable package `backend`)
         config.py               # env-based configuration (single source of truth)
         logging_config.py       # logging setup
         log_routing.py          # per-URL log routing
-        parsers/                # HTML→Markdown, link extraction, chunking, XML/tax
+        parsers/                # HTML→Markdown, link extraction, chunking, XML parsing, keyword filter
         clients/                # HuggingFace, LLM, embed, HTTP, queue clients
         models/                 # Pydantic domain models
         pipeline/               # hashing utilities
@@ -358,11 +358,11 @@ Local legal-act XML dumps (e.g. the Estonian `xml.2026.en/` export) live in the 
 
 The folder is bind-mounted into two containers via `docker-compose.yml`:
 
-| Service | Host path | Container path |
-| --- | --- | --- |
+| Service                    | Host path   | Container path |
+| -------------------------- | ----------- | -------------- |
 | `worker-fetch-file-source` | `./sources` | `/app/sources` |
-| `server` | `./sources` | `/app/sources` |
+| `server`                   | `./sources` | `/app/sources` |
 
 `worker-fetch-file-source` reads individual `.xml` files and stores their content in the DB. The `server` (`pipeline_launch.py::_seed_local`) enumerates `*.xml` files from the dataset's configured paths before publishing seed messages.
 
-Downstream actors (`filter_tax_acts`, `parse_source`, etc.) read content from the DB, not from disk, so they do not need this mount.
+Downstream actors (`filter_documents`, `parse_source`, etc.) read content from the DB, not from disk, so they do not need this mount.

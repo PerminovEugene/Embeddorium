@@ -22,8 +22,8 @@ class CrawlTargetStatus(StrEnum):
     SCHEDULING = "scheduling"
     PROCESSED = "processed"
 
-    # Local-file (XML) ingestion chain: tax-relevance gate between fetch and
-    # parse. Web targets never enter these statuses.
+    # Local-file (XML) ingestion chain: relevance gate between fetch and parse.
+    # Web targets never enter these statuses.
     FILTERING = "filtering"
     FILTERED = "filtered"
 

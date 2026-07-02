@@ -31,6 +31,7 @@ from backend.shared.models import (
 )
 from backend.shared.parsers.legal_pipeline import LegalXmlChunker
 from backend.shared.parsers.text_splitter import Chunk, TextSplitter
+from backend.shared.pipeline.source_files import read_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
 
 # Content types routed through the legal XML chunker (structure-aware) instead
@@ -49,22 +50,25 @@ def _build_raw_chunks(
     """Legal XML docs are chunked by legal structure; everything else by text.
 
     The legal chunker needs the raw XML (the structured tree is lost once the
-    parse stage flattens it into ``document.text``), so it is re-read from the
-    persisted source fetch. Falls back to the text splitter when the content is
-    not XML or cannot be parsed as a Juurakt act.
+    parse stage flattens it into the parsed-text file at
+    ``document.text_path``), so the raw content is re-read from disk via the
+    persisted ``raw_content_path`` on the source fetch. Falls back to the text
+    splitter when the content is not XML or cannot be parsed as a Juurakt act.
     """
     content_type = (document.content_type or "").split(";")[0].strip().lower()
     if legal_chunker is not None and content_type in _XML_CONTENT_TYPES:
         fetch = store.source_fetches.get_by_crawl_target(target_id)
-        if fetch is not None and fetch.raw_content:
-            legal_chunks = legal_chunker.split_xml(
-                fetch.raw_content,
-                source_url=document.source_url,
-                language=document.language or "en",
-            )
-            if legal_chunks:
-                return legal_chunks
-    return splitter.split(document.text or "")
+        if fetch is not None and fetch.raw_content_path:
+            raw = read_source_file(fetch.raw_content_path)
+            if raw:
+                legal_chunks = legal_chunker.split_xml(
+                    raw,
+                    source_url=document.source_url,
+                    language=document.language or "en",
+                )
+                if legal_chunks:
+                    return legal_chunks
+    return splitter.split(read_source_file(document.text_path))
 
 
 def chunk_document(

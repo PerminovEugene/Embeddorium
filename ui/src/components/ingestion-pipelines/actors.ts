@@ -184,20 +184,20 @@ const fetchFileSource: ActorDef = {
   ],
 };
 
-const filterTaxActs: ActorDef = {
-  key: "filter_tax_acts",
-  name: "filter_tax_acts",
+const filterDocuments: ActorDef = {
+  key: "filter_documents",
+  name: "filter_documents",
   description:
-    "Extracts the act title and classifies it with a keyword-based tax classifier; non-tax acts are skipped.",
+    "Extracts the document title and classifies it with a keyword filter; non-matching documents are skipped.",
   settings: [
     { key: "enabled", label: "Enabled", type: "checkbox", default: true },
     {
-      // Empty keeps the built-in curated tax keyword set; a non-empty list
-      // overrides it entirely.
+      // Empty means no keyword filtering — every document passes through. A
+      // non-empty list keeps only documents matching one of the keywords.
       key: "keywords",
-      label: "Tax keywords",
+      label: "Keywords",
       type: "text",
-      placeholder: "tax, vat, duty, excise",
+      placeholder: "keyword1, keyword2",
       default: "",
     },
   ],
@@ -218,7 +218,7 @@ const WEB_CHAIN: ActorDef[] = [
 // (add_file_source_job) is not a Dramatiq actor, so it isn't configurable here.
 const FILE_CHAIN: ActorDef[] = [
   fetchFileSource,
-  filterTaxActs,
+  filterDocuments,
   parseSource,
   chunkDocument,
   scheduleEmbeddings,

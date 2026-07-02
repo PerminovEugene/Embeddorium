@@ -19,8 +19,8 @@ from backend.shared.models import CrawlTarget, CrawlTargetStatus
 def make_target(
     *,
     status: CrawlTargetStatus = CrawlTargetStatus.QUEUED,
-    url: str = "https://emta.ee",
-    group: str = "Estonia",
+    url: str = "https://example.com",
+    group: str = "example",
     target_id: uuid.UUID | None = None,
 ) -> CrawlTarget:
     return CrawlTarget(

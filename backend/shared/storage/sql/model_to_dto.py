@@ -43,7 +43,7 @@ def _to_document(orm: DocumentORM, include_chunks: bool = False) -> Document:
         parser_version=orm.parser_version,
         chunker_version=orm.chunker_version,
         retrieved_at=orm.retrieved_at,
-        text=orm.text,
+        text_path=orm.text_path,
         created_at=orm.created_at,
         chunks=[_to_chunk(chunk) for chunk in orm.chunks] if include_chunks else [],
     )
@@ -69,7 +69,7 @@ def _to_source_fetch(orm: SourceFetchORM) -> SourceFetch:
         http_status=orm.http_status,
         content_type=orm.content_type,
         content_hash=orm.content_hash,
-        raw_content=orm.raw_content,
+        raw_content_path=orm.raw_content_path,
         redirect_chain=list(orm.redirect_chain or []),
         fetched_at=orm.fetched_at,
     )

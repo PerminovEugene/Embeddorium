@@ -53,7 +53,7 @@ interface PipelineRunOut {
       max_depth?: number;
     };
     fetch_file_source?: { glob?: string; dedup?: boolean };
-    filter_tax_acts?: { enabled?: boolean; keywords?: string };
+    filter_documents?: { enabled?: boolean; keywords?: string };
   };
   status: IngestionPipeline["status"];
   startedAt: string | null;
@@ -119,10 +119,10 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
       dedup: cfg.fetch_file_source.dedup ?? true,
     };
   }
-  if (cfg.filter_tax_acts) {
-    actorSettings.filter_tax_acts = {
-      enabled: cfg.filter_tax_acts.enabled ?? true,
-      keywords: cfg.filter_tax_acts.keywords ?? "",
+  if (cfg.filter_documents) {
+    actorSettings.filter_documents = {
+      enabled: cfg.filter_documents.enabled ?? true,
+      keywords: cfg.filter_documents.keywords ?? "",
     };
   }
   return {

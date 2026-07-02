@@ -16,7 +16,7 @@ def test_web_source_defaults_type_to_web(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {"description": "Tax authority", "link": "https://emta.ee"},
@@ -38,7 +38,7 @@ def test_explicit_web_type_is_accepted(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {
@@ -61,11 +61,11 @@ def test_xml_source_parses_path_and_glob(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {
-                        "description": "Estonian acts XML dump.",
+                        "description": "Sample XML dump.",
                         "type": "xml",
                         "path": "xml.2026.en",
                         "glob": "*.xml",
@@ -88,11 +88,11 @@ def test_xml_source_glob_defaults_to_xml_pattern(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {
-                        "description": "Estonian acts XML dump.",
+                        "description": "Sample XML dump.",
                         "type": "xml",
                         "path": "xml.2026.en",
                     },
@@ -111,7 +111,7 @@ def test_xml_source_without_path_raises(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {"description": "Missing path.", "type": "xml"},
@@ -129,7 +129,7 @@ def test_unknown_source_type_raises(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {
@@ -151,7 +151,7 @@ def test_web_source_without_link_raises(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {"description": "Missing link."},
@@ -170,11 +170,11 @@ def test_backward_compatible_config_without_type_field(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
                     {"description": "Tax authority", "link": "emta.ee"},
-                    {"description": "Laws", "link": "https://riigiteataja.ee"},
+                    {"description": "Laws", "link": "https://example.com"},
                 ],
             }
         ]
@@ -191,7 +191,7 @@ def test_group_without_settings_has_none(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [{"description": "Tax authority", "link": "emta.ee"}],
             }
@@ -208,7 +208,7 @@ def test_group_settings_are_parsed_per_actor(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "settings": {
                     "chunk_document": {
@@ -243,7 +243,7 @@ def test_partial_group_settings_leave_omitted_actors_none(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "settings": {"embed_chunks": {"provider": "mock", "mock_dim": 64}},
                 "sources": [{"description": "Tax authority", "link": "emta.ee"}],
@@ -264,7 +264,7 @@ def test_non_integer_chunk_size_is_rejected(tmp_path: Path):
     data = {
         "groups": [
             {
-                "name": "Estonia",
+                "name": "example",
                 "attributes": {"code": "EE"},
                 "settings": {"chunk_document": {"chunk_size": "big"}},
                 "sources": [{"description": "Tax authority", "link": "emta.ee"}],

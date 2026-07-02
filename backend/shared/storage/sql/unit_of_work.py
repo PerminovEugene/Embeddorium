@@ -99,7 +99,7 @@ class UnitOfWork:
         orm.http_status = fetch.http_status
         orm.content_type = fetch.content_type
         orm.content_hash = fetch.content_hash
-        orm.raw_content = fetch.raw_content
+        orm.raw_content_path = fetch.raw_content_path
         orm.redirect_chain = list(fetch.redirect_chain)
         self._session.flush()
         return _to_source_fetch(orm)
@@ -131,7 +131,7 @@ class UnitOfWork:
         orm.parser_version = document.parser_version
         orm.chunker_version = document.chunker_version
         orm.retrieved_at = document.retrieved_at
-        orm.text = document.text
+        orm.text_path = document.text_path
         self._session.flush()
         return _to_document(orm)
 

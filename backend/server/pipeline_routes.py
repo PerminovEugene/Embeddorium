@@ -53,7 +53,7 @@ from backend.shared.models.pipeline_run import (
     EmbedChunksSettings,
     FetchFileSourceSettings,
     FetchSourceSettings,
-    FilterTaxActsSettings,
+    FilterDocumentsSettings,
     ParseSourceSettings,
     ScheduleDiscoveredLinksSettings,
     ScheduleEmbeddingsSettings,
@@ -64,6 +64,7 @@ from backend.shared.parsers.chunking_config import (
     CHUNK_SIZE,
     CHUNK_STRATEGY,
 )
+from backend.shared.pipeline.source_files import delete_run_files
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.collection_naming import (
     COLLECTION_SIMILARITY,
@@ -229,8 +230,8 @@ async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
             fetch_file_source=_build_settings(
                 FetchFileSourceSettings, settings.get("fetch_file_source", {})
             ),
-            filter_tax_acts=_build_settings(
-                FilterTaxActsSettings, settings.get("filter_tax_acts", {})
+            filter_documents=_build_settings(
+                FilterDocumentsSettings, settings.get("filter_documents", {})
             ),
         )
 
@@ -373,6 +374,7 @@ async def delete_pipeline_run(run_id: str) -> dict:
         deleted = store.pipeline_runs.delete(parsed)
         if not deleted:
             raise HTTPException(status_code=404, detail="Pipeline run not found")
+        delete_run_files(str(parsed))
         return {"status": "deleted"}
     finally:
         store.close()
