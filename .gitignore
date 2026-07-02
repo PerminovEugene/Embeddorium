@@ -45,3 +45,4 @@ node_modules/
 # Local data dumps (e.g. Estonian acts XML)
 xml.2026.en/
 sources
+tmp
