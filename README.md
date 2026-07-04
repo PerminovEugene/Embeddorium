@@ -123,6 +123,7 @@ docker-compose.yml
 | [Architecture](docs/architecture.md)   | The pipeline stages, outbox, status machine, and storage model        |
 | [Configuration](docs/configuration.md) | Every environment variable, for host and Docker                       |
 | [Embeddings](docs/embeddings.md)       | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
+| [Concurrency](docs/concurrency.md)     | Per-stage threads/processes, fan-out, and what bounds embedding load  |
 | [Usage](docs/usage.md)                 | Starting runs, local XML sources, the agent, the embeddings tester    |
 | [Plugins](docs/plugins.md)             | Writing your own chunker plugin, auto-discovery, the built-ins        |
 | [Development](docs/development.md)     | Setup, tests, linting, migrations, resetting local state              |

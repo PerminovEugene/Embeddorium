@@ -2,9 +2,8 @@ import VariablesSection from "./VariablesSection";
 import InputsSection from "./InputsSection";
 import ResultTable from "./ResultTable";
 import { sectionStyle } from "../styles/styles";
-import ModelSelector from "./ModelSelector";
 import SimilaritySelector from "./SimilaritySelector";
-import OllamaPortInput from "./llmPort";
+import ProviderSelector from "./ProviderSelector";
 import SubmitButton from "./Submit";
 import SourceModeSelector from "./SourceModeSelector";
 import RunSelector from "./RunSelector";
@@ -35,32 +34,38 @@ const CompareComponent = () => {
         }}
       >
         <section style={sectionStyle} className="bg-emd-panel">
-          <H2>Configuration</H2>
-          <div className="flex flex-col justify-between">
-            <div className="flex flex-row gap-3 mb-5">
-              {/* In DB mode the embedding provider/model come from the selected
-                  pipeline run, so the Ollama port picker is hidden. */}
-              {!isDb && <OllamaPortInput />}
-              <SourceModeSelector />
-              {isDb ? <RunSelector /> : <SimilaritySelector />}
-            </div>
-            {/* In DB mode the embedding model comes from the selected run, so
-                the manual model picker is hidden. */}
-            {!isDb && (
-              <div>
-                <ModelSelector />
-              </div>
-            )}
+          <H2>{isDb ? "Source" : "Sources"}</H2>
+
+          <div className="flex flex-row gap-3 mb-5">
+            {/* Source mode first, then the source of the embedding model: in
+                manual mode the provider supplies it; in DB mode the selected
+                pipeline run does. */}
+            <SourceModeSelector />
+            {isDb ? <RunSelector /> : <ProviderSelector />}
           </div>
+
+          {/* In manual mode the source variables + inputs live in this same
+              card; in DB mode they move to their own "Queries" card below so the
+              layout mirrors the manual Sources/Candidates split. */}
+          {!isDb && (
+            <>
+              <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
+              <VariablesSection type="source" />
+              <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
+              <InputsSection type="source" />
+            </>
+          )}
         </section>
 
-        <section style={sectionStyle} className="bg-emd-panel">
-          <H2>{isDb ? "Queries" : "Sources"}</H2>
+        {isDb && (
+          <section style={sectionStyle} className="bg-emd-panel">
+            <H2>Queries</H2>
 
-          <VariablesSection type="source" />
-          <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
-          <InputsSection type="source" />
-        </section>
+            <VariablesSection type="source" />
+            <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
+            <InputsSection type="source" />
+          </section>
+        )}
 
         {!isDb && (
           <section style={sectionStyle} className="bg-emd-panel">
@@ -69,6 +74,13 @@ const CompareComponent = () => {
             <VariablesSection type="candidate" />
             <hr style={{ border: "1px solid #e5e7eb", margin: "1.5rem 0" }} />
             <InputsSection type="candidate" />
+          </section>
+        )}
+
+        {!isDb && (
+          <section style={sectionStyle} className="bg-emd-panel">
+            <H2>Metrics</H2>
+            <SimilaritySelector />
           </section>
         )}
 

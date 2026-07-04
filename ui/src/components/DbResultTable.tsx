@@ -5,23 +5,30 @@ import { DbMatch } from "./types";
 type SortKey = keyof DbMatch;
 type SortDirection = "asc" | "desc";
 
+// Leading sortable columns. The chunk metadata (source / group / chunk # /
+// document id) is collapsed into one non-sortable cell, and Score is rendered
+// as the trailing column — both handled separately below.
 const columns: { key: SortKey; label: string }[] = [
   { key: "queryText", label: "Query" },
   { key: "chunkText", label: "Chunk Text" },
-  { key: "score", label: "Score" },
-  { key: "sourceUrl", label: "Source URL" },
-  { key: "group", label: "Group" },
-  { key: "chunkIndex", label: "Chunk #" },
-  { key: "documentId", label: "Document ID" },
 ];
 
 const cellStyle = { border: "1px solid #d1d5db", padding: "0.5rem" } as const;
+
+// For a local dataset source_url is an absolute filesystem path; show just the
+// file name (full path stays available as a tooltip).
+const fileName = (path: string): string => path.split(/[\\/]/).pop() || path;
 
 const DbResultTable: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const { state } = useFormContext();
-  const { dbMatches = [] } = state;
+  const { dbMatches = [], selectedRun } = state;
+
+  // Web runs expose a real URL (rendered as a link); local runs expose a file
+  // path (rendered as a file name). Both surface inside the chunk metadata cell.
+  const isLocal = selectedRun?.sourceType === "local";
+  const sourceLabel = isLocal ? "File" : "Source";
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -75,16 +82,56 @@ const DbResultTable: React.FC = () => {
     );
   };
 
+  const colCount = columns.length + 2; // + chunk metadata + score columns
+
+  const renderSource = (match: DbMatch) => {
+    if (!match.sourceUrl) return "—";
+    if (isLocal) {
+      return (
+        <span
+          title={match.sourceUrl}
+          className="inline-flex items-center gap-1 max-w-[220px] align-bottom"
+        >
+          <span aria-hidden>📄</span>
+          <span className="truncate">{fileName(match.sourceUrl)}</span>
+        </span>
+      );
+    }
+    return (
+      <a
+        href={match.sourceUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-emd-primary underline break-all"
+      >
+        {match.sourceUrl}
+      </a>
+    );
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse min-w-[800px]">
         <thead>
-          <tr>{columns.map((c) => renderHeader(c.label, c.key))}</tr>
+          <tr>
+            {columns.map((c) => renderHeader(c.label, c.key))}
+            <th
+              style={{
+                border: "1px solid #d1d5db",
+                padding: "0.5rem",
+                textAlign: "left",
+                userSelect: "none",
+              }}
+            >
+              Chunk metadata
+            </th>
+            {renderHeader("Score", "score")}
+          </tr>
         </thead>
         <tbody>
           {!sortedMatches.length ? (
             <tr>
-              <td colSpan={columns.length} style={{ ...cellStyle, textAlign: "center" }}>
+              <td colSpan={colCount} style={{ ...cellStyle, textAlign: "center" }}>
                 No data
               </td>
             </tr>
@@ -94,25 +141,40 @@ const DbResultTable: React.FC = () => {
                 <td style={cellStyle}>{match.queryText}</td>
                 <td style={cellStyle}>{match.chunkText ?? "—"}</td>
                 <td style={cellStyle}>
-                  {typeof match.score === "number" ? match.score.toFixed(4) : "—"}
+                  <div className="flex flex-col gap-0.5 text-xs text-emd-text">
+                    <span className="inline-flex items-baseline gap-1 max-w-[240px]">
+                      <span className="font-medium shrink-0">{sourceLabel}:</span>{" "}
+                      {renderSource(match)}
+                    </span>
+                    {/* Web runs identify the origin by dataset; local runs use
+                        the ingest group instead. */}
+                    {isLocal ? (
+                      <span>
+                        <span className="font-medium">Group:</span>{" "}
+                        {match.group ?? "—"}
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-medium">Dataset:</span>{" "}
+                        {selectedRun?.group ?? "—"}
+                      </span>
+                    )}
+                    <span>
+                      <span className="font-medium">Chunk #:</span>{" "}
+                      {match.chunkIndex ?? "—"}
+                    </span>
+                    <span
+                      className="truncate max-w-[220px]"
+                      title={match.documentId ?? undefined}
+                    >
+                      <span className="font-medium">Doc:</span>{" "}
+                      {match.documentId ?? "—"}
+                    </span>
+                  </div>
                 </td>
                 <td style={cellStyle}>
-                  {match.sourceUrl ? (
-                    <a
-                      href={match.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emd-primary underline"
-                    >
-                      {match.sourceUrl}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
+                  {typeof match.score === "number" ? match.score.toFixed(4) : "—"}
                 </td>
-                <td style={cellStyle}>{match.group ?? "—"}</td>
-                <td style={cellStyle}>{match.chunkIndex ?? "—"}</td>
-                <td style={cellStyle}>{match.documentId ?? "—"}</td>
               </tr>
             ))
           )}

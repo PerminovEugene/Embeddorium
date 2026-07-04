@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState } from "react";
 import { Input, VariableGroup, Variable, Model } from "./types";
 import { Match, DbMatch, SourceType, PipelineRun } from "./types";
-import { Similarity } from "./consts";
+import { Provider } from "./providers/types";
+import { options, Similarity } from "./consts";
 
 export interface Errors {
   sourceVariableGroups: string[];
@@ -27,6 +28,11 @@ export interface FormState {
   // input (the run also supplies the embedding model used for the query).
   sourceType: SourceType;
   selectedRun: PipelineRun | null;
+
+  // Compare mode: the saved provider supplying the embedding model. Its
+  // type/model/port are resolved server-side from the id, replacing the old
+  // manual Ollama-port + model-name inputs.
+  selectedProvider: Provider | null;
 
   matches: Match[];
   dbMatches: DbMatch[];
@@ -69,6 +75,7 @@ interface FormContextType {
 
   setSourceType: (sourceType: SourceType) => void;
   setSelectedRun: (run: PipelineRun | null) => void;
+  setSelectedProvider: (provider: Provider | null) => void;
 
   // Reset
   resetForm: () => void;
@@ -123,6 +130,7 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     ollamaPort: "11434",
     sourceType: "manual",
     selectedRun: null,
+    selectedProvider: null,
     matches: [],
     dbMatches: [],
   });
@@ -135,7 +143,18 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         const parsed = JSON.parse(stored) as Partial<FormState>;
         // Merge over defaults so state persisted before newer fields existed
         // (e.g. dbMatches/sourceType) is still hydrated with valid values.
-        return { ...defaults, ...parsed };
+        const merged = { ...defaults, ...parsed };
+        // Drop persisted similarity metrics that are no longer supported (e.g.
+        // the removed normalized variants). Leaving them in would crash the
+        // range selector (no metricConfig entry) and render empty table
+        // columns. Fall back to the default when nothing valid remains.
+        const validIds = new Set(options.map((o) => o.id));
+        const similarities = merged.similarities.filter((s) =>
+          validIds.has(s)
+        );
+        merged.similarities =
+          similarities.length > 0 ? similarities : defaults.similarities;
+        return merged;
       } catch (e) {
         console.error("Failed to parse stored form state", e);
       }
@@ -321,6 +340,13 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
   };
 
+  const setSelectedProvider = (selectedProvider: Provider | null) => {
+    setState((prev) => ({
+      ...prev,
+      selectedProvider,
+    }));
+  };
+
   const checkSimilarity = (similarity: Similarity) => {
     setState((prev) => {
       console.log("context prev similarities", prev.similarities);
@@ -343,22 +369,21 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
       if (input.text.trim() === "")
         errors.push("Source inputs should not be empty");
     });
-    if (state.ollamaPort.trim() === "")
-      errors.push("Ollama port should not be empty");
 
     if (isDb) {
       // The embedding model comes from the selected run, and candidates /
       // similarity metrics are irrelevant: Qdrant ranks the nearest vectors
-      // with the distance fixed at collection-creation time.
+      // with the distance fixed at collection-creation time. The port is still
+      // needed to reach Ollama for embedding the query.
+      if (state.ollamaPort.trim() === "")
+        errors.push("Ollama port should not be empty");
       if (!state.selectedRun)
         errors.push("Please select a pipeline run to search");
     } else {
-      if (state.models.length === 0)
-        errors.push("Please add name for at least one model");
-      state.models.forEach((model) => {
-        if (model.name.trim() === "")
-          errors.push("Model name should not be empty");
-      });
+      // The provider supplies the embedding model (and its port), replacing the
+      // old manual model-name + Ollama-port inputs.
+      if (!state.selectedProvider)
+        errors.push("Please select a provider");
       state.candidateInputs.forEach((input) => {
         if (input.text.trim() === "")
           errors.push("Candidate inputs should not be empty");
@@ -399,6 +424,7 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
 
         setSourceType,
         setSelectedRun,
+        setSelectedProvider,
 
         validate,
         setMatches,

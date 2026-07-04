@@ -7,19 +7,6 @@ export const metricConfig = {
   [Similarity.DOT]: { min: 0, max: 1000, step: 1, positive: true },
   [Similarity.EUCLIDEAN]: { min: 0, max: 100, step: 0.1, positive: false },
   [Similarity.MANHATTAN]: { min: 0, max: 1000, step: 1, positive: false },
-  [Similarity.DOT_NORM]: { min: 0, max: 1, step: 0.01, positive: true },
-  [Similarity.EUCLIDEAN_NORM]: {
-    min: 0,
-    max: 0.5,
-    step: 0.001,
-    positive: false,
-  },
-  [Similarity.MANHATTAN_NORM]: {
-    min: 0,
-    max: 0.01,
-    step: 0.0001,
-    positive: false,
-  },
 };
 
 interface ScoreRangeSelectorProps {

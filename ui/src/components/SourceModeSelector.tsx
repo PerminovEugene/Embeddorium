@@ -3,8 +3,8 @@ import { useFormContext } from "./FormContext";
 import { SourceType } from "./types";
 
 const modes: { id: SourceType; label: string }[] = [
-  { id: "manual", label: "Compare inputs" },
-  { id: "db", label: "Search vector DB" },
+  { id: "manual", label: "Manual input" },
+  { id: "db", label: "Select pipeline results" },
 ];
 
 const SourceModeSelector: React.FC = () => {

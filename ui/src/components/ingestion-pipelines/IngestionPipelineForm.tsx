@@ -3,7 +3,7 @@ import Field from "../common/Field";
 import TextInput from "../common/TextInput";
 import Select from "../common/Select";
 import Checkbox from "../common/Checkbox";
-import MultiCheckboxSelect from "../common/MultiCheckboxSelect";
+import MultiSelectDropdown from "../common/MultiSelectDropdown";
 import { Provider } from "../providers/types";
 import { Dataset, DatasetSourceType } from "../datasets/types";
 import {
@@ -78,6 +78,30 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
     setValues(toFormValues(pipeline));
     setNameError(null);
   }, [pipeline]);
+
+  // Default the embed_chunks provider to the first embedding provider once the
+  // providers list is available, unless one is already selected (e.g. editing
+  // an existing pipeline). Keeps the stored value in sync so it's persisted on
+  // submit. Re-runs on selection change so a freshly-created pipeline is
+  // pre-filled too.
+  useEffect(() => {
+    if (disabled) return;
+    const opts = providerOptions(providers);
+    if (opts.length === 0) return;
+    setValues((prev) => {
+      if (prev.actorSettings["embed_chunks"]?.["providerId"]) return prev;
+      return {
+        ...prev,
+        actorSettings: {
+          ...prev.actorSettings,
+          embed_chunks: {
+            ...prev.actorSettings["embed_chunks"],
+            providerId: opts[0].value,
+          },
+        },
+      };
+    });
+  }, [pipeline, providers, disabled]);
 
   // The actor chain is derived from the source types of the selected datasets.
   const actorChain = useMemo<ActorDef[]>(() => {
@@ -169,12 +193,13 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
       </Field>
 
       <Field label="Datasets">
-        <MultiCheckboxSelect
+        <MultiSelectDropdown
           options={datasetOptions}
           value={values.datasetIds}
           onChange={(datasetIds) =>
             setValues((prev) => ({ ...prev, datasetIds }))
           }
+          placeholder="Select datasets…"
           emptyMessage="No datasets yet — create one first."
           disabled={disabled}
         />
@@ -310,12 +335,19 @@ const SettingControl: React.FC<SettingControlProps> = ({
 
   if (field.type === "checkbox") {
     return (
-      <Checkbox
-        label={field.label}
-        checked={Boolean(value)}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
+      <div className="flex flex-col gap-1">
+        <Checkbox
+          label={field.label}
+          checked={Boolean(value)}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        {field.description && (
+          <span className="text-xs text-emd-placeholder">
+            {field.description}
+          </span>
+        )}
+      </div>
     );
   }
 
@@ -324,7 +356,7 @@ const SettingControl: React.FC<SettingControlProps> = ({
     // Only embedding providers are relevant here.
     const opts = providerOptions(providers);
     return (
-      <Field label={field.label} htmlFor={id}>
+      <Field label={field.label} htmlFor={id} description={field.description}>
         <Select
           id={id}
           options={
@@ -345,7 +377,7 @@ const SettingControl: React.FC<SettingControlProps> = ({
 
   if (field.type === "select") {
     return (
-      <Field label={field.label} htmlFor={id}>
+      <Field label={field.label} htmlFor={id} description={field.description}>
         <Select
           id={id}
           options={field.options}
@@ -359,7 +391,7 @@ const SettingControl: React.FC<SettingControlProps> = ({
 
   if (field.type === "number") {
     return (
-      <Field label={field.label} htmlFor={id}>
+      <Field label={field.label} htmlFor={id} description={field.description}>
         <TextInput
           id={id}
           type="number"
@@ -373,7 +405,7 @@ const SettingControl: React.FC<SettingControlProps> = ({
   }
 
   return (
-    <Field label={field.label} htmlFor={id}>
+    <Field label={field.label} htmlFor={id} description={field.description}>
       <TextInput
         id={id}
         placeholder={field.placeholder}

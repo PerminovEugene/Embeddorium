@@ -69,9 +69,6 @@ const ResultTable: React.FC = () => {
     [Similarity.DOT]: 50,
     [Similarity.EUCLIDEAN]: 10,
     [Similarity.MANHATTAN]: 150,
-    [Similarity.DOT_NORM]: 0.5,
-    [Similarity.EUCLIDEAN_NORM]: 0.05,
-    [Similarity.MANHATTAN_NORM]: 0.001,
   });
 
   const [higher, setHigher] = useState({
@@ -79,9 +76,6 @@ const ResultTable: React.FC = () => {
     [Similarity.DOT]: 150,
     [Similarity.EUCLIDEAN]: 20,
     [Similarity.MANHATTAN]: 400,
-    [Similarity.DOT_NORM]: 0.7,
-    [Similarity.EUCLIDEAN_NORM]: 0.1,
-    [Similarity.MANHATTAN_NORM]: 0.005,
   });
 
   const red = "bg-red-200";

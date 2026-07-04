@@ -45,7 +45,6 @@ interface PipelineRunOut {
     crawl_frontier_manager?: {
       normalize_urls?: boolean;
       dedup?: boolean;
-      max_frontier_size?: number;
     };
     fetch_source?: {
       verify_tls?: boolean;
@@ -100,7 +99,6 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
     actorSettings.crawl_frontier_manager = {
       normalizeUrls: c.normalize_urls ?? true,
       dedup: c.dedup ?? true,
-      maxFrontierSize: c.max_frontier_size ?? 10000,
     };
   }
   if (cfg.fetch_source) {

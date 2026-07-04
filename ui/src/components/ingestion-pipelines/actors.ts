@@ -17,12 +17,15 @@ export const DEFAULT_CHUNKER = "text_markdown";
 // The "provider" variant is special: its options are not embedded in the
 // descriptor but resolved at render time from the providers list passed down
 // through the component tree. The stored value is the provider's id string.
+//
+// The optional `description` is short help text rendered under the control to
+// explain what the setting does (and its effect at the extremes).
 export type SettingField =
-  | { key: string; label: string; type: "text"; placeholder?: string; default: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
-  | { key: string; label: string; type: "number"; default: number; min?: number; hidden?: (settings: Record<string, SettingValue>) => boolean }
-  | { key: string; label: string; type: "checkbox"; default: boolean; hidden?: (settings: Record<string, SettingValue>) => boolean }
-  | { key: string; label: string; type: "select"; options: SelectOption[]; default: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
-  | { key: string; label: string; type: "provider"; default: string; hidden?: (settings: Record<string, SettingValue>) => boolean };
+  | { key: string; label: string; type: "text"; placeholder?: string; default: string; description?: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
+  | { key: string; label: string; type: "number"; default: number; min?: number; description?: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
+  | { key: string; label: string; type: "checkbox"; default: boolean; description?: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
+  | { key: string; label: string; type: "select"; options: SelectOption[]; default: string; description?: string; hidden?: (settings: Record<string, SettingValue>) => boolean }
+  | { key: string; label: string; type: "provider"; default: string; description?: string; hidden?: (settings: Record<string, SettingValue>) => boolean };
 
 // One stage of the ingestion pipeline. `name`/`description` come straight from
 // the README's pipeline-flow section; `settings` are placeholder config for now.
@@ -117,7 +120,6 @@ const crawlFrontierManager: ActorDef = {
   settings: [
     { key: "normalizeUrls", label: "Normalize URLs", type: "checkbox", default: true },
     { key: "dedup", label: "Dedup by normalized URL", type: "checkbox", default: true },
-    { key: "maxFrontierSize", label: "Max frontier size", type: "number", default: 10000, min: 1 },
   ],
 };
 
@@ -127,8 +129,23 @@ const fetchSource: ActorDef = {
   description:
     "Fetches the URL (TLS verified), classifies failures, rejects unsupported content types, stores the raw fetch + provenance.",
   settings: [
-    { key: "verifyTls", label: "Verify TLS", type: "checkbox", default: true },
-    { key: "timeoutSeconds", label: "Timeout (seconds)", type: "number", default: 30, min: 1 },
+    {
+      key: "verifyTls",
+      label: "Verify TLS",
+      type: "checkbox",
+      default: true,
+      description:
+        "Reject an HTTPS page whose TLS certificate can't be verified. Turn off only to crawl hosts with self-signed or expired certificates.",
+    },
+    {
+      key: "timeoutSeconds",
+      label: "Timeout (seconds)",
+      type: "number",
+      default: 30,
+      min: 1,
+      description:
+        "Read timeout for each fetch. The request is aborted (and retried with backoff) if the server doesn't respond within this many seconds.",
+    },
     {
       // Empty means "no extra restriction" — the parser registry decides what
       // is supported. A non-empty list further narrows the accepted types.
@@ -137,6 +154,8 @@ const fetchSource: ActorDef = {
       type: "text",
       placeholder: "Any supported (e.g. text/html, text/xml)",
       default: "",
+      description:
+        "Comma-separated allowlist that further narrows the content types the parsers already support. Leave empty to accept any supported type; a page whose Content-Type isn't listed is skipped.",
     },
   ],
 };
@@ -172,7 +191,7 @@ const filterDocuments: ActorDef = {
   description:
     "Extracts the document title and classifies it with a keyword filter; non-matching documents are skipped.",
   settings: [
-    { key: "enabled", label: "Enabled", type: "checkbox", default: true },
+    { key: "enabled", label: "Enabled", type: "checkbox", default: false },
     {
       // Empty means no keyword filtering — every document passes through. A
       // non-empty list keeps only documents matching one of the keywords.

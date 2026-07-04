@@ -94,8 +94,8 @@ const SubmitButton = () => {
 
     const data = {
       configuration: {
-        ollamaPort: state.ollamaPort,
-        modelNames: state.models.map((model) => model.name),
+        // The provider supplies the embedding type/model/port server-side.
+        providerId: state.selectedProvider?.id,
         similarities: state.similarities,
       },
       source: { inputs: processedSourceInputs },

@@ -72,13 +72,11 @@ class CrawlFrontierManagerSettings(BaseModel):
     """Settings consumed by the ``crawl_frontier_manager`` actor.
 
     ``normalize_urls`` toggles URL normalization before dedup; ``dedup``
-    toggles the already-queued gate. ``max_frontier_size`` is stored for a
-    future frontier-cap feature (not yet enforced).
+    toggles the already-queued gate.
     """
 
     normalize_urls: bool = True
     dedup: bool = True
-    max_frontier_size: int = 10000
 
 
 class FetchSourceSettings(BaseModel):
