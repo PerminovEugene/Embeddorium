@@ -1,6 +1,6 @@
 # Project Architecture
 
-A distributed crawler and indexer for legal web sources. Pipeline runs are created via the API; the system crawls the dataset URLs, chunks the text, generates vector embeddings, and stores everything for later retrieval.
+A distributed crawler and indexer for web and file sources of any domain. Pipeline runs are created via the API; the system crawls the dataset URLs, chunks the text, generates vector embeddings, and stores everything for later retrieval.
 
 ---
 
@@ -24,25 +24,30 @@ concurrent/retried deliveries are no-ops.
 POST /pipeline-runs (server)
        │  creates pipeline_run row, publishes seed with pipeline_id
        ▼
-laws.crawl.frontier.manage.v1
+ingest.crawl.frontier.manage.v1
        │
        ▼
 crawl_frontier_manager_actor          ← dedup gate; creates crawl_target (queued)
        │ (new URLs only)
        ▼
-laws.crawl.source.fetch.v1      → fetch_source            (QUEUED→FETCHING→FETCHED)
+ingest.crawl.source.fetch.v1      → fetch_source            (QUEUED→FETCHING→FETCHED)
        ▼
-laws.crawl.source.parse.v1      → parse_source            (FETCHED→PARSING→PARSED)
+ingest.crawl.source.parse.v1      → parse_source            (FETCHED→PARSING→PARSED)
        ▼
-laws.crawl.document.chunk.v1    → chunk_document          (PARSED→CHUNKING→CHUNKED)
+ingest.crawl.document.chunk.v1    → chunk_document          (PARSED→CHUNKING→CHUNKED)
        ▼
-laws.crawl.embeddings.schedule.v1 → schedule_embeddings   (CHUNKED→SCHEDULING)
+ingest.crawl.embeddings.schedule.v1 → schedule_embeddings   (CHUNKED→SCHEDULING)
        ▼
-laws.crawl.links.schedule.v1    → schedule_discovered_links (SCHEDULING→PROCESSED)
-       │                                  │
-       │ embed events                     └──► laws.crawl.frontier.manage.v1
+ingest.crawl.links.schedule.v1    → schedule_discovered_links (SCHEDULING→EMBEDDING,
+       │                                  │                  or straight to PROCESSED
+       │                                  │                  when the document has no
+       │                                  │                  chunks to embed)
+       │ embed events                     └──► ingest.crawl.frontier.manage.v1
        ▼                                        (persisted discovered links, looped back)
-laws.embed.chunk.generate.v1    → embed_chunks            ← embed → save to Qdrant
+ingest.embed.chunk.generate.v1    → embed_chunks            ← embed → save to Qdrant,
+                                                              flip chunks to `embedded`,
+                                                              (EMBEDDING→PROCESSED once
+                                                              every chunk is embedded)
 ```
 
 **No actor enqueues RabbitMQ directly.** Each stage writes its domain rows **and**
@@ -61,7 +66,7 @@ Dedup gate. Normalises the URL, skips it if an active `crawl_target` exists (tra
 Fetches over TLS (insecure only for allowlisted domains) via `HttpFetcher`, classifies failures as transient (retry) vs permanent (give up), rejects unsupported content types, hashes the body, and stores a `source_fetches` provenance row.
 
 ### parse_source
-Selects a parser by content type (registry: html→trafilatura, plain→passthrough; PDF/DOCX is a one-line extension), produces normalized text, and saves the `Document` with provenance (final URL, status, content/text hashes, parser/chunker versions, `retrieved_at`, real `language` default `unknown`, crawl `group`).
+Selects a parser by content type (registry: html→trafilatura, plain→passthrough; PDF/DOCX is a one-line extension), produces normalized text, and saves the `Document` with provenance (final URL, status, content/text hashes, parser/chunker versions, `retrieved_at`, real `language` default `unknown`).
 
 ### chunk_document
 Splits the document text into ~1200-token chunks (`langchain MarkdownTextSplitter`), upserts `document_chunks` (unique on `document_id + chunk_index`) and persists `discovered_links` (unique on `source_chunk_id + normalized_url`).
@@ -69,11 +74,11 @@ Splits the document text into ~1200-token chunks (`langchain MarkdownTextSplitte
 ### schedule_embeddings
 Writes one embed outbox event per batch of chunks (deduped per batch), then triggers link scheduling.
 
-### schedule_discovered_links (terminal)
-Writes one frontier outbox event per pending discovered link, marks them scheduled, and only then sets the target `PROCESSED` — so downstream work is durable before completion.
+### schedule_discovered_links (terminal-for-links)
+Writes one frontier outbox event per pending discovered link and marks them scheduled. Sets the target to `EMBEDDING` (waiting on its chunks to be embedded), or straight to `PROCESSED` when its document has zero chunks (or every chunk is already embedded) — no embed batch will ever run for it.
 
-### embed_chunks
-Loads chunks, runs `Qwen/Qwen3-Embedding-8B` via `sentence-transformers`, upserts vectors into `LAWS_{group}_qwen_embed_8b` using the **chunk id as the point id** (re-embedding overwrites instead of duplicating).
+### embed_chunks (terminal)
+Loads chunks, runs `Qwen/Qwen3-Embedding-8B` via `sentence-transformers`, upserts vectors into `BASE_{dataset_name}_qwen_embed_8b` using the **chunk id as the point id** (re-embedding overwrites instead of duplicating), flips those chunks' status to `embedded`, and — only once every chunk of the document is embedded — finalizes the target to `PROCESSED`. This is the only place a target with chunks reaches `PROCESSED`, so the status now means the target's chunks are actually embedded, not merely that embed batches were scheduled.
 
 ---
 
@@ -82,9 +87,9 @@ Loads chunks, runs `Qwen/Qwen3-Embedding-8B` via `sentence-transformers`, upsert
 | Store    | What lives there                                      |
 |----------|-------------------------------------------------------|
 | Postgres | `documents`, `document_chunks`, `crawl_targets`, `source_fetches`, `discovered_links`, `outbox_events` |
-| Qdrant   | Vector embeddings with `chunk_id` / `document_id` / `group` payload (point id = chunk id) |
+| Qdrant   | Vector embeddings with `chunk_id` / `document_id` / `pipeline_run_id` payload (point id = chunk id) |
 
-`crawl_targets` is the crawl frontier: every URL the system has seen gets a row with a status that walks the pipeline (`queued → fetching → fetched → parsing → parsed → chunking → chunked → scheduling → processed`), plus terminal `skipped_unsupported` / `failed_transient` / `failed_permanent`. This both prevents re-crawling and drives stage orchestration.
+`crawl_targets` is the crawl frontier: every URL the system has seen gets a row with a status that walks the pipeline (`queued → fetching → fetched → parsing → parsed → chunking → chunked → scheduling → embedding → processed`, with zero-chunk documents skipping straight from `scheduling` to `processed`), plus terminal `skipped_unsupported` / `failed_transient` / `failed_permanent`. This both prevents re-crawling and drives stage orchestration. Each `document_chunks` row also carries its own `pending → embedded` status, and `processed_at` on `crawl_targets` records when a target reached `processed` (so `processed_at - created_at` gives that target's processing time).
 
 ---
 

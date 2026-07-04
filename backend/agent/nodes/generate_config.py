@@ -9,7 +9,7 @@ from backend.agent.nodes.base import Node, format_chunks
 from backend.agent.state import AgentState
 
 _SYSTEM = (
-    "You are a tax law config builder. "
+    "You are a config builder. "
     "Using ONLY the provided chunks, build a JSON object that conforms to the target schema. "
     "Do not invent data not present in the chunks. "
     "If a field has no data in the chunks, set it to null. "

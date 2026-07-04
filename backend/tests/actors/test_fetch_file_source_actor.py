@@ -35,13 +35,12 @@ def test_reads_file_and_saves_target_and_fetch(tmp_path: Path) -> None:
     file_path.write_text("<doc><pealkiri>Sample Document</pealkiri></doc>")
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="example", store=store)
+    fetch_file_source(file_path=str(file_path), store=store)
 
     store.crawl_targets.save.assert_called_once()
     saved = store.saved_targets[-1]
     assert saved.original_url == str(file_path.resolve())
     assert saved.normalized_url == f"file://{file_path.resolve()}"
-    assert saved.group == "example"
     assert saved.status == CrawlTargetStatus.FETCHING
     assert saved.log_dir is not None
 
@@ -58,7 +57,7 @@ def test_writes_source_fetch_advances_status_and_enqueues_filter(
     file_path.write_text(content)
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="example", store=store)
+    fetch_file_source(file_path=str(file_path), store=store)
 
     saved = store.saved_targets[-1]
 
@@ -83,14 +82,13 @@ def test_dedup_skips_when_target_already_active(tmp_path: Path) -> None:
     file_path = tmp_path / "501012020001.xml"
     file_path.write_text("<doc/>")
     existing = CrawlTarget(
-        group="example",
         original_url=str(file_path.resolve()),
         normalized_url=f"file://{file_path.resolve()}",
         status=CrawlTargetStatus.FETCHED,
     )
     store = _make_store(existing_target=existing)
 
-    fetch_file_source(file_path=str(file_path), group="example", store=store)
+    fetch_file_source(file_path=str(file_path), store=store)
 
     store.crawl_targets.save.assert_not_called()
     store.unit_of_work.assert_not_called()
@@ -102,14 +100,14 @@ def test_second_run_with_same_path_is_deduped(tmp_path: Path) -> None:
     file_path.write_text("<doc><pealkiri>Sample Document</pealkiri></doc>")
     store = _make_store()
 
-    fetch_file_source(file_path=str(file_path), group="example", store=store)
+    fetch_file_source(file_path=str(file_path), store=store)
     first_saved = store.saved_targets[-1]
 
     # Second message for the same file: dedup lookup now returns the target
     # created by the first call.
     store.crawl_targets.find_active_by_normalized_url.return_value = first_saved
 
-    fetch_file_source(file_path=str(file_path), group="example", store=store)
+    fetch_file_source(file_path=str(file_path), store=store)
 
     assert store.crawl_targets.save.call_count == 1
 
@@ -118,7 +116,7 @@ def test_missing_file_marks_failed_permanent(tmp_path: Path) -> None:
     missing_path = tmp_path / "does-not-exist.xml"
     store = _make_store()
 
-    fetch_file_source(file_path=str(missing_path), group="example", store=store)
+    fetch_file_source(file_path=str(missing_path), store=store)
 
     saved = store.saved_targets[-1]
     store.crawl_targets.update_status.assert_called_once()
@@ -136,7 +134,7 @@ def test_relative_path_is_normalized_to_absolute(tmp_path: Path, monkeypatch) ->
     monkeypatch.chdir(tmp_path)
     store = _make_store()
 
-    fetch_file_source(file_path=file_path.name, group="example", store=store)
+    fetch_file_source(file_path=file_path.name, store=store)
 
     saved = store.saved_targets[-1]
     assert saved.original_url == str(file_path.resolve())

@@ -52,7 +52,7 @@ the full rundown of each provider and the Ollama networking details.
 
 ## Chat agent
 
-Used only by the optional LangGraph agent (`laws-generate`). Its provider,
+Used only by the optional LangGraph agent (`agent-generate`). Its provider,
 endpoint, and model are deliberately independent from the embedding settings
 above — the agent usually runs on the host while the embed worker runs in Docker.
 

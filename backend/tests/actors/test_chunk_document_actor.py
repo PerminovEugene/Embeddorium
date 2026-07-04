@@ -28,7 +28,6 @@ def test_lock_not_acquired_skips():
     store = make_store(acquired=None)
     chunk_document(
         crawl_target_id=str(uuid.uuid4()),
-        group="Estonia",
         store=store,
         chunker=_chunker([]),
     )
@@ -49,7 +48,7 @@ def test_happy_path_upserts_chunks_links_and_enqueues_embeddings():
     )
 
     chunk_document(
-        crawl_target_id=str(target.id), group="Estonia", store=store, chunker=chunker
+        crawl_target_id=str(target.id), store=store, chunker=chunker
     )
 
     uow = uow_of(store)
@@ -65,7 +64,6 @@ def test_happy_path_upserts_chunks_links_and_enqueues_embeddings():
     assert links[0].source_chunk_id == chunk_id
     assert links[0].normalized_url == "https://emta.ee/decl"
     assert links[0].anchor_text == "Decl"
-    assert links[0].group == "Estonia"
 
     assert uow.set_status.call_args.args[1] == CrawlTargetStatus.CHUNKED
 
@@ -84,7 +82,7 @@ def test_no_links_still_advances_and_schedules():
     chunker = _chunker([Chunk(text="c0")])
 
     chunk_document(
-        crawl_target_id=str(target.id), group="Estonia", store=store, chunker=chunker
+        crawl_target_id=str(target.id), store=store, chunker=chunker
     )
 
     uow = uow_of(store)

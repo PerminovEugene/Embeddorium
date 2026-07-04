@@ -57,7 +57,7 @@ def _store_with_keywords(acquired, keywords: str):
 def test_lock_not_acquired_skips():
     store = make_store(acquired=None)
 
-    filter_documents(crawl_target_id=str(uuid.uuid4()), group="example", store=store)
+    filter_documents(crawl_target_id=str(uuid.uuid4()), store=store)
 
     store.source_fetches.get_by_crawl_target.assert_not_called()
     store.unit_of_work.assert_not_called()
@@ -70,7 +70,7 @@ def test_missing_source_fetch_marks_transient_and_raises():
 
     with pytest.raises(RuntimeError):
         filter_documents(
-            crawl_target_id=str(target.id), group="example", store=store
+            crawl_target_id=str(target.id), store=store
         )
 
     assert (
@@ -90,7 +90,6 @@ def test_relevant_act_advances_to_filtered_and_enqueues_parse(monkeypatch):
 
     filter_documents(
         crawl_target_id=str(target.id),
-        group="example",
         pipeline_id=pipeline_id,
         store=store,
     )
@@ -116,7 +115,6 @@ def test_non_relevant_act_is_skipped_without_outbox(monkeypatch):
 
     filter_documents(
         crawl_target_id=str(target.id),
-        group="example",
         pipeline_id=pipeline_id,
         store=store,
     )
@@ -139,7 +137,7 @@ def test_no_keywords_is_passthrough(monkeypatch):
     store.source_fetches.get_by_crawl_target.return_value = _fetch(target.id)
 
     filter_documents(
-        crawl_target_id=str(target.id), group="example", store=store
+        crawl_target_id=str(target.id), store=store
     )
 
     # Document passed through — FILTERED via unit_of_work, not SKIPPED.
@@ -166,7 +164,6 @@ def test_disabled_gate_passes_all_documents(monkeypatch):
 
     filter_documents(
         crawl_target_id=str(target.id),
-        group="example",
         pipeline_id=pipeline_id,
         store=store,
     )

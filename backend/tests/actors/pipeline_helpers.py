@@ -20,12 +20,10 @@ def make_target(
     *,
     status: CrawlTargetStatus = CrawlTargetStatus.QUEUED,
     url: str = "https://example.com",
-    group: str = "example",
     target_id: uuid.UUID | None = None,
 ) -> CrawlTarget:
     return CrawlTarget(
         id=target_id or uuid.uuid4(),
-        group=group,
         original_url=url,
         normalized_url=url + "/",
         status=status,

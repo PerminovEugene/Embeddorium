@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 include = ["backend*"]
 
 [project]
-name = "laws-agent"
+name = "embeddorium"
 version = "0.1.0"
 requires-python = ">=3.11"
 
-# Shared by every actor and the runner
+# Shared by every actor
 dependencies = [
   "pydantic>=2",
   "sqlalchemy>=2",
@@ -82,4 +82,4 @@ dev = [
 ]
 
 [project.scripts]
-laws-generate = "backend.agent.generate:main"
+agent-generate = "backend.agent.generate:main"

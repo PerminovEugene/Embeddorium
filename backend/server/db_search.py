@@ -2,7 +2,7 @@
 
 Unlike ``/compare`` (which scores the user's source texts against the user's
 own candidate texts), ``/search`` treats each source text as a *query* against
-a RAG collection already populated by the laws-agent ingestion pipeline.
+a RAG collection already populated by the ingestion pipeline.
 
 The caller selects a *pipeline run* (``runId``) rather than a raw collection +
 model: the run records both the Qdrant collection it populated and the
@@ -74,6 +74,12 @@ async def search_db(request) -> dict:
     # id to keep results scoped to this pipeline alone.
     pipeline_id = str(run.id)
 
+    # Every hit necessarily belongs to the selected run's own dataset (that is
+    # exactly what the pipeline_id filter above already guarantees), so the
+    # dataset name is read once from the run rather than carried per-vector in
+    # Qdrant.
+    dataset_name = run.dataset.get("name", "")
+
     queries = request.source.inputs
     logging.info(
         "DB search: run=%s collection=%s provider=%s model=%s pipeline=%s queries=%d",
@@ -124,7 +130,7 @@ async def search_db(request) -> dict:
                         "chunkId": chunk_id,
                         "documentId": hit.get("document_id"),
                         "chunkIndex": hit.get("chunk_index"),
-                        "group": hit.get("group"),
+                        "group": dataset_name,
                         "chunkText": chunk.text if chunk else None,
                         "sourceUrl": document.source_url if document else None,
                     }

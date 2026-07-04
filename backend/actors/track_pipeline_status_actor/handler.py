@@ -4,11 +4,15 @@ Unlike the numbered crawl-chain stages, this actor is not part of a linear
 pipeline of its own — it is a listener triggered from the *tail* of the
 ingestion chain, currently by two different producers:
 
-* ``embed_chunks`` — fires every time an embed batch finishes, since that is
-  what moves ``embeddings_completed`` toward ``embeddings_scheduled``.
-* ``schedule_discovered_links`` — fires every time a crawl target reaches
-  ``processed``, since that is what moves the "no more embeds will ever be
-  scheduled for this target" condition forward.
+* ``embed_chunks`` — fires every time an embed batch finishes. This is now
+  also the actor that finalizes a target to ``processed`` (once every chunk
+  of its document is embedded), so most runs' completion is ultimately driven
+  from here.
+* ``schedule_discovered_links`` — fires every time a crawl target finishes
+  link-scheduling, whether that leaves it at the intermediate ``embedding``
+  status (waiting on ``embed_chunks`` to finalize it) or, for a
+  zero-chunk/no-document target, finalizes it to ``processed`` directly since
+  no embed batch will ever be scheduled for it.
 
 Both triggers are needed because embedding is asynchronous relative to crawl
 target status: the last embed for a run can finish either before or after its
@@ -19,6 +23,13 @@ processed; or the target is processed first, but the tracker isn't re-invoked
 once the trailing embeds land). Firing from both, and always re-deriving the
 completion condition from the database rather than trusting message order or
 payload state, closes that race regardless of which side finishes last.
+
+``count_active_for_pipeline`` (see ``crawl_target_repo``) is what keeps this
+correct with the ``embedding`` intermediate status: a target sitting in
+``embedding`` is deliberately *not* in ``_EMBEDDING_TERMINAL_STATUSES``, so it
+still counts as active and blocks completion until ``embed_chunks``
+transitions it to ``processed`` — condition 1 below only becomes true once
+every target has actually finished embedding, not merely scheduled it.
 
 Pure logic — no broker/dramatiq concerns, matching the other actor handlers.
 """
@@ -43,7 +54,6 @@ logger = logging.getLogger(__name__)
 def track_pipeline_status(
     *,
     pipeline_id: str,
-    group: str = "",
     store: SqlStore,
 ) -> None:
     """Complete *pipeline_id* if, and only if, no more work is coming.
@@ -51,21 +61,21 @@ def track_pipeline_status(
     A run is complete when both hold:
 
     1. ``crawl_targets.count_active_for_pipeline(pipeline_id) == 0`` — every
-       target has reached a status from which no further embed batch will
-       ever be scheduled (see ``_EMBEDDING_TERMINAL_STATUSES``), so
-       ``embeddings_scheduled`` can no longer grow.
+       target has reached one of ``_EMBEDDING_TERMINAL_STATUSES``: either it
+       will never produce another embed batch (skipped/failed), or it already
+       reached ``processed`` (which itself requires every one of its chunks
+       to be embedded). A target sitting in ``embedding`` — scheduled but not
+       yet fully embedded — is deliberately excluded from that set, so it
+       still counts as active here.
     2. ``embeddings_completed >= embeddings_scheduled`` — every batch that was
        ever scheduled has also finished.
 
     Every early return here is a deliberate no-op, not an error: this actor
     is invoked far more often than a run actually completes (once per embed
     batch and once per processed target), so most invocations correctly find
-    "not done yet" and return. ``group`` is accepted only for calling-
-    convention parity with the other stage handlers; the tracker re-reads
-    everything it needs from the DB by ``pipeline_id`` alone.
+    "not done yet" and return. The tracker re-reads everything it needs from
+    the DB by ``pipeline_id`` alone.
     """
-    del group  # unused; see docstring
-
     try:
         run_id = uuid.UUID(pipeline_id)
     except (ValueError, TypeError):

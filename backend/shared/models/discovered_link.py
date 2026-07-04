@@ -24,6 +24,5 @@ class DiscoveredLink(BaseModel):
     normalized_url: str
     anchor_text: Optional[str] = None
     context_text: Optional[str] = None
-    group: str
     status: DiscoveredLinkStatus = DiscoveredLinkStatus.PENDING
     created_at: Optional[datetime] = None

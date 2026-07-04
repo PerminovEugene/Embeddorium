@@ -68,13 +68,13 @@ python -m backend.mcp.server
 Then ask something (defaults to Ollama):
 
 ```sh
-python -m backend.agent.generate "What are the VAT rules in Estonia?"
+python -m backend.agent.generate "What does the knowledge base say about X?"
 
 # choose a provider explicitly
-python -m backend.agent.generate "What are the VAT rules?" openai
+python -m backend.agent.generate "What does the knowledge base say about X?" openai
 
 # or via the installed script
-laws-generate "What are the VAT rules in Estonia?"
+agent-generate "What does the knowledge base say about X?"
 ```
 
 The provider can also come from `LLM_PROVIDER` in `.env` instead of the CLI arg.

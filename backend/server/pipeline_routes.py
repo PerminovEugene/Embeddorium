@@ -370,6 +370,8 @@ async def list_pipeline_run_targets(
     Each item includes the source URL, its pipeline status, any skip/error
     detail, and the number of document chunks produced. A chunk count of 0
     means the target was skipped, failed, or is still in flight.
+    ``processedAt`` (once set) plus the item's own ``createdAt`` gives that
+    target's single-file/URL processing time.
     """
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
@@ -397,14 +399,26 @@ async def list_pipeline_run_targets(
 
 @router.get("/{run_id}", response_model=PipelineRunOut, response_model_by_alias=True)
 async def get_pipeline_run(run_id: str) -> PipelineRunOut:
-    """Fetch a single pipeline run by id, or 404 if it doesn't exist."""
+    """Fetch a single pipeline run by id, or 404 if it doesn't exist.
+
+    Includes ``chunksEmbedded``/``chunksPending`` — a run-wide "N chunks
+    processed / X chunks in progress" summary derived from a live
+    ``document_chunks`` aggregate (see
+    ``ChunkRepository.status_counts_for_pipeline``), so this is one extra
+    query beyond the run row itself.
+    """
     parsed = _parse_id(run_id)
     store = SqlStore(application_name="embeddorium-pipeline-runs")
     try:
         run = store.pipeline_runs.get(parsed)
         if run is None:
             raise HTTPException(status_code=404, detail="Pipeline run not found")
-        return pipeline_run_to_out(run)
+        counts = store.chunks.status_counts_for_pipeline(parsed)
+        chunks_embedded = counts.get("embedded", 0)
+        chunks_pending = sum(n for status, n in counts.items() if status != "embedded")
+        return pipeline_run_to_out(
+            run, chunks_embedded=chunks_embedded, chunks_pending=chunks_pending
+        )
     finally:
         store.close()
 

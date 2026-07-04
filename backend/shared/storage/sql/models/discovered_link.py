@@ -39,7 +39,6 @@ class DiscoveredLinkORM(Base):
     normalized_url: Mapped[str] = mapped_column(Text, nullable=False)
     anchor_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     context_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    group: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,

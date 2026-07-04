@@ -50,7 +50,6 @@ def _call(
     *,
     chunks: list[DocumentChunk],
     document_id: uuid.UUID | None = None,
-    group: str = "Estonia",
     model_size: int = 4,
     pipeline_id: str | None = None,
 ) -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -65,7 +64,6 @@ def _call(
     _embed_chunks(
         document_id=str(doc_id),
         chunk_ids=chunk_ids,
-        group=group,
         store=store,
         vector_store=vector_store,
         model=model,
@@ -98,7 +96,6 @@ def test_fetches_chunks_by_parsed_uuids() -> None:
     _embed_chunks(
         document_id=str(doc_id),
         chunk_ids=chunk_ids,
-        group="Estonia",
         store=store,
         vector_store=vector_store,
         model=model,
@@ -155,7 +152,7 @@ def test_upsert_vectors_come_from_model_encode() -> None:
 def test_upsert_payload_contains_correct_metadata() -> None:
     doc_id = uuid.uuid4()
     chunks = _make_chunks(2, doc_id)
-    _, vector_store, _ = _call(chunks=chunks, document_id=doc_id, group="Estonia")
+    _, vector_store, _ = _call(chunks=chunks, document_id=doc_id)
 
     payloads = vector_store.upsert.call_args.kwargs["payloads"]
     assert len(payloads) == 2
@@ -164,8 +161,6 @@ def test_upsert_payload_contains_correct_metadata() -> None:
         assert payload["chunk_id"] == str(chunk.id)
         assert payload["document_id"] == str(doc_id)
         assert payload["chunk_index"] == chunk.chunk_index
-        # group is stored under "group" now, not mislabeled as "language"
-        assert payload["group"] == "Estonia"
 
 
 def test_upsert_uses_chunk_ids_as_point_ids() -> None:
@@ -213,6 +208,27 @@ def test_batch_payloads_reference_correct_chunks() -> None:
     assert [p["chunk_id"] for p in second_payloads] == [str(c.id) for c in chunks[BATCH_SIZE:]]
 
 
+# --- chunk status + target finalization ---
+
+def test_marks_embedded_chunks_and_attempts_target_finalization() -> None:
+    # Chunk-status writes and target finalization are unconditional (not
+    # gated behind pipeline_id) — the target's own status machine must stay
+    # correct even for direct/untracked embed calls.
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(2, doc_id)
+
+    store, _, _ = _call(chunks=chunks, document_id=doc_id, pipeline_id=None)
+
+    uow = uow_of(store)
+    uow.mark_chunks_embedded.assert_called_once_with([c.id for c in chunks])
+    uow.finalize_target_if_all_chunks_embedded.assert_called_once_with(doc_id)
+
+
+def test_empty_chunk_list_skips_marking_and_finalizing() -> None:
+    store, _, _ = _call(chunks=[], pipeline_id=None)
+    store.unit_of_work.assert_not_called()
+
+
 # --- pipeline status tracking ---
 
 def test_pipeline_id_emits_tracker_event_and_increments_counter() -> None:
@@ -254,10 +270,14 @@ def test_pipeline_id_emits_exactly_one_tracker_event_across_sub_batches() -> Non
 
 
 def test_no_pipeline_id_skips_tracking_entirely() -> None:
+    # Chunks are still marked embedded (see test_marks_embedded_chunks_...
+    # above), but no tracker event/counter is written without a pipeline_id.
     chunks = _make_chunks(2)
     store, _, _ = _call(chunks=chunks, pipeline_id=None)
 
-    store.unit_of_work.assert_not_called()
+    uow = uow_of(store)
+    assert outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE) == []
+    uow.increment_embeddings_completed.assert_not_called()
 
 
 def test_redelivered_batch_does_not_double_count() -> None:
@@ -276,7 +296,6 @@ def test_redelivered_batch_does_not_double_count() -> None:
     _embed_chunks(
         document_id=str(doc_id),
         chunk_ids=[str(c.id) for c in chunks],
-        group="Estonia",
         store=store,
         vector_store=vector_store,
         model=model,

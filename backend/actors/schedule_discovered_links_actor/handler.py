@@ -1,18 +1,33 @@
-"""Stage 5 (terminal): schedule discovered links to the crawl frontier.
+"""Stage 5 (terminal-for-links): schedule discovered links to the crawl frontier.
 
 Acquires the target (locks while in SCHEDULING) and, in one transaction, writes
 one frontier outbox event per pending discovered link (deduped per link), marks
-those links scheduled, and only then sets the target to PROCESSED. Because the
-frontier events live in the same committed transaction as the PROCESSED status,
-downstream work is durable/recoverable before the target is considered done.
+those links scheduled, and then sets the target's status. Because the frontier
+events live in the same committed transaction as that status change, downstream
+work is durable/recoverable before this stage is considered done.
+
+This stage no longer sets the target to PROCESSED directly — that would mean
+"processed" as soon as embed batches were merely *scheduled*, not actually
+embedded, which is the bug this design fixes. Instead:
+
+* If the target's document has zero chunks, or every chunk is already
+  embedded (``embed_chunks`` may have raced ahead and finished first), the
+  target is finalized to PROCESSED here, since no embed batch will ever be
+  (or remains to be) scheduled for it.
+* Otherwise the target moves to EMBEDDING, an intermediate "waiting on
+  embeds" status; only ``embed_chunks`` — once the document's last chunk is
+  embedded — moves it on to PROCESSED
+  (``UnitOfWork.finalize_target_if_all_chunks_embedded``).
 
 This is also one of the two triggers for ``track_pipeline_status`` (the other
-is ``embed_chunks``): a target reaching PROCESSED means it will never schedule
-another embed batch, which is half of what the tracker needs to know a run is
-complete. Embeddings for earlier targets may still be in flight when this
-target's link event fires, or may have already finished before it — either
-order is fine because the tracker re-derives completion from the DB rather
-than trusting message order.
+is ``embed_chunks``): poking it here is a no-op unless this call also finalized
+the target to PROCESSED (EMBEDDING is still "active" — see
+``crawl_target_repo._EMBEDDING_TERMINAL_STATUSES``) — but it's harmless to poke
+unconditionally, and it does matter for the zero-chunk-target path above,
+which is otherwise never revisited. Embeddings for earlier targets may still
+be in flight when this target's link event fires, or may have already
+finished before it — either order is fine because the tracker re-derives
+completion from the DB rather than trusting message order.
 """
 
 from __future__ import annotations
@@ -45,12 +60,11 @@ from backend.shared.storage.sql.sql_store import SqlStore
 def schedule_discovered_links(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: Optional[str] = None,
     store: SqlStore,
 ) -> None:
     payload = ScheduleDiscoveredLinksPayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -88,7 +102,6 @@ def schedule_discovered_links(
         for link in pending:
             frontier_payload = {
                 "url": link.raw_url,
-                "group": payload.group,
                 "parent_document_id": str(link.source_document_id),
                 "parent_chunk_id": str(link.source_chunk_id),
                 "pipeline_id": payload.pipeline_id,
@@ -104,7 +117,17 @@ def schedule_discovered_links(
             scheduled_ids.append(link.id)
 
         uow.mark_links_scheduled(scheduled_ids)
-        uow.set_status(target_id, CrawlTargetStatus.PROCESSED)
+
+        # A target with no document, or whose document has zero chunks
+        # (filtered/skipped content), has no embed batches coming — finalize
+        # it now, since embed_chunks will never run for it. Same finalization
+        # if every chunk already reports embedded (embed_chunks raced ahead).
+        # Otherwise wait: move to EMBEDDING and let embed_chunks finalize once
+        # the document's last chunk is embedded.
+        if document is not None and not uow.document_all_chunks_embedded(document.id):
+            uow.set_status(target_id, CrawlTargetStatus.EMBEDDING)
+        else:
+            uow.set_status(target_id, CrawlTargetStatus.PROCESSED)
 
         if payload.pipeline_id is not None:
             track_payload = TrackPipelineStatusPayload(

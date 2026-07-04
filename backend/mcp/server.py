@@ -20,7 +20,7 @@ def search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
         {
             "document_id": "doc_1",
             "chunk_id": "chunk_1",
-            "title": "Example tax document",
+            "title": "Example document",
             "source_url": "https://example.com/source",
             "text": f"Fake retrieved chunk for query: {query}",
             "score": 0.91,

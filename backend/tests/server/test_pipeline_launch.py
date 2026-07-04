@@ -223,13 +223,3 @@ def test_pipeline_id_propagated_to_message_kwargs() -> None:
 
     msg = broker.enqueue.call_args[0][0]
     assert msg.kwargs["pipeline_id"] == run_id
-
-
-def test_group_propagated_to_message_kwargs() -> None:
-    """The dataset name (group) is forwarded into the message kwargs."""
-    broker = _make_broker()
-    dataset = {"name": "my-group", "paths": ["act.xml"]}
-    _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
-
-    msg = broker.enqueue.call_args[0][0]
-    assert msg.kwargs["group"] == "my-group"

@@ -39,20 +39,6 @@ services:
       timeout: 5s
       retries: 20
 
-  # Optional: Ollama running inside the compose network, reachable by other
-  # services as http://ollama:11434 (set OLLAMA_EMBED_BASE_URL accordingly in
-  # .env.docker). Not started by a plain `docker compose up -d` — opt in with
-  # `docker compose --profile ollama up -d`, or skip this service entirely and
-  # point OLLAMA_EMBED_BASE_URL at an Ollama instance already running on the host
-  # (http://host.docker.internal:11434 on Mac/Windows Docker Desktop).
-  ollama:
-    image: ollama/ollama:latest
-    profiles: ["ollama"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
   # One-off migrator. Applies pending SQL migrations and exits. Workers that
   # touch the DB wait for this to complete successfully before starting.
   migrate:
@@ -69,20 +55,6 @@ services:
       - .env.docker
     depends_on:
       - postgres
-
-  # x-worker-env: &worker-env
-  #   HG_TOKEN: ${HG_TOKEN}
-  #   POSTGRES_HOST: postgres
-  #   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-  #   POSTGRES_USER: ${POSTGRES_USER}
-  #   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #   POSTGRES_DB: ${POSTGRES_DB}
-  #   RABBITMQ_HOST: rabbitmq
-  #   RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
-  #   RABBITMQ_USER: ${RABBITMQ_USER}
-  #   RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
-  #   RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
-  #   QDRANT_URL: http://qdrant:6333
 
   worker-crawl-frontier-manager:
     build:

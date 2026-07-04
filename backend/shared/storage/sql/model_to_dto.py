@@ -32,7 +32,6 @@ def _to_document(orm: DocumentORM, include_chunks: bool = False) -> Document:
         id=orm.id,
         source_url=orm.source_url,
         language=orm.language,
-        group=orm.group,
         crawl_target_id=orm.crawl_target_id,
         normalized_url=orm.normalized_url,
         final_url=orm.final_url,
@@ -57,6 +56,7 @@ def _to_chunk(orm: DocumentChunkORM) -> DocumentChunk:
         chunk_index=orm.chunk_index,
         chunk_type=orm.chunk_type,
         chunk_metadata=orm.chunk_metadata or {},
+        status=orm.status,
         created_at=orm.created_at,
     )
 
@@ -84,7 +84,6 @@ def _to_discovered_link(orm: DiscoveredLinkORM) -> DiscoveredLink:
         normalized_url=orm.normalized_url,
         anchor_text=orm.anchor_text,
         context_text=orm.context_text,
-        group=orm.group,
         status=DiscoveredLinkStatus(orm.status),
         created_at=orm.created_at,
     )

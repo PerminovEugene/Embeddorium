@@ -46,12 +46,11 @@ BATCH_SIZE = 32
 def schedule_embeddings(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: Optional[str] = None,
     store: SqlStore,
 ) -> None:
     payload = ScheduleEmbeddingsPayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -87,7 +86,6 @@ def schedule_embeddings(
 
     links_payload = ScheduleDiscoveredLinksPayload(
         crawl_target_id=target_id,
-        group=payload.group,
         pipeline_id=payload.pipeline_id,
     )
 
@@ -101,7 +99,6 @@ def schedule_embeddings(
             embed_payload = EmbedChunksPayload(
                 document_id=document.id,
                 chunk_ids=[chunk.id for chunk in batch],
-                group=payload.group,
                 pipeline_id=payload.pipeline_id,
             )
             inserted = uow.add_outbox(

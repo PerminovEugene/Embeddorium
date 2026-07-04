@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -73,6 +73,12 @@ class UnitOfWork:
         document_id: Optional[uuid.UUID] = None,
     ) -> None:
         values: dict = {"status": status}
+        # Every path that sets PROCESSED (this one, and the atomic CAS in
+        # finalize_target_if_all_chunks_embedded) stamps processed_at so
+        # (processed_at - created_at) always gives that target's processing
+        # time, regardless of which stage performed the transition.
+        if status == CrawlTargetStatus.PROCESSED:
+            values["processed_at"] = func.now()
         if error is not None:
             values["error"] = error
         if skip_reason is not None:
@@ -84,6 +90,88 @@ class UnitOfWork:
             .where(CrawlTargetORM.id == target_id)
             .values(**values)
         )
+
+    def document_all_chunks_embedded(self, document_id: uuid.UUID) -> bool:
+        """True if *document_id* has no chunk left in a non-``embedded`` status.
+
+        Vacuously true for a document with zero chunks (e.g. content that
+        chunked down to nothing) — exactly the "no embed work is coming"
+        state a target needs to finalize immediately in
+        ``schedule_discovered_links`` instead of waiting on an
+        ``embed_chunks`` batch that will never be scheduled for it.
+        """
+        stmt = (
+            select(DocumentChunkORM.id)
+            .where(
+                DocumentChunkORM.document_id == document_id,
+                DocumentChunkORM.status != "embedded",
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).first() is None
+
+    def mark_chunks_embedded(self, chunk_ids: list[uuid.UUID]) -> None:
+        """Flip *chunk_ids* to ``embedded`` after their vectors are upserted.
+
+        Idempotent: re-marking an already-``embedded`` chunk (redelivery of
+        the same ``embed_chunks`` batch) is a harmless no-op update.
+        """
+        if not chunk_ids:
+            return
+        self._session.execute(
+            update(DocumentChunkORM)
+            .where(DocumentChunkORM.id.in_(chunk_ids))
+            .values(status="embedded")
+        )
+
+    def finalize_target_if_all_chunks_embedded(
+        self, document_id: uuid.UUID
+    ) -> Optional[uuid.UUID]:
+        """Atomically move *document_id*'s crawl target to ``PROCESSED``.
+
+        This is the terminal transition ``embed_chunks`` performs once a
+        document's last chunk is embedded — the fix for the target being
+        marked ``PROCESSED`` too early (previously set unconditionally by
+        ``schedule_discovered_links`` right after batches were merely
+        *scheduled*, not embedded).
+
+        Only transitions a target sitting in ``SCHEDULING`` (this batch's
+        embed finished before ``schedule_discovered_links`` even ran) or
+        ``EMBEDDING`` (the normal case), and only when no chunk of the
+        document is left in a non-``embedded`` status. Both the "any chunk
+        still pending?" check and the status guard are evaluated inside the
+        same ``UPDATE``, so concurrent ``embed_chunks`` batches for the same
+        document race safely: whichever call's ``mark_chunks_embedded`` is
+        the one that makes the "no pending chunks" condition true is the one
+        that wins the transition — exactly once. Every other caller,
+        including a redelivery that lands after the target is already
+        ``PROCESSED``, updates zero rows.
+
+        Returns the target's id if this call performed the transition, or
+        ``None`` if the target wasn't eligible (wrong status) or chunks are
+        still pending.
+        """
+        pending_exists = (
+            select(DocumentChunkORM.id)
+            .where(
+                DocumentChunkORM.document_id == document_id,
+                DocumentChunkORM.status != "embedded",
+            )
+            .exists()
+        )
+        stmt = (
+            update(CrawlTargetORM)
+            .where(
+                CrawlTargetORM.document_id == document_id,
+                CrawlTargetORM.status.in_(
+                    [CrawlTargetStatus.SCHEDULING, CrawlTargetStatus.EMBEDDING]
+                ),
+                ~pending_exists,
+            )
+            .values(status=CrawlTargetStatus.PROCESSED, processed_at=func.now())
+            .returning(CrawlTargetORM.id)
+        )
+        return self._session.execute(stmt).scalar()
 
     # --- source fetch ---------------------------------------------------
 
@@ -121,7 +209,6 @@ class UnitOfWork:
 
         orm.source_url = document.source_url
         orm.language = document.language
-        orm.group = document.group
         orm.crawl_target_id = document.crawl_target_id
         orm.normalized_url = document.normalized_url
         orm.final_url = document.final_url
@@ -195,7 +282,6 @@ class UnitOfWork:
                 "normalized_url": link.normalized_url,
                 "anchor_text": link.anchor_text,
                 "context_text": link.context_text,
-                "group": link.group,
                 "status": str(link.status),
             }
             for link in deduped.values()

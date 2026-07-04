@@ -1,8 +1,9 @@
 """Seed the ingestion pipeline after a ``PipelineRun`` row has been created.
 
-Ported from the old ``add_web_source_job``/``add_file_source_job`` runners.
 Called by the ``POST /pipeline-runs`` handler after the run row is persisted,
-so the row already exists when the first actor message is consumed.
+so the row already exists when the first actor message is consumed. This is
+the only way pipeline runs are seeded — every run is launched from the UI via
+that endpoint, there is no standalone seed script/runner.
 
 Web dataset → publishes one ``crawl_frontier_manager`` message per
 ``dataset.url``, carrying the run's ``pipeline_id``.
@@ -106,11 +107,9 @@ def seed_pipeline(
 def _seed_web(*, dataset: dict, pipeline_id_str: str, broker) -> int:
     """Enqueue a single crawl-frontier message for a web dataset."""
     url = ensure_scheme(dataset.get("url", ""))
-    group = dataset.get("name", "")
 
     payload = ProcessLinkSourcePayload(
         url=url,
-        group=group,
         pipeline_id=pipeline_id_str,
     )
     broker.enqueue(
@@ -122,7 +121,9 @@ def _seed_web(*, dataset: dict, pipeline_id_str: str, broker) -> int:
             options={},
         )
     )
-    logger.info("enqueued web seed url=%s group=%s", url, group)
+    logger.info(
+        "enqueued web seed url=%s pipeline_id=%s", url, pipeline_id_str
+    )
     return 1
 
 
@@ -145,7 +146,6 @@ def _seed_local(
     actor could not resolve to a real file — that is why the path looked broken.
     """
     paths: List[str] = dataset.get("paths", [])
-    group = dataset.get("name", "")
     count = 0
 
     for root_path in paths:
@@ -174,7 +174,6 @@ def _seed_local(
         for file_path in xml_files:
             payload = ProcessFileSourcePayload(
                 file_path=str(file_path),
-                group=group,
                 pipeline_id=pipeline_id_str,
             )
             broker.enqueue(
@@ -189,9 +188,8 @@ def _seed_local(
             count += 1
 
         logger.info(
-            "enqueued local seed path=%s group=%s files=%d",
+            "enqueued local seed path=%s files=%d",
             root_path,
-            group,
             len(xml_files),
         )
 

@@ -9,7 +9,7 @@ from backend.agent.nodes.base import Node, format_chunks
 from backend.agent.state import AgentState
 
 _SYSTEM = (
-    "You are a tax law coverage checker. "
+    "You are a coverage checker. "
     "Given a target schema (fields to populate) and retrieved chunks, "
     "determine if there is enough information to fill all schema fields. "
     "Output JSON: {\"coverage_ok\": bool, \"missing_fields\": [list of field names lacking data]}. "

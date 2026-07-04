@@ -21,7 +21,6 @@ def _link(doc_id, *, url="https://emta.ee/x") -> DiscoveredLink:
         source_chunk_id=uuid.uuid4(),
         raw_url=url,
         normalized_url=url,
-        group="Estonia",
         status=DiscoveredLinkStatus.PENDING,
     )
 
@@ -29,12 +28,16 @@ def _link(doc_id, *, url="https://emta.ee/x") -> DiscoveredLink:
 def test_lock_not_acquired_skips():
     store = make_store(acquired=None)
     schedule_discovered_links(
-        crawl_target_id=str(uuid.uuid4()), group="Estonia", store=store
+        crawl_target_id=str(uuid.uuid4()), store=store
     )
     store.unit_of_work.assert_not_called()
 
 
-def test_schedules_links_marks_them_and_sets_processed_last():
+def test_schedules_links_marks_them_and_finalizes_last():
+    # uow.document_all_chunks_embedded is a MagicMock by default (truthy), so
+    # "not document_all_chunks_embedded(...)" is False and the target is
+    # finalized straight to PROCESSED here — matching a document whose chunks
+    # are all already embedded (or have none).
     target = make_target(status=CrawlTargetStatus.SCHEDULING)
     doc_id = uuid.uuid4()
     links = [_link(doc_id, url="https://emta.ee/a"), _link(doc_id, url="https://emta.ee/b")]
@@ -44,7 +47,7 @@ def test_schedules_links_marks_them_and_sets_processed_last():
     )
     store.discovered_links.list_pending_by_document.return_value = links
 
-    schedule_discovered_links(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_discovered_links(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     frontier_events = outbox_for_queue(uow, CRAWL_FRONTIER_MANAGER_QUEUE)
@@ -56,11 +59,13 @@ def test_schedules_links_marks_them_and_sets_processed_last():
 
     uow.mark_links_scheduled.assert_called_once_with([l.id for l in links])
 
-    # PROCESSED is set inside the same unit of work, after the frontier events.
+    # The status decision is made inside the same unit of work, after the
+    # frontier events, and re-derived from the document's chunk statuses.
+    uow.document_all_chunks_embedded.assert_called_once_with(doc_id)
     uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.PROCESSED)
 
 
-def test_no_pending_links_still_marks_processed():
+def test_no_pending_links_still_finalizes():
     target = make_target(status=CrawlTargetStatus.SCHEDULING)
     store = make_store(acquired=target)
     store.documents.get_by_crawl_target.return_value = Document(
@@ -68,10 +73,46 @@ def test_no_pending_links_still_marks_processed():
     )
     store.discovered_links.list_pending_by_document.return_value = []
 
-    schedule_discovered_links(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_discovered_links(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     assert outbox_for_queue(uow, CRAWL_FRONTIER_MANAGER_QUEUE) == []
+    uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.PROCESSED)
+
+
+def test_pending_chunks_move_target_to_embedding_instead_of_processed():
+    # A document with chunks still awaiting embed_chunks must not be marked
+    # PROCESSED yet — this is the bug fix: the target waits in EMBEDDING until
+    # embed_chunks finalizes it once every chunk is embedded.
+    target = make_target(status=CrawlTargetStatus.SCHEDULING)
+    doc_id = uuid.uuid4()
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = Document(
+        id=doc_id, source_url=target.original_url
+    )
+    store.discovered_links.list_pending_by_document.return_value = []
+
+    uow = uow_of(store)
+    uow.document_all_chunks_embedded.return_value = False
+
+    schedule_discovered_links(crawl_target_id=str(target.id), store=store)
+
+    uow.document_all_chunks_embedded.assert_called_once_with(doc_id)
+    uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.EMBEDDING)
+
+
+def test_missing_document_finalizes_to_processed():
+    # No document (edge case) means there is nothing to wait on; finalize
+    # immediately rather than getting stuck in EMBEDDING forever.
+    target = make_target(status=CrawlTargetStatus.SCHEDULING)
+    store = make_store(acquired=target)
+    store.documents.get_by_crawl_target.return_value = None
+    store.discovered_links.list_pending_by_document.return_value = []
+
+    schedule_discovered_links(crawl_target_id=str(target.id), store=store)
+
+    uow = uow_of(store)
+    uow.document_all_chunks_embedded.assert_not_called()
     uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.PROCESSED)
 
 
@@ -88,7 +129,6 @@ def test_pipeline_id_emits_tracker_event_with_links_dedup_key():
 
     schedule_discovered_links(
         crawl_target_id=str(target.id),
-        group="Estonia",
         pipeline_id=pipeline_id,
         store=store,
     )
@@ -108,7 +148,7 @@ def test_no_pipeline_id_emits_no_tracker_event():
     )
     store.discovered_links.list_pending_by_document.return_value = []
 
-    schedule_discovered_links(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_discovered_links(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     assert outbox_for_queue(uow, TRACK_PIPELINE_STATUS_QUEUE) == []

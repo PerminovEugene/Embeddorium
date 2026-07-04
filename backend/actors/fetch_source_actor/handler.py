@@ -55,14 +55,13 @@ def _content_type_allowed(content_type: str | None, allowlist: str) -> bool:
 def fetch_source(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: str | None = None,
     store: SqlStore,
     fetcher: HttpFetcher,
     insecure_tls_policy: Callable[[str], bool] = allow_insecure_tls,
 ) -> None:
     payload = ProcessWebSourcePayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -152,7 +151,6 @@ def fetch_source(
 
     parse_payload = ParseSourcePayload(
         crawl_target_id=target_id,
-        group=payload.group,
         pipeline_id=payload.pipeline_id,
     )
 

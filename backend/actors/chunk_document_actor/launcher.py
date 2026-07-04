@@ -100,7 +100,7 @@ def _load_chunk_settings(pipeline_id: Optional[str]) -> Tuple[str, dict]:
     max_retries=3,
 )
 def chunk_document(
-    *, crawl_target_id: str, group: str, pipeline_id: Optional[str] = None
+    *, crawl_target_id: str, pipeline_id: Optional[str] = None
 ) -> None:
     target = sql_store.crawl_targets.get(uuid.UUID(crawl_target_id))
     log_dir = target.log_dir if target is not None else None
@@ -114,7 +114,6 @@ def chunk_document(
     with log_to(log_dir, pipeline_id=pipeline_id):
         _chunk_document(
             crawl_target_id=crawl_target_id,
-            group=group,
             pipeline_id=pipeline_id,
             store=sql_store,
             chunker=chunker,

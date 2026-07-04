@@ -19,7 +19,7 @@ def test_web_source_defaults_type_to_web(tmp_path: Path):
                 "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
-                    {"description": "Tax authority", "link": "https://emta.ee"},
+                    {"description": "Example source", "link": "https://example.com"},
                 ],
             }
         ]
@@ -30,7 +30,7 @@ def test_web_source_defaults_type_to_web(tmp_path: Path):
 
     source = config.groups[0].sources[0]
     assert source.type == "web"
-    assert source.link == "https://emta.ee"
+    assert source.link == "https://example.com"
     assert source.path is None
 
 
@@ -42,8 +42,8 @@ def test_explicit_web_type_is_accepted(tmp_path: Path):
                 "attributes": {"code": "EE"},
                 "sources": [
                     {
-                        "description": "Tax authority",
-                        "link": "https://emta.ee",
+                        "description": "Example source",
+                        "link": "https://example.com",
                         "type": "web",
                     },
                 ],
@@ -135,7 +135,7 @@ def test_unknown_source_type_raises(tmp_path: Path):
                     {
                         "description": "Bad type.",
                         "type": "ftp",
-                        "link": "https://emta.ee",
+                        "link": "https://example.com",
                     },
                 ],
             }
@@ -173,8 +173,8 @@ def test_backward_compatible_config_without_type_field(tmp_path: Path):
                 "name": "example",
                 "attributes": {"code": "EE"},
                 "sources": [
-                    {"description": "Tax authority", "link": "emta.ee"},
-                    {"description": "Laws", "link": "https://example.com"},
+                    {"description": "Example source", "link": "example.com"},
+                    {"description": "Docs", "link": "https://example.com"},
                 ],
             }
         ]
@@ -193,7 +193,7 @@ def test_group_without_settings_has_none(tmp_path: Path):
             {
                 "name": "example",
                 "attributes": {"code": "EE"},
-                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+                "sources": [{"description": "Example source", "link": "example.com"}],
             }
         ]
     }
@@ -223,7 +223,7 @@ def test_group_settings_are_parsed_per_actor(tmp_path: Path):
                     },
                     "vector_store": {"similarity": "dot"},
                 },
-                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+                "sources": [{"description": "Example source", "link": "example.com"}],
             }
         ]
     }
@@ -246,7 +246,7 @@ def test_partial_group_settings_leave_omitted_actors_none(tmp_path: Path):
                 "name": "example",
                 "attributes": {"code": "EE"},
                 "settings": {"embed_chunks": {"provider": "mock", "mock_dim": 64}},
-                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+                "sources": [{"description": "Example source", "link": "example.com"}],
             }
         ]
     }
@@ -267,7 +267,7 @@ def test_non_integer_chunk_size_is_rejected(tmp_path: Path):
                 "name": "example",
                 "attributes": {"code": "EE"},
                 "settings": {"chunk_document": {"chunk_size": "big"}},
-                "sources": [{"description": "Tax authority", "link": "emta.ee"}],
+                "sources": [{"description": "Example source", "link": "example.com"}],
             }
         ]
     }

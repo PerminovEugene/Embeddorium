@@ -12,7 +12,7 @@ def _event(**kw) -> OutboxEvent:
         id=kw.get("id", uuid.uuid4()),
         queue_name=kw.get("queue_name", "ingest.crawl.source.parse.v1"),
         actor_name=kw.get("actor_name", "parse_source"),
-        payload=kw.get("payload", {"crawl_target_id": "t", "group": "example"}),
+        payload=kw.get("payload", {"crawl_target_id": "t", "pipeline_id": "p"}),
         dedup_key=kw.get("dedup_key", "parse:t"),
     )
 

@@ -34,10 +34,6 @@ class CrawlTargetORM(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    group: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
     pipeline_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipeline_runs.id", ondelete="CASCADE"),
@@ -98,6 +94,13 @@ class CrawlTargetORM(Base):
         nullable=False,
         server_default=sql_text("now()"),
         onupdate=sql_text("now()"),
+    )
+    # Set when the target reaches PROCESSED; NULL until then (and for
+    # pre-migration-023 rows). See UnitOfWork.set_status and
+    # UnitOfWork.finalize_target_if_all_chunks_embedded.
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     document: Mapped[Optional["DocumentORM"]] = relationship(

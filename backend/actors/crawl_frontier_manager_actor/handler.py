@@ -54,7 +54,6 @@ def _resolve_log_dir(
 def handle(
     *,
     url: str,
-    group: str,
     parent_document_id: Optional[str] = None,
     parent_chunk_id: Optional[str] = None,
     pipeline_id: Optional[str] = None,
@@ -63,7 +62,6 @@ def handle(
 ) -> None:
     payload = ProcessLinkSourcePayload.from_actor_kwargs(
         url=url,
-        group=group,
         parent_document_id=parent_document_id,
         parent_chunk_id=parent_chunk_id,
         pipeline_id=pipeline_id,
@@ -87,7 +85,6 @@ def handle(
     with log_to(log_dir, pipeline_id=pipeline_id):
         existing_target = (
             store.crawl_targets.find_active_by_normalized_url(
-                group=payload.group,
                 normalized_url=normalized_url,
                 pipeline_id=run_uuid,
             )
@@ -99,7 +96,7 @@ def handle(
                 actor_name=CRAWL_FRONTIER_MANAGER_ACTOR,
                 queue_name=CRAWL_FRONTIER_MANAGER_QUEUE,
                 reason="url_already_queued",
-                extra={"normalized_url": normalized_url, "group": payload.group},
+                extra={"normalized_url": normalized_url},
             )
             return
 
@@ -119,7 +116,6 @@ def handle(
 
         target = store.crawl_targets.save(
             CrawlTarget(
-                group=payload.group,
                 pipeline_id=run_uuid,
                 original_url=payload.url,
                 normalized_url=normalized_url,
@@ -141,7 +137,6 @@ def handle(
                 args=[],
                 kwargs={
                     "crawl_target_id": str(target.id),
-                    "group": payload.group,
                     "pipeline_id": payload.pipeline_id,
                 },
                 options={},

@@ -22,7 +22,7 @@ from backend.shared.clients.http.failures import (
 )
 
 DEFAULT_USER_AGENT = (
-    "laws-agent-crawler/0.1 (+https://github.com/; legal/tax document ingestion)"
+    "embeddorium-crawler/0.1 (+https://github.com/; document ingestion)"
 )
 DEFAULT_TIMEOUT = (5, 30)  # (connect, read) seconds
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024  # 10 MiB

@@ -268,6 +268,15 @@ const PipelineRunsPage = () => {
                   {formatDuration(runInfo.startedAt, runInfo.finishedAt)}
                 </dd>
               </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.15em] text-emd-placeholder">
+                  Chunks
+                </dt>
+                <dd className="mt-0.5 text-sm text-emd-text tabular-nums">
+                  {runInfo.chunksEmbedded} chunks processed / {runInfo.chunksPending}{" "}
+                  chunks in progress
+                </dd>
+              </div>
             </dl>
           </Card>
         </div>
@@ -298,8 +307,9 @@ const PipelineRunsPage = () => {
                       </th>
                       <th className="py-3 pr-4 font-semibold">Status</th>
                       <th className="py-3 pr-4 font-semibold">Detail</th>
+                      <th className="py-3 pr-4 font-semibold text-right">Chunks</th>
                       <th className="py-3 pl-4 font-semibold text-right last:pr-1">
-                        Chunks
+                        Processing time
                       </th>
                     </tr>
                   </thead>
@@ -338,8 +348,11 @@ const PipelineRunsPage = () => {
                             {t.skipReason ?? t.error ?? "—"}
                           </span>
                         </td>
-                        <td className="py-3 pl-4 last:pr-1 text-right align-top tabular-nums">
+                        <td className="py-3 pr-4 text-right align-top tabular-nums">
                           {t.chunkCount}
+                        </td>
+                        <td className="py-3 pl-4 last:pr-1 text-right align-top tabular-nums">
+                          {formatDuration(t.createdAt, t.processedAt)}
                         </td>
                       </tr>
                     ))}

@@ -48,12 +48,11 @@ def _parse_keywords(raw: str) -> List[str]:
 def filter_documents(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: Optional[str] = None,
     store: SqlStore,
 ) -> None:
     payload = FilterDocumentsPayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -116,7 +115,6 @@ def filter_documents(
 
     parse_payload = ParseSourcePayload(
         crawl_target_id=target_id,
-        group=payload.group,
         pipeline_id=payload.pipeline_id,
     )
 

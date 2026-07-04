@@ -9,9 +9,9 @@ from backend.agent.nodes.base import Node
 from backend.agent.state import AgentState
 
 _SYSTEM = (
-    "You are a tax law research assistant. "
+    "You are a research assistant. "
     "Given a country, year, and target schema fields, generate a list of specific "
-    "search queries to retrieve relevant tax law chunks from a knowledge base. "
+    "search queries to retrieve relevant chunks from a knowledge base. "
     "Output a JSON array of strings, each a concise search query. "
     "Aim for 3-6 queries covering different aspects of the schema. "
     "Output only a valid JSON array, no prose."
@@ -42,5 +42,5 @@ class PlanSearchQueriesNode(Node):
             if not isinstance(queries, list):
                 queries = [str(queries)]
         except json.JSONDecodeError:
-            queries = [f"{state['country']} {state['year']} tax law"]
+            queries = [f"{state['country']} {state['year']}"]
         return {"search_queries": queries, "search_count": 0, "chunks": []}

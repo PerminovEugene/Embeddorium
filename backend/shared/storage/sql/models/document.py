@@ -42,8 +42,7 @@ class DocumentORM(Base):
         server_default="unknown",
     )
 
-    # Crawl context + fetch/parse provenance (migration 005).
-    group: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Fetch/parse provenance (migration 005).
     crawl_target_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )

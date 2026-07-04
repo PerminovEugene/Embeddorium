@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple
 
 from sqlalchemy import func, select, update
@@ -15,8 +16,16 @@ from backend.shared.models.crawl_target import (
 from backend.shared.storage.sql.models.chunk import DocumentChunkORM
 from backend.shared.storage.sql.models.crawl_target import CrawlTargetORM
 
-# Statuses from which no further embed batches will ever be scheduled for a
-# target. This is deliberately narrower than TERMINAL_OR_ACTIVE_STATUSES
+# Statuses from which a target will never again change the run's embed
+# progress: either no further embed batch will ever be scheduled for it
+# (skipped/failed), or — PROCESSED only — every chunk it ever scheduled has
+# already been embedded (see UnitOfWork.finalize_target_if_all_chunks_embedded,
+# the only place that sets PROCESSED for a target with chunks). EMBEDDING is
+# deliberately excluded: a target there has already had its batches scheduled
+# but is still waiting on embed_chunks to finish and finalize it, so
+# track_pipeline_status must keep treating it as active.
+#
+# This set is also deliberately narrower than TERMINAL_OR_ACTIVE_STATUSES
 # (which governs re-queue dedup): here FAILED_TRANSIENT/FAILED are counted as
 # terminal too, because track_pipeline_status only cares whether a target can
 # still *produce* work, not whether the frontier manager would re-queue it.
@@ -35,7 +44,6 @@ _EMBEDDING_TERMINAL_STATUSES = frozenset(
 def _to_crawl_target(orm: CrawlTargetORM) -> CrawlTarget:
     return CrawlTarget(
         id=orm.id,
-        group=orm.group,
         pipeline_id=orm.pipeline_id,
         original_url=orm.original_url,
         normalized_url=orm.normalized_url,
@@ -49,6 +57,7 @@ def _to_crawl_target(orm: CrawlTargetORM) -> CrawlTarget:
         skip_reason=orm.skip_reason,
         created_at=orm.created_at,
         updated_at=orm.updated_at,
+        processed_at=orm.processed_at,
     )
 
 
@@ -59,7 +68,6 @@ class CrawlTargetRepository:
     def save(self, target: CrawlTarget) -> CrawlTarget:
         with Session(self.engine) as session:
             orm = CrawlTargetORM(
-                group=target.group,
                 pipeline_id=target.pipeline_id,
                 original_url=target.original_url,
                 normalized_url=target.normalized_url,
@@ -81,7 +89,6 @@ class CrawlTargetRepository:
         with Session(self.engine) as session:
             orms = [
                 CrawlTargetORM(
-                    group=t.group,
                     pipeline_id=t.pipeline_id,
                     original_url=t.original_url,
                     normalized_url=t.normalized_url,
@@ -115,6 +122,8 @@ class CrawlTargetRepository:
             if orm is None:
                 return None
             orm.status = status
+            if status == CrawlTargetStatus.PROCESSED:
+                orm.processed_at = datetime.now(tz=timezone.utc)
             if error is not None:
                 orm.error = error
             if skip_reason is not None:
@@ -170,7 +179,6 @@ class CrawlTargetRepository:
 
     def find_active_by_normalized_url(
         self,
-        group: str,
         normalized_url: str,
         *,
         pipeline_id: Optional[uuid.UUID] = None,
@@ -191,7 +199,6 @@ class CrawlTargetRepository:
         active = [str(s) for s in TERMINAL_OR_ACTIVE_STATUSES]
         with Session(self.engine) as session:
             stmt = select(CrawlTargetORM).where(
-                CrawlTargetORM.group == group,
                 CrawlTargetORM.pipeline_id == pipeline_id,
                 CrawlTargetORM.normalized_url == normalized_url,
                 CrawlTargetORM.status.in_(active),

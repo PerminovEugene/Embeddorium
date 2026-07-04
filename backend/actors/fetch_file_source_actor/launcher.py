@@ -40,7 +40,7 @@ sql_store = SqlStore(
     max_retries=3,
 )
 def fetch_file_source(
-    *, file_path: str, group: str, pipeline_id: Optional[str] = None
+    *, file_path: str, pipeline_id: Optional[str] = None
 ) -> None:
     # No crawl target exists yet (this actor creates it), so there is no
     # log_dir to pre-resolve here. The handler computes log_dir once the
@@ -50,7 +50,6 @@ def fetch_file_source(
     with log_to(None, pipeline_id=pipeline_id):
         _fetch_file_source(
             file_path=file_path,
-            group=group,
             pipeline_id=pipeline_id,
             store=sql_store,
             broker=rabbitmq_broker,

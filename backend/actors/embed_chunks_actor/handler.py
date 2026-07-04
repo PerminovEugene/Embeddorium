@@ -6,11 +6,17 @@ providers return/fetch vectors without importing torch/sentence-transformers,
 so this module stays import-light in containers that run those providers —
 only the ``huggingface`` (real local model) path pulls the heavy ML stack.
 
-Once a batch's vectors are upserted, this is also one of the two triggers for
-``track_pipeline_status`` (the other is ``schedule_discovered_links``): it
-writes a tracker outbox event and bumps the run's ``embeddings_completed``
-counter, so the tracker can eventually see that every scheduled batch has
-finished. See ``track_pipeline_status_actor`` for the completion condition.
+Once a batch's vectors are upserted, in one transaction this: (1) flips those
+chunks' ``status`` to ``embedded``, (2) atomically finalizes the owning crawl
+target to ``PROCESSED`` if — and only if — every chunk of its document is now
+embedded (``UnitOfWork.finalize_target_if_all_chunks_embedded``; a no-op while
+other chunks are still pending), and (3), when the batch belongs to a tracked
+run, writes a tracker outbox event and bumps the run's ``embeddings_completed``
+counter. This is what makes a target's ``PROCESSED`` status actually mean "its
+chunks are embedded" instead of merely "its embed batches were scheduled" —
+see ``schedule_discovered_links_actor`` for the target's status leading up to
+this point, and ``track_pipeline_status_actor`` for the run-completion
+condition that both this actor and ``schedule_discovered_links`` feed into.
 """
 
 from __future__ import annotations
@@ -91,7 +97,6 @@ def embed_chunks(
     *,
     document_id: str,
     chunk_ids: list[str],
-    group: str,
     store: SqlStore,
     vector_store: VectorStore,
     model,
@@ -103,7 +108,6 @@ def embed_chunks(
     payload = EmbedChunksPayload.from_actor_kwargs(
         document_id=document_id,
         chunk_ids=chunk_ids,
-        group=group,
         pipeline_id=pipeline_id,
     )
 
@@ -153,7 +157,6 @@ def embed_chunks(
                     "chunk_id": str(chunk.id),
                     "document_id": str(payload.document_id),
                     "chunk_index": chunk.chunk_index,
-                    "group": payload.group,
                     # Chunk classification (legal_body/act_title/...) so retrieval
                     # can prefer legal_body and gate amendment_history behind
                     # history/date queries.
@@ -168,27 +171,38 @@ def embed_chunks(
 
     # This whole invocation is one "batch" as far as schedule_embeddings and
     # track_pipeline_status are concerned (the BATCH_SIZE re-splitting above is
-    # purely an internal encode-call chunking detail). Emit the tracker event
+    # purely an internal encode-call chunking detail). Everything below runs
     # once, after every sub-batch has been upserted, so a partial failure never
-    # reports a batch as complete. The dedup key is keyed off the first chunk
-    # id of the whole message, which is stable and unique per scheduled batch.
-    if payload.pipeline_id is not None and payload.chunk_ids:
+    # marks a chunk embedded (or reports a batch as complete) prematurely.
+    #
+    # Marking chunks embedded and finalizing the target are unconditional
+    # (independent of pipeline_id): the target's own status machine must stay
+    # correct even for direct/untracked embed calls. Only the tracker event
+    # and its counter are gated behind pipeline_id, since those exist purely
+    # to drive a specific run's completion detection.
+    if payload.chunk_ids:
         with store.unit_of_work() as uow:
-            track_payload = TrackPipelineStatusPayload(
-                pipeline_id=uuid.UUID(payload.pipeline_id)
-            )
-            inserted = uow.add_outbox(
-                OutboxEvent(
-                    queue_name=TRACK_PIPELINE_STATUS_QUEUE,
-                    actor_name=TRACK_PIPELINE_STATUS_ACTOR,
-                    payload=track_payload.to_actor_kwargs(),
-                    dedup_key=(
-                        f"track:{payload.pipeline_id}:embed:"
-                        f"{payload.document_id}:{payload.chunk_ids[0]}"
-                    ),
+            uow.mark_chunks_embedded(payload.chunk_ids)
+            uow.finalize_target_if_all_chunks_embedded(payload.document_id)
+
+            if payload.pipeline_id is not None:
+                # The dedup key is keyed off the first chunk id of the whole
+                # message, which is stable and unique per scheduled batch.
+                track_payload = TrackPipelineStatusPayload(
+                    pipeline_id=uuid.UUID(payload.pipeline_id)
                 )
-            )
-            if inserted:
-                uow.increment_embeddings_completed(
-                    uuid.UUID(payload.pipeline_id), 1
+                inserted = uow.add_outbox(
+                    OutboxEvent(
+                        queue_name=TRACK_PIPELINE_STATUS_QUEUE,
+                        actor_name=TRACK_PIPELINE_STATUS_ACTOR,
+                        payload=track_payload.to_actor_kwargs(),
+                        dedup_key=(
+                            f"track:{payload.pipeline_id}:embed:"
+                            f"{payload.document_id}:{payload.chunk_ids[0]}"
+                        ),
+                    )
                 )
+                if inserted:
+                    uow.increment_embeddings_completed(
+                        uuid.UUID(payload.pipeline_id), 1
+                    )

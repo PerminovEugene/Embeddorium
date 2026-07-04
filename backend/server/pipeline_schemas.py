@@ -52,6 +52,14 @@ class PipelineRunOut(_CamelModel):
 
     The embedding provider snapshot lives inside ``actor_configs.embed_chunks``
     rather than at the top level; callers should read it from there.
+
+    ``chunks_embedded`` / ``chunks_pending`` are derived at read time from a
+    ``document_chunks`` aggregate (see ``ChunkRepository.status_counts_for_pipeline``)
+    rather than stored counters — consistent with how ``chunk_count`` on
+    ``PipelineRunTargetOut`` is already computed via a join — so they always
+    reflect the live chunk table. They default to 0 for callers that don't
+    populate them (e.g. the run list), where per-run chunk progress isn't
+    shown.
     """
 
     id: uuid.UUID
@@ -62,6 +70,8 @@ class PipelineRunOut(_CamelModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    chunks_embedded: int = 0
+    chunks_pending: int = 0
 
 
 class PipelineRunStatusIn(_CamelModel):
@@ -95,6 +105,11 @@ class PipelineRunTargetOut(_CamelModel):
     document_id: Optional[uuid.UUID] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Set once the target reaches "processed"; None while still in flight.
+    # The UI derives this target's processing time as (processedAt -
+    # createdAt), the same pattern already used for a run's "Working time"
+    # (startedAt/finishedAt).
+    processed_at: Optional[datetime] = None
 
 
 class PipelineRunTargetsPage(_CamelModel):
@@ -121,11 +136,23 @@ def pipeline_run_target_to_out(
         document_id=target.document_id,
         created_at=target.created_at,
         updated_at=target.updated_at,
+        processed_at=target.processed_at,
     )
 
 
-def pipeline_run_to_out(run: PipelineRun) -> PipelineRunOut:
-    """Map a domain ``PipelineRun`` to its camelCase response schema."""
+def pipeline_run_to_out(
+    run: PipelineRun,
+    *,
+    chunks_embedded: int = 0,
+    chunks_pending: int = 0,
+) -> PipelineRunOut:
+    """Map a domain ``PipelineRun`` to its camelCase response schema.
+
+    ``chunks_embedded``/``chunks_pending`` are optional because they require
+    an extra aggregate query (``ChunkRepository.status_counts_for_pipeline``);
+    callers that don't need per-run chunk progress (e.g. the run list) may
+    omit them and get 0/0.
+    """
     return PipelineRunOut(
         id=run.id,
         name=run.name,
@@ -135,4 +162,6 @@ def pipeline_run_to_out(run: PipelineRun) -> PipelineRunOut:
         started_at=run.started_at,
         finished_at=run.finished_at,
         created_at=run.created_at,
+        chunks_embedded=chunks_embedded,
+        chunks_pending=chunks_pending,
     )

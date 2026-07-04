@@ -6,7 +6,7 @@ from backend.agent.config import MCP_SERVER_URL
 async def get_mcp_tools() -> list:
     client = MultiServerMCPClient(
         {
-            "laws_kb": {
+            "knowledge_base": {
                 "url": MCP_SERVER_URL,
                 "transport": "streamable_http",
             }

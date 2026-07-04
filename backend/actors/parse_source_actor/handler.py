@@ -44,12 +44,11 @@ from backend.shared.storage.sql.sql_store import SqlStore
 def parse_source(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: Optional[str] = None,
     store: SqlStore,
 ) -> None:
     payload = ParseSourcePayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -109,7 +108,6 @@ def parse_source(
     document = Document(
         source_url=target.original_url,
         crawl_target_id=target_id,
-        group=payload.group,
         language="unknown",
         normalized_url=target.normalized_url,
         final_url=fetch.final_url,
@@ -125,7 +123,6 @@ def parse_source(
 
     chunk_payload = ChunkDocumentPayload(
         crawl_target_id=target_id,
-        group=payload.group,
         pipeline_id=payload.pipeline_id,
     )
 

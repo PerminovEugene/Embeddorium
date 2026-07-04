@@ -44,10 +44,9 @@ sql_store = SqlStore(
     actor_name=TRACK_PIPELINE_STATUS_ACTOR,
     max_retries=3,
 )
-def track_pipeline_status(*, pipeline_id: str, group: str = "") -> None:
+def track_pipeline_status(*, pipeline_id: str) -> None:
     with log_to(None, pipeline_id=pipeline_id):
         _track_pipeline_status(
             pipeline_id=pipeline_id,
-            group=group,
             store=sql_store,
         )

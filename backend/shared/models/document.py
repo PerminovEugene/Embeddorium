@@ -14,11 +14,12 @@ class Document(BaseModel):
     id: Optional[uuid.UUID] = None
     source_url: str
 
-    # Real document language ("unknown" until detection is added), NOT the crawl group.
+    # Real document language ("unknown" until detection is added).
     language: str = "unknown"
 
-    # Crawl context + fetch/parse provenance (see migration 005).
-    group: Optional[str] = None
+    # Fetch/parse provenance (see migration 005). The dataset this document
+    # belongs to is reached via crawl_target_id -> CrawlTarget.pipeline_id ->
+    # PipelineRun.dataset, not stored redundantly here (see migration 024).
     crawl_target_id: Optional[uuid.UUID] = None
     normalized_url: Optional[str] = None
     final_url: Optional[str] = None

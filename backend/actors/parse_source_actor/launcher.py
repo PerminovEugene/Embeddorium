@@ -36,7 +36,7 @@ sql_store = SqlStore(
     max_retries=3,
 )
 def parse_source(
-    *, crawl_target_id: str, group: str, pipeline_id: Optional[str] = None
+    *, crawl_target_id: str, pipeline_id: Optional[str] = None
 ) -> None:
     target = sql_store.crawl_targets.get(uuid.UUID(crawl_target_id))
     log_dir = target.log_dir if target is not None else None
@@ -44,7 +44,6 @@ def parse_source(
     with log_to(log_dir, pipeline_id=pipeline_id):
         _parse_source(
             crawl_target_id=crawl_target_id,
-            group=group,
             pipeline_id=pipeline_id,
             store=sql_store,
         )

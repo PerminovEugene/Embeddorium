@@ -16,7 +16,6 @@ env/
 
 # Environment variables
 .env
-.env.*
 
 # IDE
 .vscode/
@@ -46,3 +45,4 @@ node_modules/
 xml.2026.en/
 sources
 tmp
+.DS_Store

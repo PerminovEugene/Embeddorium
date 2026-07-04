@@ -47,16 +47,14 @@ sql_store = SqlStore(
 def manage_crawl_frontier(
     *,
     url: str,
-    group: str,
     parent_document_id: Optional[str] = None,
     parent_chunk_id: Optional[str] = None,
     pipeline_id: Optional[str] = None,
 ) -> None:
-    logger.info("received link url=%s group=%s pipeline_id=%s", url, group, pipeline_id)
+    logger.info("received link url=%s pipeline_id=%s", url, pipeline_id)
 
     handle(
         url=url,
-        group=group,
         parent_document_id=parent_document_id,
         parent_chunk_id=parent_chunk_id,
         pipeline_id=pipeline_id,

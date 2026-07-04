@@ -20,6 +20,14 @@ class CrawlTargetStatus(StrEnum):
     CHUNKING = "chunking"
     CHUNKED = "chunked"
     SCHEDULING = "scheduling"
+    # A target whose document has at least one chunk still not embedded, once
+    # schedule_discovered_links has finished scheduling its outgoing links.
+    # Only embed_chunks moves a target out of this status (to PROCESSED), by
+    # finalizing once the document's last chunk is embedded. Targets whose
+    # document has zero chunks skip this status entirely and go straight from
+    # SCHEDULING to PROCESSED, since no embed_chunks batch will ever run for
+    # them. See embed_chunks_actor and schedule_discovered_links_actor.
+    EMBEDDING = "embedding"
     PROCESSED = "processed"
 
     # Local-file (XML) ingestion chain: relevance gate between fetch and parse.
@@ -50,7 +58,6 @@ TERMINAL_OR_ACTIVE_STATUSES = frozenset(
 class CrawlTarget(BaseModel):
     id: Optional[uuid.UUID] = None
 
-    group: str
     original_url: str
     normalized_url: str
 
@@ -76,3 +83,10 @@ class CrawlTarget(BaseModel):
 
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    # Set when the target reaches PROCESSED (see UnitOfWork.set_status and
+    # UnitOfWork.finalize_target_if_all_chunks_embedded). (processed_at -
+    # created_at) gives this target's single-file/URL processing time. None
+    # for targets that have not yet reached PROCESSED, and for rows written
+    # before migration 023.
+    processed_at: Optional[datetime] = None

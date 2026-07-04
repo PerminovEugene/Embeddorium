@@ -71,13 +71,12 @@ def _build_chunk_input(*, document, target_id: UUID, store: SqlStore) -> ChunkIn
 def chunk_document(
     *,
     crawl_target_id: str,
-    group: str,
     pipeline_id: Optional[str] = None,
     store: SqlStore,
     chunker: Chunker,
 ) -> None:
     payload = ChunkDocumentPayload.from_actor_kwargs(
-        crawl_target_id=crawl_target_id, group=group, pipeline_id=pipeline_id
+        crawl_target_id=crawl_target_id, pipeline_id=pipeline_id
     )
     target_id: UUID = payload.crawl_target_id
 
@@ -121,7 +120,6 @@ def chunk_document(
 
     schedule_payload = ScheduleEmbeddingsPayload(
         crawl_target_id=target_id,
-        group=payload.group,
         pipeline_id=payload.pipeline_id,
     )
 
@@ -138,7 +136,6 @@ def chunk_document(
                         raw_url=link["url"],
                         normalized_url=normalize_url(link["url"]),
                         anchor_text=link.get("label"),
-                        group=payload.group,
                     )
                 )
         uow.upsert_discovered_links(links)

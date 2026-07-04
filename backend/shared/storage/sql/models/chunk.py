@@ -57,6 +57,15 @@ class DocumentChunkORM(Base):
         nullable=False,
         server_default=sql_text("'{}'"),
     )
+    # Embedding lifecycle for this chunk: "pending" until embed_chunks upserts
+    # its vector into Qdrant, then "embedded". A crawl target only reaches
+    # PROCESSED once every chunk of its document is "embedded" — see
+    # UnitOfWork.finalize_target_if_all_chunks_embedded.
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=sql_text("'pending'"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

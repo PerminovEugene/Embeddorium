@@ -19,5 +19,9 @@ class DocumentChunk(BaseModel):
     # legal_metadata for chunks produced by the legal XML chunker.
     chunk_type: str = "passage"
     chunk_metadata: dict = Field(default_factory=dict)
+    # Embedding lifecycle: "pending" until embed_chunks upserts this chunk's
+    # vector into Qdrant, then "embedded". See
+    # UnitOfWork.finalize_target_if_all_chunks_embedded.
+    status: str = "pending"
     created_at: Optional[datetime] = None
     document: Optional[Document] = None

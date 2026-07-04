@@ -1,12 +1,13 @@
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, selectinload
 
 from backend.shared.models import DocumentChunk
 from backend.shared.storage.sql.model_to_dto import _to_chunk, _to_document
 from backend.shared.storage.sql.models.chunk import DocumentChunkORM
+from backend.shared.storage.sql.models.crawl_target import CrawlTargetORM
 
 
 
@@ -117,3 +118,32 @@ class ChunkRepository:
                 result.append(chunk)
 
             return result
+
+    def status_counts_for_pipeline(self, pipeline_id: uuid.UUID) -> dict[str, int]:
+        """Aggregate chunk-status counts across every target in *pipeline_id*.
+
+        Joins ``document_chunks`` to ``crawl_targets`` on ``document_id`` and
+        groups by ``status`` in a single query, rather than maintaining a
+        mutable counter column — the same "derive it from a join" approach
+        ``CrawlTargetRepository.list_by_pipeline`` already uses for its
+        per-target ``chunk_count``. This keeps the numbers always consistent
+        with the live chunk table (no separate counter to keep in sync as
+        chunks are re-chunked/re-embedded) at the cost of one aggregate query
+        per read, which is cheap relative to a pipeline's write volume.
+
+        Returns a dict keyed by ``document_chunks.status`` (e.g.
+        ``{"pending": 3, "embedded": 12}``); a status with zero matching
+        chunks is simply absent from the result.
+        """
+        stmt = (
+            select(DocumentChunkORM.status, func.count(DocumentChunkORM.id))
+            .join(
+                CrawlTargetORM,
+                CrawlTargetORM.document_id == DocumentChunkORM.document_id,
+            )
+            .where(CrawlTargetORM.pipeline_id == pipeline_id)
+            .group_by(DocumentChunkORM.status)
+        )
+        with Session(self.engine) as session:
+            rows = session.execute(stmt).all()
+            return {status: int(count) for status, count in rows}

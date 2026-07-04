@@ -18,7 +18,7 @@ def _chunks(doc_id, n):
 
 def test_lock_not_acquired_skips():
     store = make_store(acquired=None)
-    schedule_embeddings(crawl_target_id=str(uuid.uuid4()), group="Estonia", store=store)
+    schedule_embeddings(crawl_target_id=str(uuid.uuid4()), store=store)
     store.unit_of_work.assert_not_called()
 
 
@@ -32,13 +32,12 @@ def test_single_batch_emits_one_embed_event_and_schedules_links():
     )
     store.chunks.list_by_document.return_value = chunks
 
-    schedule_embeddings(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_embeddings(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     embed_events = outbox_for_queue(uow, EMBED_CHUNKS_QUEUE)
     assert len(embed_events) == 1
     assert embed_events[0].payload["chunk_ids"] == [str(c.id) for c in chunks]
-    assert embed_events[0].payload["group"] == "Estonia"
     assert embed_events[0].dedup_key == f"embed:{doc_id}:0"
 
     link_events = outbox_for_queue(uow, SCHEDULE_DISCOVERED_LINKS_QUEUE)
@@ -55,7 +54,7 @@ def test_multiple_batches_emit_distinct_dedup_keys():
     )
     store.chunks.list_by_document.return_value = _chunks(doc_id, BATCH_SIZE + 1)
 
-    schedule_embeddings(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_embeddings(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     embed_events = outbox_for_queue(uow, EMBED_CHUNKS_QUEUE)
@@ -79,7 +78,6 @@ def test_pipeline_id_increments_embeddings_scheduled_by_batch_count():
 
     schedule_embeddings(
         crawl_target_id=str(target.id),
-        group="Estonia",
         pipeline_id=pipeline_id,
         store=store,
     )
@@ -101,7 +99,7 @@ def test_no_pipeline_id_skips_scheduled_counter():
     )
     store.chunks.list_by_document.return_value = _chunks(doc_id, 2)
 
-    schedule_embeddings(crawl_target_id=str(target.id), group="Estonia", store=store)
+    schedule_embeddings(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
     uow.increment_embeddings_scheduled.assert_not_called()

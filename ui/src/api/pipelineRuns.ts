@@ -25,6 +25,12 @@ export interface PipelineRunSummary {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string | null;
+  // Run-wide chunk-embedding progress, derived server-side from a live
+  // document_chunks aggregate (see ChunkRepository.status_counts_for_pipeline).
+  // Only populated by GET /pipeline-runs/{id}; the run list omits them (both
+  // default to 0 on the wire).
+  chunksEmbedded: number;
+  chunksPending: number;
 }
 
 // One crawl target row, mirroring PipelineRunTargetOut on the server.
@@ -40,6 +46,9 @@ export interface PipelineRunTarget {
   documentId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  // Set once this target reaches "processed"; null while still in flight.
+  // (processedAt - createdAt) is this target's single-file/URL processing time.
+  processedAt: string | null;
 }
 
 // Paginated response from GET /pipeline-runs/{id}/targets.
@@ -59,6 +68,8 @@ interface _RawRunOut {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string | null;
+  chunksEmbedded?: number;
+  chunksPending?: number;
 }
 
 function toSummary(raw: _RawRunOut): PipelineRunSummary {
@@ -69,6 +80,8 @@ function toSummary(raw: _RawRunOut): PipelineRunSummary {
     startedAt: raw.startedAt,
     finishedAt: raw.finishedAt,
     createdAt: raw.createdAt,
+    chunksEmbedded: raw.chunksEmbedded ?? 0,
+    chunksPending: raw.chunksPending ?? 0,
   };
 }
 

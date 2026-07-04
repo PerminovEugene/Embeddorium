@@ -23,6 +23,7 @@ from backend.shared.storage.sql.core.engine import SqlPoolConfig
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.collection_naming import (
     COLLECTION_SIMILARITY,
+    UNSCOPED_DATASET_NAME,
     build_collection_name,
 )
 from backend.shared.storage.vector.vector_store import VectorStore, similarity_to_distance
@@ -49,7 +50,7 @@ sql_store = SqlStore(
 _embed_config: dict[str, tuple] = {}
 
 
-def _load_embed_config(pipeline_id: Optional[str], group: str):
+def _load_embed_config(pipeline_id: Optional[str]):
     """Return (provider, model, mock_dim, collection, distance) for the run.
 
     Reads the run's ``actor_configs.embed_chunks.provider`` snapshot and
@@ -106,8 +107,12 @@ def _load_embed_config(pipeline_id: Optional[str], group: str):
                     pipeline_id,
                 )
 
-    # Fallback: global env / naming convention (legacy / no pipeline_id).
-    collection = build_collection_name(group)
+    # Fallback: global env / naming convention (legacy / no pipeline_id). There
+    # is no dataset name to key the collection by here (that lived only in the
+    # now-removed ``group`` field), so this degenerate path uses a fixed
+    # placeholder collection — every current entry point records a
+    # pipeline_id, so this should not be reachable in practice.
+    collection = build_collection_name(UNSCOPED_DATASET_NAME)
     distance = similarity_to_distance(COLLECTION_SIMILARITY)
     embed_provider = config.EMBED_PROVIDER
     if embed_provider == "ollama":
@@ -131,14 +136,13 @@ def embed_chunks(
     *,
     document_id: str,
     chunk_ids: List[str],
-    group: str,
     pipeline_id: Optional[str] = None,
 ) -> None:
     # Collection, embedding provider/model and similarity all come from this
     # run's recorded pipeline_run config, not global config, so the query side
     # (DB search) and the index side agree on exactly one configuration.
     embed_provider, model_name, mock_dim, collection, distance = _load_embed_config(
-        pipeline_id, group
+        pipeline_id
     )
 
     model, model_size = get_model_and_size(
@@ -154,7 +158,6 @@ def embed_chunks(
         _embed_chunks(
             document_id=document_id,
             chunk_ids=chunk_ids,
-            group=group,
             store=sql_store,
             vector_store=VectorStore(collection),
             model=model,

@@ -33,7 +33,7 @@ def _fetch(
 def test_lock_not_acquired_skips():
     store = make_store(acquired=None)
 
-    parse_source(crawl_target_id=str(uuid.uuid4()), group="Estonia", store=store)
+    parse_source(crawl_target_id=str(uuid.uuid4()), store=store)
 
     store.source_fetches.get_by_crawl_target.assert_not_called()
     store.unit_of_work.assert_not_called()
@@ -45,7 +45,7 @@ def test_missing_source_fetch_marks_transient_and_raises():
     store.source_fetches.get_by_crawl_target.return_value = None
 
     with pytest.raises(RuntimeError):
-        parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
+        parse_source(crawl_target_id=str(target.id), store=store)
 
     assert (
         store.crawl_targets.update_status.call_args.kwargs["status"]
@@ -60,7 +60,7 @@ def test_unsupported_content_type_is_skipped():
         target.id, content_type="application/zip"
     )
 
-    parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
+    parse_source(crawl_target_id=str(target.id), store=store)
 
     assert (
         store.crawl_targets.update_status.call_args.kwargs["status"]
@@ -87,7 +87,7 @@ def test_filtered_target_is_acquired_for_the_file_chain(tmp_path: Path, monkeypa
         id=uuid.uuid4(), source_url=target.original_url
     )
 
-    parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
+    parse_source(crawl_target_id=str(target.id), store=store)
 
     store.crawl_targets.acquire.assert_called_once()
     assert (
@@ -115,12 +115,11 @@ def test_happy_path_saves_document_and_enqueues_chunk(tmp_path: Path, monkeypatc
         id=doc_id, source_url=target.original_url
     )
 
-    parse_source(crawl_target_id=str(target.id), group="Estonia", store=store)
+    parse_source(crawl_target_id=str(target.id), store=store)
 
     saved_doc = uow.upsert_document.call_args.args[0]
     assert saved_doc.crawl_target_id == target.id
-    assert saved_doc.group == "Estonia"
-    assert saved_doc.language == "unknown"  # group is NOT stored as language
+    assert saved_doc.language == "unknown"
     assert saved_doc.text_hash
     assert saved_doc.text_path is not None
     assert (tmp_path / saved_doc.text_path).read_text(encoding="utf-8") == "Some statute text."

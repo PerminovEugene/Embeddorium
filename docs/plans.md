@@ -2,7 +2,7 @@ A. Dataset / ingestion
 Dataset versioning
 Один и тот же набор документов фиксируется как версия: dataset_v1, dataset_v2. Потом можно честно сравнивать пайплайны на одинаковом корпусе.
 Document groups / collections
-Группы типа estonian-tax-laws, stripe-docs, my-project-docs. Это база для экспериментов и ACL.
+Группы типа knowledge-base-a, stripe-docs, my-project-docs. Это база для экспериментов и ACL.
 Source adapters
 Поддержка разных источников: URL crawl, sitemap, локальные PDF/XML/HTML/Markdown, GitHub repo, npm package docs, raw text paste.
 Crawl policy presets

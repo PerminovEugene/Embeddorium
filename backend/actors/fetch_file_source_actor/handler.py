@@ -42,11 +42,11 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_file_source(
-    *, file_path: str, group: str, pipeline_id: Optional[str] = None,
+    *, file_path: str, pipeline_id: Optional[str] = None,
     store: SqlStore, broker=None
 ) -> None:
     payload = ProcessFileSourcePayload.from_actor_kwargs(
-        file_path=file_path, group=group, pipeline_id=pipeline_id
+        file_path=file_path, pipeline_id=pipeline_id
     )
 
     logger.info(
@@ -71,7 +71,6 @@ def fetch_file_source(
 
     existing_target = (
         store.crawl_targets.find_active_by_normalized_url(
-            group=payload.group,
             normalized_url=normalized_url,
             pipeline_id=run_uuid,
         )
@@ -83,7 +82,7 @@ def fetch_file_source(
             actor_name=FETCH_FILE_SOURCE_ACTOR,
             queue_name=FETCH_FILE_SOURCE_QUEUE,
             reason="url_already_queued",
-            extra={"normalized_url": normalized_url, "group": payload.group},
+            extra={"normalized_url": normalized_url},
         )
         return
 
@@ -94,7 +93,6 @@ def fetch_file_source(
     with log_to(log_dir, pipeline_id=payload.pipeline_id):
         target = store.crawl_targets.save(
             CrawlTarget(
-                group=payload.group,
                 pipeline_id=run_uuid,
                 original_url=abs_path,
                 normalized_url=normalized_url,
@@ -143,7 +141,6 @@ def fetch_file_source(
 
         filter_payload = FilterDocumentsPayload(
             crawl_target_id=target_id,
-            group=payload.group,
             pipeline_id=payload.pipeline_id,
         )
 

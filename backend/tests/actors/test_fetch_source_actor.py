@@ -26,10 +26,9 @@ def _fetcher(result: FetchResult | None = None, error: Exception | None = None) 
     return fetcher
 
 
-def _run(store, fetcher, *, group="Estonia", target_id=None, insecure=lambda url: False):
+def _run(store, fetcher, *, target_id=None, insecure=lambda url: False):
     fetch_source(
         crawl_target_id=str(target_id or uuid.uuid4()),
-        group=group,
         store=store,
         fetcher=fetcher,
         insecure_tls_policy=insecure,

@@ -140,3 +140,21 @@ ruff check . && ruff format --check .
 ## License
 
 Licensed under the Apache License 2.0 — see [LICENSE.md](LICENSE.md).
+
+## 🚀 Setup Instructions
+
+1. Launch Ollama and pull the embedding models you want to use.
+2. Install Docker and Docker Compose if you haven't already.
+3. Clone the repository and start the server:
+
+```sh
+docker-compose up -d
+```
+
+4. Open your browser and navigate to:
+
+```text
+http://localhost:5173/
+```
+
+That's it — you're ready to experiment!

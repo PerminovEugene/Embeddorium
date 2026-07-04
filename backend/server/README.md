@@ -5,7 +5,7 @@ FastAPI backend for the **Embeddings Tester** UI (`../ui`). It embeds a set of
 source/candidate pair with the selected similarity metrics, returning a ranked
 table of matches.
 
-It is integrated with the main **laws-agent** project and reuses its code rather
+It is integrated with the main **embeddorium** project and reuses its code rather
 than duplicating it:
 
 - `backend.shared.clients.ollama_embed_client.OllamaEmbedClient` — embedding calls
