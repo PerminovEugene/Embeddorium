@@ -21,8 +21,15 @@ const H2 = ({ children }) => (
   </h2>
 );
 
+const Loader = () => (
+  <div className="flex flex-col items-center justify-center gap-3 py-12 text-emd-text">
+    <div className="w-10 h-10 rounded-full border-4 border-emd-border border-t-emd-primary animate-spin" />
+    <span>Loading…</span>
+  </div>
+);
+
 const CompareComponent = () => {
-  const { state } = useFormContext();
+  const { state, loading } = useFormContext();
   const isDb = state.sourceType === "db";
 
   return (
@@ -90,7 +97,7 @@ const CompareComponent = () => {
         <div className="overflow-x-auto mx-auto text-center,">
           <section style={sectionStyle} className="bg-emd-panel">
             <H2>Matches</H2>
-            <ResultTable />
+            {loading ? <Loader /> : <ResultTable />}
           </section>
         </div>
       </div>

@@ -41,6 +41,11 @@ export interface FormState {
 interface FormContextType {
   state: FormState;
 
+  // True while a compare/search request is in flight; the results area shows a
+  // loader instead of the (stale) table.
+  loading: boolean;
+  setLoading: (loading: boolean) => void;
+
   // Variables
   updateVariable: (
     type: "source" | "candidate",
@@ -162,6 +167,7 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     return defaults;
   };
   const [state, setState] = useState<FormState>(getInitialState());
+  const [loading, setLoading] = useState(false);
 
   // 🔥 Save to localStorage on submit
   const saveFormToStorage = () => {
@@ -405,6 +411,8 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     <FormContext.Provider
       value={{
         state,
+        loading,
+        setLoading,
         updateVariable,
         addVariable,
         removeVariable,

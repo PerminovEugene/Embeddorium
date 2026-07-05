@@ -9,10 +9,16 @@ export const inputIdGroupSeparator = "____";
 
 const SubmitButton = () => {
   const [errors, setErrors] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  const { state, validate, setMatches, setDbMatches, saveFormToStorage } =
-    useFormContext();
+  const {
+    state,
+    loading,
+    setLoading,
+    validate,
+    setMatches,
+    setDbMatches,
+    saveFormToStorage,
+  } = useFormContext();
 
   const validateForm = (): boolean => {
     const errors = validate();
