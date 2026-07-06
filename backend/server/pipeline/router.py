@@ -8,7 +8,7 @@ The embedding provider snapshot is stored inside
 ``actor_configs.embed_chunks.provider`` — it is an embed_chunks concern, not
 a top-level run property.
 
-Request/response bodies use camelCase (see ``pipeline_schemas.py``).
+Request/response bodies use camelCase (see ``pipeline/schemas.py``).
 
 POST  /pipeline-runs                  — create a run (status="pending").
 GET   /pipeline-runs                  — list runs, newest first.
@@ -40,8 +40,8 @@ from pydantic import BaseModel
 from pydantic.alias_generators import to_snake
 
 from backend.plugins.chunkers.registry import DEFAULT_CHUNKER
-from backend.server.pipeline_launch import seed_pipeline
-from backend.server.pipeline_schemas import (
+from backend.server.pipeline.launch import seed_pipeline
+from backend.server.pipeline.schemas import (
     PipelineRunIn,
     PipelineRunOut,
     PipelineRunStatusIn,

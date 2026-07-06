@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.server.chunkers_routes import router
+from backend.server.chunkers.router import router
 
 _app = FastAPI()
 _app.include_router(router)

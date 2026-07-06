@@ -3,7 +3,7 @@
 A provider supplies a model (Ollama, a remote OpenAI-compatible endpoint, or
 a mock for testing). Request/response bodies use camelCase to match the UI's
 ``Provider`` union (``ui/src/components/providers/types.ts``); see
-``provider_schemas.py`` for the camelCase<->domain mapping.
+``providers/schemas.py`` for the camelCase<->domain mapping.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 
-from backend.server.provider_schemas import (
+from backend.server.providers.schemas import (
     ProviderIn,
     ProviderOut,
     provider_in_to_domain,

@@ -3,7 +3,7 @@
 A dataset describes where ingestion content comes from (web crawl vs. local
 files). Request/response bodies use camelCase to match the UI's
 ``Dataset`` union (``ui/src/components/datasets/types.ts``); see
-``dataset_schemas.py`` for the camelCase<->domain mapping.
+``datasets/schemas.py`` for the camelCase<->domain mapping.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 
-from backend.server.dataset_schemas import (
+from backend.server.datasets.schemas import (
     DatasetIn,
     DatasetOut,
     dataset_in_to_domain,

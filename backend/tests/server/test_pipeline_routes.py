@@ -1,7 +1,7 @@
 """Tests for the /pipeline-runs endpoints.
 
 Uses FastAPI's TestClient against the real router (no live DB or broker):
-- ``SqlStore`` is patched at the import site in ``pipeline_routes`` so every
+- ``SqlStore`` is patched at the import site in ``pipeline.router`` so every
   handler receives a MagicMock store.
 - ``seed_pipeline`` is patched at the same site so broker setup is skipped.
 
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.server.pipeline_routes import router
+from backend.server.pipeline.router import router
 from backend.shared.models import MockProvider, PipelineRun, WebDataset
 
 # ---------------------------------------------------------------------------
@@ -128,9 +128,9 @@ def test_create_returns_pending_run_and_does_not_call_seed_pipeline() -> None:
         created_run=pending_run,
     )
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
-        with patch("backend.server.pipeline_routes.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 200, resp.text
@@ -173,9 +173,9 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
         },
     }
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
-        with patch("backend.server.pipeline_routes.seed_pipeline"):
+        with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=payload)
 
     assert resp.status_code == 200, resp.text
@@ -209,9 +209,9 @@ def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
         created_run=pending_run,
     )
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
-        with patch("backend.server.pipeline_routes.seed_pipeline"):
+        with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 200, resp.text
@@ -224,7 +224,7 @@ def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
 def test_create_400_when_provider_id_missing() -> None:
     """Returns 400 when embed_chunks.providerId is absent."""
     store_mock = _make_store(dataset=_make_dataset(), provider=_make_provider())
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.post(
             "/pipeline-runs",
             json={"datasetId": str(_DATASET_ID), "actorSettings": {}},
@@ -237,7 +237,7 @@ def test_create_400_when_provider_id_missing() -> None:
 def test_create_404_when_dataset_missing() -> None:
     """Returns 404 when the dataset doesn't exist."""
     store_mock = _make_store(dataset=None, provider=_make_provider())
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 404
@@ -247,7 +247,7 @@ def test_create_404_when_dataset_missing() -> None:
 def test_create_404_when_provider_missing() -> None:
     """Returns 404 when the provider doesn't exist."""
     store_mock = _make_store(dataset=_make_dataset(), provider=None)
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 404
@@ -263,7 +263,7 @@ def test_create_400_when_provider_not_embedding() -> None:
         provider_type="mock",
     )
     store_mock = _make_store(dataset=_make_dataset(), provider=text_provider)
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 400
@@ -282,9 +282,9 @@ def test_launch_pending_run_calls_seed_pipeline_and_transitions_to_running() -> 
     store_mock = _make_store(run=pending_run, updated_run=running_run)
 
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
-        with patch("backend.server.pipeline_routes.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -305,8 +305,8 @@ def test_launch_running_run_returns_409_and_does_not_call_seed() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=running_run)
 
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
-        with patch("backend.server.pipeline_routes.seed_pipeline") as mock_seed:
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 409
@@ -320,8 +320,8 @@ def test_launch_failed_run_is_allowed_relaunch() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=failed_run, updated_run=running_run)
 
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
-        with patch("backend.server.pipeline_routes.seed_pipeline") as mock_seed:
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -335,8 +335,8 @@ def test_launch_completed_run_is_allowed_relaunch() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=completed_run, updated_run=running_run)
 
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
-        with patch("backend.server.pipeline_routes.seed_pipeline") as mock_seed:
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -347,8 +347,8 @@ def test_launch_returns_404_when_run_not_found() -> None:
     """Returns 404 when the run id doesn't exist."""
     store_mock = _make_store(run=None)
 
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
-        with patch("backend.server.pipeline_routes.seed_pipeline"):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+        with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 404
@@ -366,7 +366,7 @@ def test_patch_status_to_failed_sets_finished_at() -> None:
     store_mock = _make_store(run=pending_run, updated_run=failed_run)
 
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
@@ -389,7 +389,7 @@ def test_patch_status_to_completed_sets_finished_at() -> None:
     store_mock = _make_store(run=pending_run, updated_run=completed_run)
 
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
@@ -409,7 +409,7 @@ def test_patch_status_to_running_does_not_set_finished_at() -> None:
     store_mock = _make_store(run=pending_run, updated_run=running_run)
 
     with patch(
-        "backend.server.pipeline_routes.SqlStore", return_value=store_mock
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
     ) as mock_store_cls:
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
@@ -425,7 +425,7 @@ def test_patch_status_to_running_does_not_set_finished_at() -> None:
 def test_patch_returns_404_when_run_not_found() -> None:
     """Returns 404 when the run id doesn't exist."""
     store_mock = _make_store(run=None)
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "failed"},
@@ -439,7 +439,7 @@ def test_patch_returns_422_for_invalid_status() -> None:
     run = _make_run("pending")
     store_mock = _make_store(run=run)
 
-    with patch("backend.server.pipeline_routes.SqlStore", return_value=store_mock):
+    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "invalid-status"},

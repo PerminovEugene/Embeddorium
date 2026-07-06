@@ -4,9 +4,9 @@
 
 # Embeddorium
 
-**A local-first RAG playground.** Crawl or import sources, chunk and embed them
-with a provider you choose, store the vectors in Qdrant, and inspect the results
-— all on your own machine.
+**A local-first RAG pipeline workbench.** Build, inspect, and compare retrieval
+pipelines — see exactly what happened during ingest, parsing, chunking,
+embedding, storage, and querying instead of treating RAG as a black box.
 
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)
 ![Dramatiq](https://img.shields.io/badge/pipeline-Dramatiq-orange)
@@ -17,43 +17,114 @@ with a provider you choose, store the vectors in Qdrant, and inspect the results
 
 ---
 
-Embeddorium is a workshop for retrieval pipelines you can actually see into. It
-runs the full ingest → chunk → embed → store → query loop as a set of small,
-independent workers on your laptop, so you can swap embedding models, tweak
-chunking, and watch exactly what each stage produced — without shipping your
-data anywhere.
-
-It ships with two ingestion front-ends out of the box (a web crawler and a local
-XML importer) and a browser UI for eyeballing how an embedding model scores one
-piece of text against another.
-
 ## Why
 
 Most RAG demos are a single script and a black box. When retrieval is bad, you
 can't tell whether the culprit was the fetch, the parse, the chunker, or the
-embedding model. Embeddorium breaks the pipeline into stages that each leave a
-durable, inspectable trace:
+embedding model. Embeddorium runs the full **ingest → parse → chunk → embed →
+store → query** loop as a set of small, independent workers on your own machine,
+and every stage leaves a durable, inspectable trace — so you can swap models,
+tweak chunking, and watch exactly what each stage produced without shipping your
+data anywhere.
 
-- **Swap embedders freely** — a `mock` provider for instant end-to-end runs,
-  remote **Ollama** over HTTP.
-- **Pluggable chunking** — drop a chunker plugin into `backend/plugins/chunkers/`
-  and it's auto-discovered, selectable per run, no core code to touch. See
-  [docs/plugins.md](docs/plugins.md).
-- **See every artifact** — raw fetched bytes and parsed text land as real files
-  under `tmp/pipeline_run/<id>/`, next to per-URL logs. The database stores paths
-  and metadata, not giant blobs.
-- **Reproducible runs** — every run snapshots its dataset and provider, so its
-  settings and its Qdrant collection stay pinned to that run.
-- **Restartable by design** — a transactional outbox means a message exists only
-  if its data was committed; every stage is idempotent, so retries are safe.
-- **Local and self-hosted** — Postgres, Qdrant, and RabbitMQ come up with one
-  `docker compose` command.
+## What you can do with it
 
-## How it works
+- Build a local vector knowledge base from **crawled web pages** or **local XML
+  files**.
+- Compare **chunking** (size / overlap) and **embedding** configurations across
+  runs — each run is snapshotted and reproducible.
+- Inspect the pipeline end to end: raw fetched bytes, parsed text, chunks,
+  metadata, per-URL logs, and the resulting **Qdrant collection**.
+- Use a **`mock` provider** for instant end-to-end demos, or **Ollama** for real
+  local embeddings.
+- Add custom **chunking strategies** as auto-discovered plugins — no core code to
+  touch ([docs/plugins.md](docs/plugins.md)).
+- Test **embedding similarity** between texts in the browser with the embeddings
+  tester.
 
-Ingestion is a chain of single-purpose [Dramatiq](https://dramatiq.io/) actors.
-Each one does its job, writes its result plus the next message in one database
-transaction, and an outbox dispatcher publishes that message to RabbitMQ.
+## Who this is for
+
+- Engineers building RAG systems who want a real pipeline, not a notebook.
+- Anyone **debugging retrieval quality** and needing to see which stage went
+  wrong.
+- People working with **private or local datasets** that can't leave the machine.
+- Developers **comparing chunking and embedding strategies** side by side.
+- People learning **production-style ingestion architecture** (workers, a
+  transactional outbox, idempotent retries).
+
+## What it is not
+
+Embeddorium is not a hosted SaaS, and not a polished chatbot product. It is a
+**local workbench** for experimenting with and inspecting RAG ingestion and
+retrieval pipelines. It runs entirely on your machine via Docker Compose.
+
+## Quick start
+
+The default path uses the **`mock` embedding provider**, so you get a completed
+run in seconds without any model. You'll need **Docker** (Compose v2) and
+**Git**. For a step-by-step version with expected output, see
+[docs/quickstart.md](docs/quickstart.md) and the
+[first mock run tutorial](docs/tutorials/first_mock_run.md).
+
+```sh
+# 1. Clone
+git clone <repo-url> embeddorium && cd embeddorium
+
+# 2. Create the env file (Compose reads it for Postgres/RabbitMQ credentials).
+#    Defaults work out of the box.
+cp .env.example .env
+
+# 3. Bring up the whole stack. Migrations run automatically via the `migrate`
+#    service before any worker starts — no manual migration step.
+docker compose up -d --build
+```
+
+That starts Postgres, Qdrant, RabbitMQ, every pipeline worker, the API, and the
+UI. Then, in the UI (http://localhost:5173):
+
+1. **Providers** → create a provider of type **Mock** (model type `embedding`).
+2. **Datasets** → create a dataset. The quickest is a **Web** dataset with a
+   single URL and depth `0`.
+3. **Pipeline runs** → start a run with that dataset + the mock provider.
+
+**Success condition:** the run reaches **`completed`** in the Pipeline runs page,
+and a matching collection appears in the Qdrant dashboard
+(http://localhost:6333/dashboard).
+
+Local endpoints:
+
+- UI — http://localhost:5173
+- API + interactive docs — http://localhost:8000/docs
+- Qdrant dashboard — http://localhost:6333/dashboard
+- RabbitMQ management — http://localhost:15672
+
+Stuck? See [docs/troubleshooting.md](docs/troubleshooting.md).
+
+## Use real local embeddings with Ollama (optional)
+
+The mock provider produces random vectors — good for verifying the flow, not
+retrieval quality. For real embeddings, point a provider at a local
+[Ollama](https://ollama.com) server. Full guide:
+[docs/tutorials/ollama_embeddings.md](docs/tutorials/ollama_embeddings.md).
+
+```sh
+# On the host running Ollama:
+ollama pull qwen3-embedding
+```
+
+Then create an **Ollama** provider in the UI (model `qwen3-embedding`, the port
+Ollama listens on) and select it for a run.
+
+> **Docker networking:** the embed worker runs in a container, so `localhost`
+> won't reach Ollama on your host. Use `host.docker.internal` (Docker Desktop) or
+> run Ollama as the `ollama` Compose service. Details in
+> [docs/embeddings.md](docs/embeddings.md).
+
+## Architecture
+
+Ingestion is a chain of single-purpose [Dramatiq](https://dramatiq.io/) actors,
+one per stage. There are two ways in — a **web crawler** and a **local XML
+importer** — that converge on the same downstream stages.
 
 ```
 POST /pipeline-runs
@@ -64,39 +135,28 @@ crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_docu
    fetch_file_source ─► filter_documents ─────┘                                          track_pipeline_status
 ```
 
-Once every embedding batch a run scheduled has finished (and no crawl target
-can schedule any more), `track_pipeline_status` flips the run to `completed`
-and stamps `finished_at` automatically — no polling required.
+- **Why separate stages?** Each stage does one thing and records its result, so
+  when retrieval is off you can pinpoint the stage that produced the bad output.
+- **Where do artifacts live?** Raw fetched bytes and parsed text are real files
+  under `tmp/pipeline_run/<run-id>/`. Postgres stores paths and metadata, not
+  giant blobs.
+- **Where do vectors live?** In **Qdrant**, keyed by chunk id (re-embedding
+  overwrites instead of duplicating).
+- **Why an outbox + retries?** Each stage writes its rows *and* the next message
+  in one transaction; a dispatcher publishes it. A message exists only if its
+  data committed, and every stage is idempotent — so retries are safe and runs
+  are restartable.
+- **Reproducible runs.** Each run snapshots its dataset and provider, so its
+  settings and Qdrant collection stay pinned to that run.
 
-The full walk-through — both chains, the outbox, the status machine, and where
-data lives — is in **[docs/architecture.md](docs/architecture.md)**.
+Full walk-through — both chains, the outbox, the status machine, and where data
+lives — in [docs/architecture.md](docs/architecture.md).
 
-## Quick start
+## Screenshots
 
-You'll need Docker and Python 3.11+.
-
-```sh
-# 1. Configure
-cp .env.example .env        # fill in Postgres / RabbitMQ / Qdrant values
-
-# 2. Migrate the database
-python -m backend.shared.storage.sql.migrate
-
-# 3. Bring up the whole stack
-docker compose up -d --build
-```
-
-That starts Postgres, Qdrant, RabbitMQ, every pipeline worker, the API, and the
-UI. The default embedding provider is `mock`, so you can watch a run flow end to
-end in seconds before wiring up a real model.
-
-Then create a dataset and a provider, and launch a run — see
-**[docs/usage.md](docs/usage.md)**.
-
-- UI — http://localhost:5173
-- API + docs — http://localhost:8000/docs
-- Qdrant dashboard — http://localhost:6333/dashboard
-- RabbitMQ — http://localhost:15672
+| Datasets / sources | Provider configuration |
+| ------------------ | ---------------------- |
+| ![Datasets](docs/screenshots/sources.png) | ![Provider config](docs/screenshots/config.png) |
 
 ## Project layout
 
@@ -112,21 +172,29 @@ backend/
   tests/         # pytest suite
 ui/              # React + Vite front end
 infra/           # broker / db / vector config
-docs/            # architecture, configuration, usage, development
+docs/            # architecture, configuration, usage, tutorials
 docker-compose.yml
 ```
 
 ## Documentation
 
-| Guide                                  | Contents                                                              |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| [Architecture](docs/architecture.md)   | The pipeline stages, outbox, status machine, and storage model        |
-| [Configuration](docs/configuration.md) | Every environment variable, for host and Docker                       |
-| [Embeddings](docs/embeddings.md)       | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
-| [Concurrency](docs/concurrency.md)     | Per-stage threads/processes, fan-out, and what bounds embedding load  |
-| [Usage](docs/usage.md)                 | Starting runs, local XML sources, the agent, the embeddings tester    |
-| [Plugins](docs/plugins.md)             | Writing your own chunker plugin, auto-discovery, the built-ins        |
-| [Development](docs/development.md)     | Setup, tests, linting, migrations, resetting local state              |
+| Guide | Contents |
+| ----- | -------- |
+| [Quick start](docs/quickstart.md) | Detailed first run, service URLs, reset, common failures |
+| [Usage](docs/usage.md) | Starting runs, local XML sources, the agent, the embeddings tester |
+| [Architecture](docs/architecture.md) | Pipeline stages, outbox, status machine, storage model |
+| [Configuration](docs/configuration.md) | Every environment variable, for host and Docker |
+| [Embeddings](docs/embeddings.md) | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
+| [Concurrency](docs/concurrency.md) | Per-stage threads/processes, fan-out, embedding load |
+| [Plugins](docs/plugins.md) | Writing your own chunker plugin, auto-discovery, the built-ins |
+| [Development](docs/development.md) | Setup, tests, linting, migrations, resetting local state |
+| [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs |
+
+**Tutorials:**
+[First mock run](docs/tutorials/first_mock_run.md) ·
+[Ollama embeddings](docs/tutorials/ollama_embeddings.md) ·
+[Local XML import](docs/tutorials/local_xml_import.md) ·
+[Web crawl](docs/tutorials/web_crawl.md)
 
 ## Contributing
 
@@ -141,21 +209,3 @@ ruff check . && ruff format --check .
 ## License
 
 Licensed under the Apache License 2.0 — see [LICENSE.md](LICENSE.md).
-
-## 🚀 Setup Instructions
-
-1. Launch Ollama and pull the embedding models you want to use.
-2. Install Docker and Docker Compose if you haven't already.
-3. Clone the repository and start the server:
-
-```sh
-docker-compose up -d
-```
-
-4. Open your browser and navigate to:
-
-```text
-http://localhost:5173/
-```
-
-That's it — you're ready to experiment!

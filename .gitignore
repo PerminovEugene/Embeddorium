@@ -46,3 +46,4 @@ xml.2026.en/
 sources
 tmp
 .DS_Store
+.claude/commit-context.md

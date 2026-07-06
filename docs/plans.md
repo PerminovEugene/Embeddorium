@@ -1,14 +1,9 @@
 A. Dataset / ingestion
-Dataset versioning
-Один и тот же набор документов фиксируется как версия: dataset_v1, dataset_v2. Потом можно честно сравнивать пайплайны на одинаковом корпусе.
-Document groups / collections
-Группы типа knowledge-base-a, stripe-docs, my-project-docs. Это база для экспериментов и ACL.
-Source adapters
-Поддержка разных источников: URL crawl, sitemap, локальные PDF/XML/HTML/Markdown, GitHub repo, npm package docs, raw text paste.
+
 Crawl policy presets
 Настройки глубины, allowed domains, deny patterns, max pages, content-type filter, canonical URL normalization.
 Raw artifact storage
-Сохранять raw HTML/PDF/XML отдельно от parsed text. Потом можно перепарсить документ новым парсером без повторного crawling.
+
 Parser comparison mode
 Один документ прогнать через разные парсеры: naive HTML text, Readability, markdown extraction, PDF text parser, OCR fallback.
 Boilerplate removal toggle

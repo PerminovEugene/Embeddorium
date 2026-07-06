@@ -23,7 +23,7 @@ os.environ.setdefault("POSTGRES_DB", "test")
 os.environ.setdefault("RABBITMQ_USER", "test")
 os.environ.setdefault("RABBITMQ_PASSWORD", "test")
 
-from backend.server.pipeline_launch import _seed_local  # noqa: E402
+from backend.server.pipeline.launch import _seed_local  # noqa: E402
 from backend.shared.clients.queue.queue_names import (  # noqa: E402
     FETCH_FILE_SOURCE_ACTOR,
     FETCH_FILE_SOURCE_QUEUE,
@@ -179,7 +179,7 @@ def test_non_xml_non_directory_path_logs_warning_and_skips(tmp_path: Path) -> No
 
     broker = _make_broker()
     dataset = {"name": "g", "paths": [bogus]}
-    with patch("backend.server.pipeline_launch.logger") as mock_logger:
+    with patch("backend.server.pipeline.launch.logger") as mock_logger:
         count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
 
     assert count == 0

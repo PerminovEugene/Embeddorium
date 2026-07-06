@@ -16,15 +16,37 @@ than duplicating it:
 
 ## Layout
 
-| File                   | Purpose                                                        |
-| ---------------------- | ------------------------------------------------------------- |
-| `main.py`              | FastAPI app + `/compare`, `/pipeline-runs`, `/search`, `/health`|
-| `models.py`            | Pydantic request models (`CompareRequest`, `SearchRequest`)   |
-| `embedder.py`          | Embeddings via `OllamaEmbedClient`                            |
-| `vector_store_utils.py`| Qdrant upsert via `VectorStore`                              |
-| `matcher.py`           | Similarity metrics + pairwise scoring                         |
-| `pipeline_runs.py`     | Lists/loads ingestion pipeline runs from Postgres             |
-| `db_search.py`         | Nearest-vector search over a run's collection + Postgres join |
+The server is organized **component-first**: each feature owns its own
+router, schemas and logic in one folder, rather than being split across
+top-level `routers/`/`schemas/`/`services/` layers.
+
+| Path                       | Purpose                                                        |
+| -------------------------- | --------------------------------------------------------------- |
+| `main.py`                  | App assembly only: `FastAPI()`, CORS, `include_router` per component, `/health` |
+| `compare/router.py`        | `/compare` handler + provider resolution                      |
+| `compare/schemas.py`       | `CompareRequest` (+ `TextGroup`/`TextItem`)                    |
+| `compare/embedder.py`      | Embeddings via `OllamaEmbedClient` (also used by `search/`)    |
+| `compare/matcher.py`       | Similarity metrics + pairwise scoring                          |
+| `compare/vector_store.py`  | Qdrant upsert via `VectorStore`                                |
+| `search/router.py`         | `/search` handler                                              |
+| `search/schemas.py`        | `SearchRequest` (+ `TextGroup`/`TextItem`)                     |
+| `search/service.py`        | Nearest-vector search over a run's collection + Postgres join  |
+| `pipeline/router.py`       | `/pipeline-runs` CRUD + launch endpoints                       |
+| `pipeline/schemas.py`      | camelCase `PipelineRun*` API schemas                           |
+| `pipeline/launch.py`       | Seeds the ingestion pipeline from a created run                |
+| `pipeline/runs.py`         | Lists/loads ingestion pipeline runs from Postgres              |
+| `providers/router.py`      | `/providers` CRUD endpoints                                    |
+| `providers/schemas.py`     | camelCase `Provider*` API schemas                              |
+| `datasets/router.py`       | `/datasets` CRUD endpoints                                     |
+| `datasets/schemas.py`      | camelCase `Dataset*` API schemas                                |
+| `chunkers/router.py`       | `/chunkers` read-only metadata endpoint                        |
+| `chunkers/schemas.py`      | camelCase `ChunkerConfig*` API schemas                          |
+| `source_files/router.py`   | `/source-files` browse endpoint                                |
+| `source_files/source_root.py` | Resolve/guard paths against the ingestion source root       |
+
+`compare/embedder.py` is the one function shared across components:
+`search/service.py` imports `get_embeddings` from it rather than duplicating
+it, so both `/compare` and `/search` embed text identically.
 
 ## Running with Docker (recommended)
 

@@ -4,7 +4,7 @@ The actors read local files from a single directory tree that is mounted into
 their containers (``./sources -> /app/sources`` in docker-compose). The UI lets
 the user browse and pick files/folders *inside* that tree, and stores the
 selection as paths **relative to the source root**. Both the browse endpoint
-(``source_files_routes``) and the pipeline seeder (``pipeline_launch``) resolve
+(``source_files.router``) and the pipeline seeder (``pipeline.launch``) resolve
 those relative paths back to real files through this module so the server and
 the actors agree on one anchor.
 

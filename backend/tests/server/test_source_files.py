@@ -21,8 +21,8 @@ os.environ.setdefault("RABBITMQ_PASSWORD", "test")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from backend.server import source_root  # noqa: E402
-from backend.server.source_files_routes import router  # noqa: E402
+from backend.server.source_files import source_root  # noqa: E402
+from backend.server.source_files.router import router  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 
 

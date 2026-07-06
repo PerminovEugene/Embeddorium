@@ -15,7 +15,7 @@ from typing import List
 from fastapi import APIRouter
 
 from backend.plugins.chunkers.registry import list_chunker_configs
-from backend.server.chunker_schemas import ChunkerConfigOut, chunker_config_to_out
+from backend.server.chunkers.schemas import ChunkerConfigOut, chunker_config_to_out
 
 router = APIRouter(prefix="/chunkers", tags=["chunkers"])
 

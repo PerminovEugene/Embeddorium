@@ -22,7 +22,7 @@ from typing import List
 
 import dramatiq
 
-from backend.server.source_root import resolve_for_seed
+from backend.server.source_files.source_root import resolve_for_seed
 from backend.shared.clients.queue.process_file_payload import ProcessFileSourcePayload
 from backend.shared.clients.queue.process_link_payload import ProcessLinkSourcePayload
 from backend.shared.clients.queue.queue_client import QueueClient

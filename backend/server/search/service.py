@@ -27,11 +27,11 @@ import logging
 import uuid
 from typing import List, Optional
 
-from backend.server.embedder import get_embeddings
+from backend.server.compare.embedder import get_embeddings
+from backend.server.pipeline.runs import get_pipeline_run
 from backend.shared import config
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
-from backend.server.pipeline_runs import get_pipeline_run
 
 TOP_K = 10
 

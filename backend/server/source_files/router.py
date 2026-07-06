@@ -18,7 +18,10 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from backend.server.source_root import get_source_root, safe_resolve_within_root
+from backend.server.source_files.source_root import (
+    get_source_root,
+    safe_resolve_within_root,
+)
 
 router = APIRouter(prefix="/source-files", tags=["source-files"])
 
