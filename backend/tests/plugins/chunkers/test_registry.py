@@ -16,6 +16,8 @@ _BUILTIN_NAMES = {
     "text_section",
     "text_recursive",
     "text_fixed",
+    "text_sentence",
+    "text_sliding_window",
     "legal_xml",
 }
 

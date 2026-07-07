@@ -9,8 +9,9 @@ ChunkerConfig`) describing it.
 
 See ``base.py`` for the plugin interface and ``registry.py`` for discovery.
 The built-in chunkers (``text_markdown``, ``text_section``,
-``text_recursive``, ``text_fixed``, ``legal_xml``) live alongside this file
-as the reference implementations.
+``text_recursive``, ``text_fixed``, ``text_sentence``,
+``text_sliding_window``, ``legal_xml``) live alongside this file as the
+reference implementations.
 """
 
 from __future__ import annotations

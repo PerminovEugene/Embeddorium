@@ -1,10 +1,10 @@
 """Shared ``chunk_size``/``chunk_overlap`` field declaration.
 
-The three size-based text chunkers (``text_markdown``, ``text_recursive``,
-``text_fixed``) all expose the same pair of UI-configurable numbers with the
-same keys, so their :class:`~backend.plugins.chunkers.base.ChunkerConfig`
-declarations share this helper instead of repeating the boilerplate three
-times.
+The size-based text chunkers (``text_markdown``, ``text_recursive``,
+``text_fixed``, ``text_sentence``) all expose the same pair of
+UI-configurable numbers with the same keys, so their
+:class:`~backend.plugins.chunkers.base.ChunkerConfig` declarations share this
+helper instead of repeating the boilerplate.
 """
 
 from __future__ import annotations
