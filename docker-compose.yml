@@ -9,8 +9,30 @@ services:
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
 
+  # Built (not `image: postgres:16`) to get the pg_textsearch extension used
+  # by the BM25 chunk-search index (migration
+  # 025_add_chunk_bm25_search.sql) — see infra/postgres/README.md.
+  #
+  # IMPORTANT — major-version upgrade / volume caveat: this moves Postgres
+  # from 16 to 17, and the `postgres_data` volume was initialized under 16.
+  # Postgres does NOT support starting a newer major version's server binary
+  # against an older major version's on-disk data directory — the container
+  # will fail to start against an existing `postgres_data` volume. This is a
+  # required *operator* action, not something this change automates: either
+  # `pg_dump`/`pg_restore` (or `pg_dumpall`) the old volume's data into a
+  # fresh 17 volume, or run `pg_upgrade` between the old and new data
+  # directories, before bringing this service up in any environment that has
+  # a pre-existing `postgres_data` volume. A brand-new environment (no prior
+  # volume) is unaffected and just initializes fresh under 17.
   postgres:
-    image: postgres:16
+    build:
+      context: ./infra/postgres
+    # shared_preload_libraries must be set before the server starts — it
+    # cannot be applied later via CREATE EXTENSION or ALTER SYSTEM + reload,
+    # only via a full server restart with this in place. Overriding
+    # `command:` here (rather than adding/mounting a postgresql.conf) is the
+    # simplest way to guarantee it's always applied to this service.
+    command: postgres -c shared_preload_libraries=pg_textsearch
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
