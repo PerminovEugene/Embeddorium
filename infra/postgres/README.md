@@ -1,7 +1,7 @@
 # Postgres infra
 
 The `postgres` service in `docker-compose.yml` builds `infra/postgres/Dockerfile`
-instead of running the stock `postgres:16` image, in order to get the
+instead of running the stock `postgres:17` image, in order to get the
 [`pg_textsearch`](https://www.pedroalonso.net/blog/postgres-bm25-search/)
 extension, which provides BM25 full-text search (a `bm25` index access method
 plus the `<@>` operator). This backs the `document_chunks.text` BM25 index
@@ -14,12 +14,13 @@ created in migration `025_add_chunk_bm25_search.sql` and queried by
 with Postgres 16. `infra/postgres/Dockerfile` builds `FROM postgres:17` and
 installs the extension.
 
-**The exact install steps in `infra/postgres/Dockerfile` are unverified** —
-they were written without web access and are marked with
-`# TODO(verify):` comments. Before relying on this build in any real
-environment, confirm the real package name / install method against the
-[pg_textsearch](https://www.pedroalonso.net/blog/postgres-bm25-search/)
-project itself.
+There is no apt package for `pg_textsearch`, so the Dockerfile builds it from
+source (it is a plain-C pgxs extension — no Rust/pgrx, no submodules) against
+the `postgresql-server-dev-17` headers, pinned to tag `v1.3.1` via the
+`PG_TEXTSEARCH_REF` build arg. The build toolchain is purged in the same layer
+so the published image keeps only the runtime plus the compiled extension.
+Override the version with `--build-arg PG_TEXTSEARCH_REF=...` (it must support
+the Postgres major version of the base image).
 
 ## `shared_preload_libraries` requirement
 

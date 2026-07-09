@@ -2,34 +2,43 @@
 # used for the document_chunks.text index created in migration
 # 025_add_chunk_bm25_search.sql.
 #
-# ---------------------------------------------------------------------------
-# UNVERIFIED INSTALL METHOD — no web access was available while writing this
-# Dockerfile, so the install steps below could not be checked against the
-# real pg_textsearch packaging/release artifacts. Before relying on this in
-# any environment, confirm against the authoritative sources:
-#   * https://www.pedroalonso.net/blog/postgres-bm25-search/
-#   * the pg_textsearch project itself (TigerData/Timescale) — check its repo
-#     for the current release process, supported Postgres major versions
-#     (this Dockerfile assumes 17; 18 is the other option called out in the
-#     article), and whether it ships as a `.deb`/apt repo, a prebuilt
-#     `.so` release archive, or requires building from source with
-#     `pgxs`/`cargo pgrx` (pg_textsearch, like pgvectorscale, may be a
-#     Rust/pgrx extension rather than a plain C extension).
-# ---------------------------------------------------------------------------
+# pg_textsearch (https://github.com/timescale/pg_textsearch) is a plain C
+# PostgreSQL extension (pgxs Makefile — no Rust/pgrx, no submodules) that
+# supports Postgres 17 and 18 only. There is no apt package, so it is built
+# from source against the matching server dev headers and installed into the
+# image's PostgreSQL extension directories.
+#
+# It provides the `bm25` index access method and the `<@>` scoring operator
+# (see ChunkRepository.search_bm25). Remember the two runtime prerequisites
+# that live outside this file:
+#   * `shared_preload_libraries = 'pg_textsearch'` before the server starts
+#     (set via `command:` in docker-compose.yml).
+#   * `CREATE EXTENSION pg_textsearch;` once per database (migration 025).
 
 FROM postgres:17
 
-# TODO(verify): the package name, repository/channel, and install mechanism
-# below are best-effort placeholders, not confirmed working steps. Replace
-# this block with whatever TigerData's own install instructions specify
-# (this may be `apt-get install postgresql-17-pg-textsearch` from a
-# TigerData apt repo, a `cargo pgrx package` build, or a release tarball
-# copied into the Postgres extension directories — pick whichever the
-# upstream project documents once verified).
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+# Pin the extension to a released tag for reproducible builds. Override with
+# `--build-arg PG_TEXTSEARCH_REF=...` if you need a different version; it must
+# support the Postgres major version of the FROM image above.
+ARG PG_TEXTSEARCH_REF=v1.3.1
+
+# Build from source, then purge the build toolchain in the same layer so the
+# published image keeps only the runtime + the compiled extension (.so, .control
+# and SQL files land in the base image's PostgreSQL extension dirs).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
         ca-certificates \
-        curl \
-    # TODO(verify): replace with the real pg_textsearch package/install step.
-    && echo "TODO(verify): install pg_textsearch for PG17 here" \
-    && rm -rf /var/lib/apt/lists/*
+        postgresql-server-dev-17; \
+    git clone --depth 1 --branch "${PG_TEXTSEARCH_REF}" \
+        https://github.com/timescale/pg_textsearch.git /tmp/pg_textsearch; \
+    make -C /tmp/pg_textsearch; \
+    make -C /tmp/pg_textsearch install; \
+    rm -rf /tmp/pg_textsearch; \
+    apt-get purge -y --auto-remove \
+        build-essential \
+        git \
+        postgresql-server-dev-17; \
+    rm -rf /var/lib/apt/lists/*
