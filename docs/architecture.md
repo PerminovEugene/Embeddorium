@@ -145,6 +145,7 @@ the source tree, and run under `dramatiq --watch`, so they reload on any change.
 | `postgres` | Relational store |
 | `qdrant` | Vector store (dashboard at `/dashboard`) |
 | `rabbitmq` | Message broker (+ management UI) |
+| `migrate` | One-shot: applies SQL migrations before workers start |
 | `worker-crawl-frontier-manager` | Dedup gate / frontier |
 | `worker-fetch-source` | Fetch web sources |
 | `worker-parse-source` | Parse into normalized text |
@@ -154,6 +155,7 @@ the source tree, and run under `dramatiq --watch`, so they reload on any change.
 | `worker-fetch-file-source` | Read local XML files |
 | `worker-filter-documents` | Keyword relevance gate |
 | `worker-embed-chunks` | Embed chunks → Qdrant |
+| `worker-track-pipeline-status` | Flip runs to `completed` when all work is done |
 | `worker-outbox-dispatcher` | Publish outbox events → RabbitMQ |
 | `server` | FastAPI API + embeddings tester backend |
 | `ui` | React/Vite front end |

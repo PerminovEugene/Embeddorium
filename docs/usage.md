@@ -1,8 +1,8 @@
 # Usage
 
-This covers the day-to-day: kicking off an ingestion run, querying with the
-agent, and using the embeddings tester. For first-time setup see the
-[Quick start](../README.md#quick-start) in the README.
+This covers the day-to-day: kicking off an ingestion run, searching the
+result, querying with the agent, and using the embeddings tester. For
+first-time setup see the [Quick start](../README.md#quick-start) in the README.
 
 ## Start a pipeline run
 
@@ -56,6 +56,14 @@ two services that need it:
 `*.xml` files from a dataset's configured paths when it publishes the seed
 messages.
 
+## Search a completed run
+
+Once a run is `completed`, query its vectors from the UI home page (source
+mode **Select pipeline results**) or via `POST /search`. Search is run-scoped:
+the run's snapshot supplies the collection and the embedding model, so queries
+are always embedded the way the collection was indexed. Full guide:
+[search.md](search.md).
+
 ## The LangGraph agent (optional)
 
 The agent answers questions against the knowledge base you've built, through the
@@ -81,9 +89,12 @@ The provider can also come from `LLM_PROVIDER` in `.env` instead of the CLI arg.
 
 ## Embeddings tester
 
-A small web tool for eyeballing how an embedding model scores text against text:
-enter source and candidate texts, pick one or more Ollama models and similarity
-metrics, and get back a ranked table of every source/candidate pair. It reuses
+The **Manual input** mode of the UI home page: a small tool for eyeballing how
+an embedding model scores text against text. Enter source and candidate texts,
+pick one or more Ollama models and similarity metrics, and get back a ranked
+table of every source/candidate pair. (The other mode, **Select pipeline
+results**, searches a run's collection instead — see [search.md](search.md).)
+It reuses
 the pipeline's own `VectorStore` and embed client, so it stores vectors exactly
 like ingestion does.
 

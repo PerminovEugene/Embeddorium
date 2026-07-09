@@ -95,11 +95,11 @@ docker compose exec worker-embed-chunks curl -s http://host.docker.internal:1143
 
 - **Ollama on the host (Docker Desktop):** use
   `OLLAMA_EMBED_BASE_URL=http://host.docker.internal:11434`.
-- **Ollama as the Compose service:** `docker compose --profile ollama up -d
-  ollama` and use `http://ollama:11434`.
 - **Linux without Docker Desktop:** use the bridge IP (e.g.
   `http://172.17.0.1:11434`) or add
   `extra_hosts: ["host.docker.internal:host-gateway"]`.
+- **Ollama in your own container:** attach it to the project's Compose network
+  and use its container name (e.g. `http://ollama:11434`).
 
 Full matrix in [embeddings.md](embeddings.md#pointing-a-container-at-ollama).
 
@@ -109,9 +109,8 @@ Ollama returns a "model not found" error during embedding. Pull the model on
 whichever host runs Ollama, and make sure the provider's model name matches.
 
 ```sh
-ollama pull qwen3-embedding                      # host Ollama
-docker compose exec ollama ollama pull qwen3-embedding   # Compose service
-ollama list                                      # confirm it's there
+ollama pull qwen3-embedding   # on whichever host/container runs Ollama
+ollama list                   # confirm it's there
 ```
 
 ## The UI can't reach the API

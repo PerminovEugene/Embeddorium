@@ -40,8 +40,9 @@ The server and workers need RabbitMQ credentials.
 
 ## Embeddings
 
-Selects how chunk vectors are produced. See [embeddings.md](embeddings.md) for
-the full rundown of each provider and the Ollama networking details.
+Fallbacks for how chunk vectors are produced — each run normally carries its
+own provider snapshot, which takes precedence. See [embeddings.md](embeddings.md)
+for the full rundown of each provider and the Ollama networking details.
 
 | Variable | Required | Default | Description |
 | -------- | -------- | ------- | ----------- |

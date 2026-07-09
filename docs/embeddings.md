@@ -1,8 +1,12 @@
 # Embedding providers
 
 The embed stage (`worker-embed-chunks`) runs in Docker like every other stage.
-Which provider it uses is set by `EMBED_PROVIDER` in `.env.docker`. There are
-three, trading off speed against realism.
+Which provider it uses comes from the **provider record you select for each
+run** — the run stores a snapshot of it, and the worker reads that snapshot.
+The `EMBED_PROVIDER` / `OLLAMA_EMBED_*` variables in `.env.docker` are only the
+fallback for runs that carry no provider snapshot.
+
+There are three provider types, trading off speed against realism.
 
 ## `mock` — fast, meaningless vectors
 
@@ -42,20 +46,6 @@ ollama pull qwen3-embedding
 `worker-embed-chunks` container. `http://localhost:11434` will not work there —
 each container has its own loopback, separate from the host's.
 
-**Ollama as a Compose service.** The `docker-compose.yml` defines an optional
-`ollama` service (profile `ollama`, not started by a plain `docker compose up`).
-Start it and use the service name as the host:
-
-```sh
-docker compose --profile ollama up -d ollama
-docker compose exec ollama ollama pull qwen3-embedding
-```
-
-```sh
-# .env.docker
-OLLAMA_EMBED_BASE_URL=http://ollama:11434
-```
-
 **Ollama on the host** (e.g. natively on a Mac, for Metal acceleration). Pull the
 model on the host, then point the container at the host's special DNS name:
 
@@ -71,6 +61,10 @@ OLLAMA_EMBED_BASE_URL=http://host.docker.internal:11434
 On Linux without Docker Desktop, use the Docker bridge IP (e.g.
 `http://172.17.0.1:11434`) or add
 `extra_hosts: ["host.docker.internal:host-gateway"]` to the service.
+
+**Ollama in your own container.** If you run Ollama in Docker yourself, attach
+it to this project's Compose network and use its container name as the host in
+`OLLAMA_EMBED_BASE_URL` (e.g. `http://ollama:11434`).
 
 ## `huggingface` — real local model
 

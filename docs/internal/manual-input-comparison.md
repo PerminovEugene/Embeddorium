@@ -1,6 +1,6 @@
 # Embedorium
 
-![UI Screenshot](./screenshots/table.png)
+![UI Screenshot](../screenshots/table.png)
 
 ## ✨ Similarity List
 
@@ -20,5 +20,5 @@
 
 ## 🖼 More Screenshots
 
-![UI Screenshot](./screenshots/config.png)
-![UI Screenshot](./screenshots/sources.png)
+![UI Screenshot](../screenshots/config.png)
+![UI Screenshot](../screenshots/sources.png)

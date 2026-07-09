@@ -212,10 +212,12 @@ chunkers, and `backend/tests/server/test_chunkers_routes.py` for the
 
 ## Built-in chunkers
 
-| Name             | What it does                                                              | Configurable fields                     |
-| ---------------- | -------------------------------------------------------------------------- | ---------------------------------------- |
-| `text_markdown`  | Size-based split along markdown-aware boundaries. **Default.**             | `chunk_size`, `chunk_overlap`            |
-| `text_section`   | Splits on `#`/`##`/`###` headers; falls back to paragraphs if none exist.  | — |
-| `text_recursive` | Recursively tries paragraph/line/word/character separators to hit a size target. | `chunk_size`, `chunk_overlap`      |
-| `text_fixed`     | Fixed-size character chunks, no structure awareness.                       | `chunk_size`, `chunk_overlap`            |
-| `legal_xml`      | One chunk per `§` for Estonian Juurakt-format act XML; falls back to `text_markdown` for non-act content. | `target_tokens`, `max_tokens`, `min_tokens` |
+| Name                  | What it does                                                              | Configurable fields                     |
+| --------------------- | -------------------------------------------------------------------------- | ---------------------------------------- |
+| `text_markdown`       | Size-based split along markdown-aware boundaries. **Default.**             | `chunk_size`, `chunk_overlap`            |
+| `text_section`        | Splits on `#`/`##`/`###` headers; falls back to paragraphs if none exist.  | — |
+| `text_recursive`      | Recursively tries paragraph/line/word/character separators to hit a size target. | `chunk_size`, `chunk_overlap`      |
+| `text_fixed`          | Fixed-size character chunks, no structure awareness.                       | `chunk_size`, `chunk_overlap`            |
+| `text_sentence`       | Packs whole sentences into chunks up to the target size — never cuts a sentence in half. | `chunk_size`, `chunk_overlap` |
+| `text_sliding_window` | Overlapping windows of whole words; the window advances by `step_size` words. | `window_size`, `step_size`            |
+| `legal_xml`           | One chunk per `§` for Estonian Juurakt-format act XML; falls back to `text_markdown` for non-act content. | `target_tokens`, `max_tokens`, `min_tokens` |

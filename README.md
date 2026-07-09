@@ -37,6 +37,8 @@ data anywhere.
   metadata, per-URL logs, and the resulting **Qdrant collection**.
 - Use a **`mock` provider** for instant end-to-end demos, or **Ollama** for real
   local embeddings.
+- **Search** a completed run's collection from the UI or the API — queries are
+  embedded with the same model the run used ([docs/search.md](docs/search.md)).
 - Add custom **chunking strategies** as auto-discovered plugins — no core code to
   touch ([docs/plugins.md](docs/plugins.md)).
 - Test **embedding similarity** between texts in the browser with the embeddings
@@ -68,7 +70,7 @@ run in seconds without any model. You'll need **Docker** (Compose v2) and
 
 ```sh
 # 1. Clone
-git clone <repo-url> embeddorium && cd embeddorium
+git clone https://github.com/PerminovEugene/web-knoweladge-indexer.git embeddorium && cd embeddorium
 
 # 2. Create the env file (Compose reads it for Postgres/RabbitMQ credentials).
 #    Defaults work out of the box.
@@ -117,7 +119,7 @@ Ollama listens on) and select it for a run.
 
 > **Docker networking:** the embed worker runs in a container, so `localhost`
 > won't reach Ollama on your host. Use `host.docker.internal` (Docker Desktop) or
-> run Ollama as the `ollama` Compose service. Details in
+> the Docker bridge IP on Linux. Details in
 > [docs/embeddings.md](docs/embeddings.md).
 
 ## Architecture
@@ -182,6 +184,7 @@ docker-compose.yml
 | ----- | -------- |
 | [Quick start](docs/quickstart.md) | Detailed first run, service URLs, reset, common failures |
 | [Usage](docs/usage.md) | Starting runs, local XML sources, the agent, the embeddings tester |
+| [Search](docs/search.md) | Querying a run's collection from the UI and the API |
 | [Architecture](docs/architecture.md) | Pipeline stages, outbox, status machine, storage model |
 | [Configuration](docs/configuration.md) | Every environment variable, for host and Docker |
 | [Embeddings](docs/embeddings.md) | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
@@ -189,6 +192,7 @@ docker-compose.yml
 | [Plugins](docs/plugins.md) | Writing your own chunker plugin, auto-discovery, the built-ins |
 | [Development](docs/development.md) | Setup, tests, linting, migrations, resetting local state |
 | [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs |
+| [Roadmap](docs/roadmap.md) | What's shipped, what's next (hybrid search, reranking, evaluation) |
 
 **Tutorials:**
 [First mock run](docs/tutorials/first_mock_run.md) ·

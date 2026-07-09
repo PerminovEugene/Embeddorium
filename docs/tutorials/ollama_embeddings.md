@@ -34,12 +34,8 @@ The embed worker runs in a container, so `http://localhost:11434` points at the
 OLLAMA_EMBED_BASE_URL=http://host.docker.internal:11434
 ```
 
-**B. Ollama as a Compose service** (optional `ollama` profile, GPU/CPU in Docker):
-
-```sh
-docker compose --profile ollama up -d ollama
-docker compose exec ollama ollama pull qwen3-embedding
-```
+**B. Ollama in your own Docker container.** Attach it to this project's Compose
+network and use its container name as the host:
 
 ```sh
 # .env.docker
@@ -99,7 +95,7 @@ random ones.
   loads the model into Ollama. Expect seconds-to-minutes depending on model size,
   hardware, and chunk count.
 - On Apple Silicon, running Ollama **natively on the host** (option A) uses Metal
-  acceleration; the in-container `ollama` service (option B) may be CPU-only.
+  acceleration; Ollama inside a container (option B) may be CPU-only.
 - Larger models produce higher-dimensional vectors — more storage and slower
   similarity search in Qdrant.
 
