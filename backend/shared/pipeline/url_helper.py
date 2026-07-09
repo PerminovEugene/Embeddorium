@@ -1,6 +1,13 @@
+"""URL normalization / origin helpers shared by the ingestion pipeline.
+
+Moved here from the old crawl_frontier_manager actor so both the
+``validate_source`` web strategy plugin and other actors (e.g.
+``chunk_document``) can use them without importing an actor package.
+"""
+
 from urllib.parse import urlparse, urlunparse
 
-from backend.shared.clients.queue.process_link_payload import ProcessLinkSourcePayload
+from backend.shared.clients.queue.validate_source_payload import ValidateSourcePayload
 from backend.shared.storage.sql.sql_store import SqlStore
 
 
@@ -31,7 +38,7 @@ def get_origin(url: str) -> str:
 
 
 def is_allowed_url(
-    *, payload: ProcessLinkSourcePayload, normalized_url: str, store: SqlStore
+    *, payload: ValidateSourcePayload, normalized_url: str, store: SqlStore
 ) -> bool:
     if payload.parent_document_id is None:
         return True
@@ -41,4 +48,3 @@ def is_allowed_url(
         return False
 
     return get_origin(parent_document.source_url) == get_origin(normalized_url)
-

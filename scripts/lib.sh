@@ -20,13 +20,12 @@ fi
 
 # The pipeline workers (everything started by `docker compose up` except infra).
 WORKERS=(
-  worker-crawl-frontier-manager
+  worker-validate-source
   worker-fetch-source
   worker-parse-source
   worker-chunk-document
   worker-schedule-embeddings
   worker-schedule-links
-  worker-fetch-file-source
   worker-filter-documents
   worker-embed-chunks
   worker-outbox-dispatcher

@@ -7,9 +7,7 @@ from backend.shared.models.discovered_link import DiscoveredLink, DiscoveredLink
 from backend.shared.models.outbox_event import OutboxEvent, OutboxStatus
 from backend.shared.models.pipeline_run import (
     ChunkDocumentSettings,
-    CrawlFrontierManagerSettings,
     EmbedChunksSettings,
-    FetchFileSourceSettings,
     FetchSourceSettings,
     FilterDocumentsSettings,
     ParseSourceSettings,
@@ -17,6 +15,7 @@ from backend.shared.models.pipeline_run import (
     PipelineRun,
     ScheduleDiscoveredLinksSettings,
     ScheduleEmbeddingsSettings,
+    ValidateSourceSettings,
     VectorStoreSettings,
 )
 from backend.shared.models.provider import (
@@ -53,10 +52,9 @@ __all__ = [
     "VectorStoreSettings",
     "ParseSourceSettings",
     "ScheduleEmbeddingsSettings",
-    "CrawlFrontierManagerSettings",
+    "ValidateSourceSettings",
     "FetchSourceSettings",
     "ScheduleDiscoveredLinksSettings",
-    "FetchFileSourceSettings",
     "FilterDocumentsSettings",
     "Provider",
     "OllamaProvider",

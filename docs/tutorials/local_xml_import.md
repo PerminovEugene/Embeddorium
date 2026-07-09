@@ -13,12 +13,13 @@ rejoins the shared pipeline at `parse_source`. Architecture:
 ## Step 1 — Put files under the source root
 
 Local files must live in the repo's **`sources/`** directory. It's bind-mounted
-into the two services that need it — the file worker and the API — at
-`/app/sources`:
+into the services that need it — the validation and fetch workers and the API —
+at `/app/sources`:
 
 | Service | Host path | Container path |
 | ------- | --------- | -------------- |
-| `worker-fetch-file-source` | `./sources` | `/app/sources` |
+| `worker-validate-source` | `./sources` | `/app/sources` |
+| `worker-fetch-source` | `./sources` | `/app/sources` |
 | `server` | `./sources` | `/app/sources` |
 
 `sources/` is gitignored. Drop your XML in there, e.g.:
@@ -56,8 +57,9 @@ curl -s -X POST http://localhost:8000/datasets \
 [mock provider](first_mock_run.md#step-4--create-a-mock-provider) is fine for a
 first pass). Launch it.
 
-Internally the server publishes **one `fetch_file_source` message per file**. Each
-file is read, stored as a `SourceFetch`, optionally keyword-filtered
+Internally the server publishes **one `validate_source` message per file**. Each
+file is validated (exists + readable), read by `fetch_source`'s local-file
+strategy, stored as a `SourceFetch`, optionally keyword-filtered
 (`filter_documents`), then parsed, chunked, embedded, and stored — identical to
 the crawl path from `parse_source` onward.
 

@@ -45,16 +45,17 @@ up (`docker compose up -d`).
 
 Local legal-act XML dumps (for example the Estonian `xml.2026.en/` export) live
 in the gitignored `sources/` folder at the repo root. It's bind-mounted into the
-two services that need it:
+services that need it:
 
 | Service | Host path | Container path |
 | ------- | --------- | -------------- |
-| `worker-fetch-file-source` | `./sources` | `/app/sources` |
+| `worker-validate-source` | `./sources` | `/app/sources` |
+| `worker-fetch-source` | `./sources` | `/app/sources` |
 | `server` | `./sources` | `/app/sources` |
 
-`worker-fetch-file-source` reads each `.xml` file; the server enumerates the
-`*.xml` files from a dataset's configured paths when it publishes the seed
-messages.
+`worker-validate-source` checks that each `.xml` file exists and is readable,
+`worker-fetch-source` reads its content, and the server enumerates the `*.xml`
+files from a dataset's configured paths when it publishes the seed messages.
 
 ## Search a completed run
 

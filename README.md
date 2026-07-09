@@ -126,16 +126,21 @@ Ollama listens on) and select it for a run.
 
 Ingestion is a chain of single-purpose [Dramatiq](https://dramatiq.io/) actors,
 one per stage. There are two ways in — a **web crawler** and a **local XML
-importer** — that converge on the same downstream stages.
+importer** — that share one chain: the `validate_source` and `fetch_source`
+stages pick a per-source-type strategy plugin (web vs local file), and
+everything downstream is identical.
 
 ```
 POST /pipeline-runs
       │
       ▼
-crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► embed_chunks ─► Qdrant
-                                              ▲                                                          │
-   fetch_file_source ─► filter_documents ─────┘                                          track_pipeline_status
+validate_source ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► embed_chunks ─► Qdrant
+                        │               ▲                                                        │
+                        └─ (local) ─► filter_documents                          track_pipeline_status
 ```
+
+(A local-file target detours through `filter_documents` between fetch and
+parse; web targets go straight to `parse_source`.)
 
 - **Why separate stages?** Each stage does one thing and records its result, so
   when retrieval is off you can pinpoint the stage that produced the bad output.

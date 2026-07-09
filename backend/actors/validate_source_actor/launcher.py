@@ -1,9 +1,10 @@
-"""Dramatiq actor launcher for the Crawl Frontier Manager worker.
+"""Dramatiq actor launcher for the Source Validator worker.
 
 Sets up logging, the RabbitMQ broker, and the SQL store, then exposes the
-``manage_crawl_frontier`` actor: it consumes crawl-frontier messages, normalizes
-the URL, skips already-queued or disallowed URLs, persists a ``CrawlTarget``,
-and enqueues a fetch-source message for the new target.
+``validate_source`` actor: it consumes validation messages from both chains
+(web seed/discovered-link URLs and local file paths), applies the
+per-source-type validation strategy, persists a ``CrawlTarget`` and enqueues
+a fetch-source message for the new target.
 """
 
 import logging
@@ -11,11 +12,11 @@ from typing import Optional
 
 import dramatiq
 
-from backend.actors.crawl_frontier_manager_actor.handler import handle
+from backend.actors.validate_source_actor.handler import handle
 from backend.shared.clients.queue.queue_client import QueueClient
 from backend.shared.clients.queue.queue_names import (
-    CRAWL_FRONTIER_MANAGER_ACTOR,
-    CRAWL_FRONTIER_MANAGER_QUEUE,
+    VALIDATE_SOURCE_ACTOR,
+    VALIDATE_SOURCE_QUEUE,
 )
 from backend.shared.logging_config import configure_logging
 from backend.shared.storage.sql.core.engine import SqlPoolConfig
@@ -25,33 +26,31 @@ configure_logging()
 
 logger = logging.getLogger(__name__)
 
-logger.info("setup broker")
-rabbitmq_broker = QueueClient().create("crawl_frontier_manager")
+rabbitmq_broker = QueueClient().create("validate_source")
 dramatiq.set_broker(rabbitmq_broker)
-logger.info("setup broker done broker=%s", rabbitmq_broker)
 
 # pool_size=2, max_overflow=3: dramatiq gives this worker its own concurrency
 # via processes/threads, so the pool only needs to satisfy one process's
 # threads, not the whole worker. See SqlPoolConfig for the full reasoning.
 sql_store = SqlStore(
     pool_config=SqlPoolConfig(pool_size=2, max_overflow=3),
-    application_name=CRAWL_FRONTIER_MANAGER_ACTOR,
+    application_name=VALIDATE_SOURCE_ACTOR,
 )
 
 
 @dramatiq.actor(
-    queue_name=CRAWL_FRONTIER_MANAGER_QUEUE,
-    actor_name=CRAWL_FRONTIER_MANAGER_ACTOR,
+    queue_name=VALIDATE_SOURCE_QUEUE,
+    actor_name=VALIDATE_SOURCE_ACTOR,
     max_retries=3,
 )
-def manage_crawl_frontier(
+def validate_source(
     *,
     url: str,
     parent_document_id: Optional[str] = None,
     parent_chunk_id: Optional[str] = None,
     pipeline_id: Optional[str] = None,
 ) -> None:
-    logger.info("received link url=%s pipeline_id=%s", url, pipeline_id)
+    logger.info("received source url=%s pipeline_id=%s", url, pipeline_id)
 
     handle(
         url=url,

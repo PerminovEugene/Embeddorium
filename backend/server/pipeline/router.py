@@ -52,14 +52,13 @@ from backend.server.pipeline.schemas import (
 from backend.shared.models import PipelineActorConfigs, PipelineRun
 from backend.shared.models.pipeline_run import (
     ChunkDocumentSettings,
-    CrawlFrontierManagerSettings,
     EmbedChunksSettings,
-    FetchFileSourceSettings,
     FetchSourceSettings,
     FilterDocumentsSettings,
     ParseSourceSettings,
     ScheduleDiscoveredLinksSettings,
     ScheduleEmbeddingsSettings,
+    ValidateSourceSettings,
     VectorStoreSettings,
 )
 from backend.shared.pipeline.source_files import delete_run_files
@@ -120,6 +119,35 @@ def _build_settings(
         # A malformed value (e.g. wrong type) shouldn't 500 the create; fall
         # back to defaults so the run is still created with sane config.
         return model_cls()
+
+
+def _validate_source_block(settings: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Resolve the ``validate_source`` form block, accepting legacy keys.
+
+    Older UI builds send the pre-merge ``crawl_frontier_manager`` block (and a
+    ``fetch_file_source.dedup`` toggle for local runs); map those onto the
+    merged actor's settings so existing forms keep working.
+    """
+    block = settings.get("validate_source") or settings.get(
+        "crawl_frontier_manager"
+    ) or {}
+    legacy_file = settings.get("fetch_file_source") or {}
+    if "dedup" not in block and "dedup" in legacy_file:
+        block = {**block, "dedup": legacy_file["dedup"]}
+    return block
+
+
+def _fetch_source_block(settings: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Resolve the ``fetch_source`` form block, accepting legacy keys.
+
+    Older UI builds send the local-file glob as ``fetch_file_source.glob``;
+    map it onto the merged actor's ``file_glob`` unless the new key is set.
+    """
+    block = settings.get("fetch_source") or {}
+    legacy_glob = (settings.get("fetch_file_source") or {}).get("glob")
+    if legacy_glob and "fileGlob" not in block and "file_glob" not in block:
+        block = {**block, "file_glob": legacy_glob}
+    return block
 
 
 @router.get("", response_model=List[PipelineRunOut], response_model_by_alias=True)
@@ -215,19 +243,15 @@ async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
             schedule_embeddings=_build_settings(
                 ScheduleEmbeddingsSettings, settings.get("schedule_embeddings", {})
             ),
-            crawl_frontier_manager=_build_settings(
-                CrawlFrontierManagerSettings,
-                settings.get("crawl_frontier_manager", {}),
+            validate_source=_build_settings(
+                ValidateSourceSettings, _validate_source_block(settings)
             ),
             fetch_source=_build_settings(
-                FetchSourceSettings, settings.get("fetch_source", {})
+                FetchSourceSettings, _fetch_source_block(settings)
             ),
             schedule_discovered_links=_build_settings(
                 ScheduleDiscoveredLinksSettings,
                 settings.get("schedule_discovered_links", {}),
-            ),
-            fetch_file_source=_build_settings(
-                FetchFileSourceSettings, settings.get("fetch_file_source", {})
             ),
             filter_documents=_build_settings(
                 FilterDocumentsSettings, settings.get("filter_documents", {})
@@ -283,14 +307,15 @@ async def launch_pipeline_run(run_id: str) -> PipelineRunOut:
 
         # The local-file glob is a seed-time concern (it decides which files a
         # folder path expands to), so resolve it here from the stored config.
-        try:
-            file_glob = (
-                PipelineActorConfigs.model_validate(run.actor_configs)
-                .fetch_file_source.glob
-                or "*.xml"
-            )
-        except Exception:
-            file_glob = "*.xml"
+        # Read the raw dict rather than the typed model so runs recorded
+        # before the fetch actors were merged (fetch_file_source.glob) still
+        # relaunch with their original glob.
+        raw_cfgs = run.actor_configs or {}
+        file_glob = (
+            (raw_cfgs.get("fetch_source") or {}).get("file_glob")
+            or (raw_cfgs.get("fetch_file_source") or {}).get("glob")
+            or "*.xml"
+        )
 
         # Publish seed messages — pipeline_id flows into every actor message.
         seed_pipeline(

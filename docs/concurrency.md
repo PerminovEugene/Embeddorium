@@ -26,13 +26,12 @@ host CPU count):
 
 | Container | Command | Processes × Threads |
 | --------- | ------- | ------------------- |
-| `worker-crawl-frontier-manager` | `dramatiq …crawl_frontier_manager_actor` | 1 × 1 |
+| `worker-validate-source` | `dramatiq …validate_source_actor` | 1 × 1 |
 | `worker-fetch-source` | `dramatiq …fetch_source_actor` | 1 × 1 |
 | `worker-parse-source` | `dramatiq …parse_source_actor` | 1 × 1 |
 | `worker-chunk-document` | `dramatiq …chunk_document_actor` | 1 × 1 |
 | `worker-schedule-embeddings` | `dramatiq …schedule_embeddings_actor` | 1 × 1 |
 | `worker-schedule-links` | `dramatiq …schedule_discovered_links_actor` | 1 × 1 |
-| `worker-fetch-file-source` | `dramatiq …fetch_file_source_actor` | 1 × 1 |
 | `worker-filter-documents` | `dramatiq …filter_documents_actor` | 1 × 1 |
 | `worker-embed-chunks` | `dramatiq …embed_chunks_actor` | 1 × 1 |
 | `worker-track-pipeline-status` | `dramatiq …track_pipeline_status_actor` | 1 × 1 |

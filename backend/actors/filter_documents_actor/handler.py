@@ -1,4 +1,4 @@
-"""Relevance gate between fetch_file_source and parse_source.
+"""Relevance gate between fetch_source (local-file strategy) and parse_source.
 
 Acquires the target (FETCHED/FILTERING → FILTERING), loads the persisted
 ``SourceFetch``, extracts the document title from the XML, and classifies it

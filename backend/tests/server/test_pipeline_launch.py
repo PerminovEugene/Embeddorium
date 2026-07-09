@@ -25,8 +25,8 @@ os.environ.setdefault("RABBITMQ_PASSWORD", "test")
 
 from backend.server.pipeline.launch import _seed_local  # noqa: E402
 from backend.shared.clients.queue.queue_names import (  # noqa: E402
-    FETCH_FILE_SOURCE_ACTOR,
-    FETCH_FILE_SOURCE_QUEUE,
+    VALIDATE_SOURCE_ACTOR,
+    VALIDATE_SOURCE_QUEUE,
 )
 
 
@@ -40,11 +40,11 @@ def _make_broker() -> MagicMock:
 
 
 def _enqueued_file_paths(broker: MagicMock) -> List[str]:
-    """Extract the ``file_path`` kwarg from every enqueued dramatiq Message."""
+    """Extract the file-path ``url`` kwarg from every enqueued dramatiq Message."""
     paths = []
     for c in broker.enqueue.call_args_list:
         msg = c[0][0]
-        paths.append(msg.kwargs["file_path"])
+        paths.append(msg.kwargs["url"])
     return paths
 
 
@@ -93,8 +93,8 @@ def test_two_xml_file_paths_enqueue_two_messages(tmp_path: Path) -> None:
 def test_xml_file_path_not_yet_on_disk_is_still_enqueued() -> None:
     """A .xml path that doesn't yet exist on disk is enqueued anyway.
 
-    The fetch_file_source actor handles missing files (OSError → FAILED_PERMANENT).
-    The seeder's job is to dispatch, not to validate local existence.
+    The validate_source actor's local strategy rejects missing files with a
+    skip. The seeder's job is to dispatch, not to validate local existence.
     """
     broker = _make_broker()
     dataset = {"name": "g", "paths": ["nonexistent_act.xml"]}
@@ -205,13 +205,13 @@ def test_empty_paths_returns_zero() -> None:
 
 
 def test_enqueued_message_targets_correct_queue_and_actor() -> None:
-    """Messages are dispatched to FETCH_FILE_SOURCE_QUEUE / FETCH_FILE_SOURCE_ACTOR."""
+    """Messages are dispatched to VALIDATE_SOURCE_QUEUE / VALIDATE_SOURCE_ACTOR."""
     broker = _make_broker()
     dataset = {"name": "g", "paths": ["my_act.xml"]}
     _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
 
-    assert _enqueued_queue_names(broker) == [FETCH_FILE_SOURCE_QUEUE]
-    assert _enqueued_actor_names(broker) == [FETCH_FILE_SOURCE_ACTOR]
+    assert _enqueued_queue_names(broker) == [VALIDATE_SOURCE_QUEUE]
+    assert _enqueued_actor_names(broker) == [VALIDATE_SOURCE_ACTOR]
 
 
 def test_pipeline_id_propagated_to_message_kwargs() -> None:

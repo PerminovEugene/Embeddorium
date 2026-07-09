@@ -5,7 +5,8 @@ from typing import Any
 
 # Source "type" values supported by ``Source.type``. "web" (the default) is a
 # link to crawl; "xml" is a local directory of XML files to enumerate and
-# ingest via the file chain (fetch_file_source -> filter_documents -> ...).
+# ingest via the local-file strategies of the shared chain
+# (validate_source -> fetch_source -> filter_documents -> ...).
 ALLOWED_SOURCE_TYPES = frozenset({"web", "xml"})
 
 DEFAULT_SOURCE_TYPE = "web"

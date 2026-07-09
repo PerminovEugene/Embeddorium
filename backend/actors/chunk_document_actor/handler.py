@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from backend.actors.crawl_frontier_manager_actor.url_helper import normalize_url
+from backend.shared.pipeline.url_helper import normalize_url
 from backend.plugins.chunkers.base import Chunker, ChunkInput
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
 from backend.shared.clients.queue.pipeline_payloads import (

@@ -1,3 +1,11 @@
+"""Payload for the ``validate_source`` actor (shared ingestion entry point).
+
+``url`` is either a web URL (web datasets, discovered links) or a local file
+path (local datasets) — the actor picks a validation strategy per the run's
+dataset source type. ``parent_*`` ids are only set for links discovered while
+crawling; local-file messages never carry them.
+"""
+
 from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
@@ -18,7 +26,7 @@ def optional_uuid_to_str(value: Optional[UUID]) -> Optional[str]:
 
 
 @dataclass(frozen=True)
-class ProcessLinkSourcePayload:
+class ValidateSourcePayload:
     url: str
     parent_chunk_id: Optional[UUID] = None
     parent_document_id: Optional[UUID] = None
@@ -41,7 +49,7 @@ class ProcessLinkSourcePayload:
         parent_document_id=None,
         parent_chunk_id=None,
         pipeline_id: Optional[str] = None,
-    ) -> "ProcessLinkSourcePayload":
+    ) -> "ValidateSourcePayload":
         return cls(
             url=url,
             parent_document_id=parse_optional_uuid(parent_document_id),

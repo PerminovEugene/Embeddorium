@@ -1,4 +1,8 @@
-"""Dramatiq launcher for the fetch_source worker (pipeline stage 1)."""
+"""Dramatiq launcher for the merged fetch_source worker (pipeline stage 1).
+
+Serves both ingestion chains: the handler picks a fetch strategy plugin (web
+HTTP fetch vs local file read) per the run's dataset source type.
+"""
 
 import logging
 import uuid

@@ -41,12 +41,12 @@ from backend.shared.clients.queue.pipeline_payloads import (
     TrackPipelineStatusPayload,
 )
 from backend.shared.clients.queue.queue_names import (
-    CRAWL_FRONTIER_MANAGER_ACTOR,
-    CRAWL_FRONTIER_MANAGER_QUEUE,
     SCHEDULE_DISCOVERED_LINKS_ACTOR,
     SCHEDULE_DISCOVERED_LINKS_QUEUE,
     TRACK_PIPELINE_STATUS_ACTOR,
     TRACK_PIPELINE_STATUS_QUEUE,
+    VALIDATE_SOURCE_ACTOR,
+    VALIDATE_SOURCE_QUEUE,
 )
 from backend.shared.models import (
     CrawlTargetStatus,
@@ -108,8 +108,8 @@ def schedule_discovered_links(
             }
             uow.add_outbox(
                 OutboxEvent(
-                    queue_name=CRAWL_FRONTIER_MANAGER_QUEUE,
-                    actor_name=CRAWL_FRONTIER_MANAGER_ACTOR,
+                    queue_name=VALIDATE_SOURCE_QUEUE,
+                    actor_name=VALIDATE_SOURCE_ACTOR,
                     payload=frontier_payload,
                     dedup_key=f"frontier:{link.id}",
                 )

@@ -2,8 +2,8 @@ import uuid
 
 from backend.actors.schedule_discovered_links_actor import schedule_discovered_links
 from backend.shared.clients.queue.queue_names import (
-    CRAWL_FRONTIER_MANAGER_QUEUE,
     TRACK_PIPELINE_STATUS_QUEUE,
+    VALIDATE_SOURCE_QUEUE,
 )
 from backend.shared.models import (
     CrawlTargetStatus,
@@ -50,14 +50,16 @@ def test_schedules_links_marks_them_and_finalizes_last():
     schedule_discovered_links(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
-    frontier_events = outbox_for_queue(uow, CRAWL_FRONTIER_MANAGER_QUEUE)
+    frontier_events = outbox_for_queue(uow, VALIDATE_SOURCE_QUEUE)
     assert {e.payload["url"] for e in frontier_events} == {
         "https://emta.ee/a",
         "https://emta.ee/b",
     }
-    assert [e.dedup_key for e in frontier_events] == [f"frontier:{l.id}" for l in links]
+    assert [e.dedup_key for e in frontier_events] == [
+        f"frontier:{link.id}" for link in links
+    ]
 
-    uow.mark_links_scheduled.assert_called_once_with([l.id for l in links])
+    uow.mark_links_scheduled.assert_called_once_with([link.id for link in links])
 
     # The status decision is made inside the same unit of work, after the
     # frontier events, and re-derived from the document's chunk statuses.
@@ -76,7 +78,7 @@ def test_no_pending_links_still_finalizes():
     schedule_discovered_links(crawl_target_id=str(target.id), store=store)
 
     uow = uow_of(store)
-    assert outbox_for_queue(uow, CRAWL_FRONTIER_MANAGER_QUEUE) == []
+    assert outbox_for_queue(uow, VALIDATE_SOURCE_QUEUE) == []
     uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.PROCESSED)
 
 

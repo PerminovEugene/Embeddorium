@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 # run (the snapshot is immutable once created).
 _configs: dict[str, PipelineActorConfigs] = {}
 
+# Dataset source types ("web" / "local") cached by pipeline_id — same
+# immutability argument as _configs (the dataset snapshot never changes after
+# run creation).
+_source_types: dict[str, str] = {}
+
 
 def load_actor_configs(
     store: SqlStore, pipeline_id: Optional[str]
@@ -59,3 +64,37 @@ def load_actor_configs(
 
     _configs[key] = cfg
     return cfg
+
+
+def load_dataset_source_type(
+    store: SqlStore, pipeline_id: Optional[str]
+) -> Optional[str]:
+    """Return this run's dataset ``source_type`` ("web"/"local"), cached.
+
+    ``None`` signals "no run-specific config" (legacy message, missing run or
+    malformed snapshot); callers then fall back to inferring the source type
+    from the message itself (URL scheme / ``file://`` prefix).
+    """
+    if not pipeline_id:
+        return None
+
+    key = str(pipeline_id)
+    cached = _source_types.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        run = store.pipeline_runs.get(uuid.UUID(key))
+    except (ValueError, TypeError):
+        return None
+    if run is None:
+        return None
+
+    dataset = run.dataset if isinstance(run.dataset, dict) else {}
+    source_type = dataset.get("source_type")
+    if not isinstance(source_type, str) or not source_type:
+        logger.warning("dataset snapshot has no source_type for pipeline_id=%s", key)
+        return None
+
+    _source_types[key] = source_type
+    return source_type

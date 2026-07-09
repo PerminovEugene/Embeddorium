@@ -78,7 +78,10 @@ services:
     depends_on:
       - postgres
 
-  worker-crawl-frontier-manager:
+  # Shared entry point of both ingestion chains: validates web URLs (origin
+  # gate) and local files (exists/readable) via per-source-type strategy
+  # plugins, then hands admitted targets to worker-fetch-source.
+  worker-validate-source:
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -87,7 +90,7 @@ services:
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
     # one process per CPU core x 8 threads each) so the SqlStore pool size in
     # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq backend.actors.crawl_frontier_manager_actor --queues ingest.crawl.frontier.manage.v1 --processes 1 --threads 1
+    command: dramatiq backend.actors.validate_source_actor --queues ingest.crawl.source.validate.v1 --processes 1 --threads 1
     volumes:
       - .:/app
       # Per-pipeline-run artefacts (PIPELINE_RUNS_DIR, default /tmp/pipeline_runs)
@@ -95,6 +98,9 @@ services:
       # logs and source files (raw XML, parsed text) land in ./tmp/pipeline_run
       # on the host and survive container restarts.
       - ./tmp/pipeline_run:/tmp/pipeline_runs
+      # Local source-files mount: the local-file validation strategy checks
+      # that each seeded .xml file exists and is readable.
+      - ./sources:/app/sources
     env_file:
       - .env.docker
     depends_on:
@@ -108,6 +114,8 @@ services:
 
   # --- ingestion pipeline (one worker per stage) ---
 
+  # Merged fetch stage: web targets are fetched over HTTP(S), local-file
+  # targets are read from disk — one strategy plugin per source type.
   worker-fetch-source:
     build:
       context: .
@@ -121,6 +129,9 @@ services:
     volumes:
       - .:/app
       - ./tmp/pipeline_run:/tmp/pipeline_runs
+      # Local source-files mount: XML dumps read by the local-file fetch
+      # strategy (each .xml file's content is read from here).
+      - ./sources:/app/sources
     env_file:
       - .env.docker
     depends_on:
@@ -228,34 +239,7 @@ services:
         condition: service_completed_successfully
     restart: on-failure
 
-  # --- local-file (XML) ingestion chain (re-joins parse_source) ---
-
-  worker-fetch-file-source:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-      args:
-        EXTRAS: ""
-    # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
-    # one process per CPU core x 8 threads each) so the SqlStore pool size in
-    # the launcher can be sized against a known, bounded concurrency.
-    command: dramatiq backend.actors.fetch_file_source_actor --queues ingest.crawl.file.fetch.v1 --processes 1 --threads 1
-    volumes:
-      - .:/app
-      - ./tmp/pipeline_run:/tmp/pipeline_runs
-      # Local source-files mount: XML dumps read by the file-ingestion chain
-      # (this actor reads each .xml file from disk and stores its content into the DB).
-      - ./sources:/app/sources
-    env_file:
-      - .env.docker
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres:
-        condition: service_started
-      migrate:
-        condition: service_completed_successfully
-    restart: on-failure
+  # --- local-file (XML) chain extras (re-joins parse_source) ---
 
   worker-filter-documents:
     build:

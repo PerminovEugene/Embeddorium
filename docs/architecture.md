@@ -7,7 +7,9 @@ outbox. No actor talks to RabbitMQ directly, which is what keeps the whole thing
 restartable and idempotent.
 
 There are two ways in — crawling web pages, or reading a folder of local XML
-files — and they converge on the same downstream stages.
+files. Both run through the *same* chain of actors: the first two stages
+(`validate_source`, `fetch_source`) select a per-source-type strategy plugin
+(web vs local file) and the rest is fully shared.
 
 ## The crawl chain (web)
 
@@ -15,21 +17,24 @@ files — and they converge on the same downstream stages.
 POST /pipeline-runs
       │  server creates the pipeline_runs row + publishes a seed message (carries pipeline_id)
       ▼
-crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► schedule_discovered_links
+validate_source ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► schedule_discovered_links
       ▲                                                          │                                          │        │
       └──────────────── discovered links loop back ─────────────┘                                    embed_chunks   │
                                                                                                               │       │
                                                                                                               └───► track_pipeline_status ◄───┘
 ```
 
-1. **crawl_frontier_manager** — the dedup gate. Normalizes the URL, skips it if
-   an active `crawl_target` already exists, otherwise creates one (`queued`) and
-   enqueues the fetch. Discovered links loop back here carrying the same
-   `pipeline_id`, and same-origin policy is enforced for them (seeds are exempt).
-2. **fetch_source** — fetches over TLS (insecure only for allowlisted domains),
-   sorts failures into transient (retry) vs permanent (give up), rejects
-   unsupported content types, and writes the raw body to disk plus a
-   `source_fetches` provenance row.
+1. **validate_source** — the validation/dedup gate (strategy plugins live in
+   `backend/plugins/validate_source`). The web strategy normalizes the URL and
+   enforces same-origin policy for discovered links (seeds are exempt); the
+   actor then skips the source if an active `crawl_target` already exists,
+   otherwise creates one (`queued`) and enqueues the fetch. Discovered links
+   loop back here carrying the same `pipeline_id`.
+2. **fetch_source** — the merged fetch stage (strategy plugins live in
+   `backend/plugins/fetch_source`). The web strategy fetches over TLS
+   (insecure only for allowlisted domains), sorts failures into transient
+   (retry) vs permanent (give up), rejects unsupported content types, and
+   writes the raw body to disk plus a `source_fetches` provenance row.
 3. **parse_source** — picks a parser by content type, extracts normalized text,
    and saves a `Document` with its hashes and provenance.
 4. **chunk_document** — splits the text into chunks and records any links it
@@ -56,18 +61,23 @@ crawl_frontier_manager ─► fetch_source ─► parse_source ─► chunk_docu
 ## The file chain (local XML)
 
 Instead of crawling links, this chain reads a local dump of `*.xml` files and
-optionally filters them by keyword. It rejoins the crawl chain at `parse_source`,
-so everything from there on is shared.
+optionally filters them by keyword. It runs through the same `validate_source`
+and `fetch_source` actors as the web chain — only the strategy plugins differ —
+and rejoins the shared chain at `parse_source`.
 
 ```
-POST /pipeline-runs  ─►  fetch_file_source  ─►  filter_documents  ─►  parse_source ─► … (shared downstream)
-   (one seed per file)     (read file →           (keyword match?
-                            SourceFetch)           no → skipped)
+POST /pipeline-runs  ─►  validate_source  ─►  fetch_source  ─►  filter_documents  ─►  parse_source ─► … (shared downstream)
+   (one seed per file)     (exists/readable?      (read file →       (keyword match?
+                            dedup)                 SourceFetch)       no → skipped)
 ```
 
-- **fetch_file_source** merges "create frontier entry" and "fetch" for a local
-  file: it normalizes the path to `file://<abs_path>`, dedups against an
-  already-queued target, reads the file, and stores it as a `SourceFetch`.
+- **validate_source (local strategy)** normalizes the path to its absolute form
+  (`file://<abs_path>` for dedup), validates that the file exists and is
+  readable, dedups against an already-queued target, and creates the
+  `crawl_target`.
+- **fetch_source (local strategy)** reads the file from disk and stores it as a
+  `SourceFetch` (`http_status=0`, `content_type=application/xml`), then routes
+  to `filter_documents` instead of `parse_source`.
 - **filter_documents** pulls the document title out of the XML and checks it
   against a configurable keyword list. With no keywords configured, everything
   passes. Non-matches are marked `skipped` (`skip_reason="not_relevant"`) and
@@ -146,13 +156,12 @@ the source tree, and run under `dramatiq --watch`, so they reload on any change.
 | `qdrant` | Vector store (dashboard at `/dashboard`) |
 | `rabbitmq` | Message broker (+ management UI) |
 | `migrate` | One-shot: applies SQL migrations before workers start |
-| `worker-crawl-frontier-manager` | Dedup gate / frontier |
-| `worker-fetch-source` | Fetch web sources |
+| `worker-validate-source` | Validation/dedup gate (web + local strategies) |
+| `worker-fetch-source` | Fetch web sources / read local files |
 | `worker-parse-source` | Parse into normalized text |
 | `worker-chunk-document` | Chunk + link extraction |
 | `worker-schedule-embeddings` | Fan out embed jobs |
 | `worker-schedule-links` | Schedule discovered links |
-| `worker-fetch-file-source` | Read local XML files |
 | `worker-filter-documents` | Keyword relevance gate |
 | `worker-embed-chunks` | Embed chunks → Qdrant |
 | `worker-track-pipeline-status` | Flip runs to `completed` when all work is done |

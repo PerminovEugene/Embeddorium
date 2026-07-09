@@ -165,10 +165,9 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
             "embed_chunks": {"providerId": str(_PROVIDER_ID), "similarity": "dot"},
             "parse_source": {"parser": "html"},
             "schedule_embeddings": {"batchSize": 16},
-            "fetch_source": {"verifyTls": False, "timeoutSeconds": 12},
-            "crawl_frontier_manager": {"normalizeUrls": False, "dedup": False},
+            "validate_source": {"normalizeUrls": False, "dedup": False},
             "schedule_discovered_links": {"followChildLinks": False},
-            "fetch_file_source": {"glob": "*.html", "dedup": False},
+            "fetch_source": {"verifyTls": False, "timeoutSeconds": 12, "fileGlob": "*.html"},
             "filter_documents": {"enabled": False, "keywords": "vat, customs"},
         },
     }
@@ -192,11 +191,44 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
     assert cfg["schedule_embeddings"]["batch_size"] == 16
     assert cfg["fetch_source"]["verify_tls"] is False
     assert cfg["fetch_source"]["timeout_seconds"] == 12
-    assert cfg["crawl_frontier_manager"]["normalize_urls"] is False
-    assert cfg["crawl_frontier_manager"]["dedup"] is False
+    assert cfg["validate_source"]["normalize_urls"] is False
+    assert cfg["validate_source"]["dedup"] is False
     assert cfg["schedule_discovered_links"]["follow_child_links"] is False
-    assert cfg["fetch_file_source"] == {"glob": "*.html", "dedup": False}
+    assert cfg["fetch_source"]["file_glob"] == "*.html"
     assert cfg["filter_documents"] == {"enabled": False, "keywords": "vat, customs"}
+
+
+def test_create_accepts_legacy_actor_settings_keys() -> None:
+    """Pre-merge UI builds send crawl_frontier_manager / fetch_file_source
+    blocks; those map onto validate_source / fetch_source."""
+    pending_run = _make_run("pending")
+    store_mock = _make_store(
+        dataset=_make_dataset(),
+        provider=_make_provider(),
+        run=pending_run,
+        created_run=pending_run,
+    )
+    payload = {
+        "datasetId": str(_DATASET_ID),
+        "actorSettings": {
+            "embed_chunks": {"providerId": str(_PROVIDER_ID)},
+            "crawl_frontier_manager": {"normalizeUrls": False},
+            "fetch_file_source": {"glob": "*.html", "dedup": False},
+        },
+    }
+    with patch(
+        "backend.server.pipeline.router.SqlStore", return_value=store_mock
+    ) as mock_store_cls:
+        with patch("backend.server.pipeline.router.seed_pipeline"):
+            resp = client.post("/pipeline-runs", json=payload)
+
+    assert resp.status_code == 200, resp.text
+    cfg = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0].actor_configs
+    assert cfg["validate_source"]["normalize_urls"] is False
+    # Legacy fetch_file_source.dedup feeds the merged validate_source gate...
+    assert cfg["validate_source"]["dedup"] is False
+    # ...and its glob becomes the merged fetch_source file_glob.
+    assert cfg["fetch_source"]["file_glob"] == "*.html"
 
 
 def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:

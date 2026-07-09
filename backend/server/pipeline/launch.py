@@ -5,11 +5,15 @@ so the row already exists when the first actor message is consumed. This is
 the only way pipeline runs are seeded — every run is launched from the UI via
 that endpoint, there is no standalone seed script/runner.
 
-Web dataset → publishes one ``crawl_frontier_manager`` message per
-``dataset.url``, carrying the run's ``pipeline_id``.
+Both dataset kinds seed the same ``validate_source`` actor (the shared entry
+point of the merged pipeline); the actor picks its validation strategy from
+the run's dataset source type.
 
-Local dataset → enumerates ``*.xml`` files under each path in
-``dataset.paths`` and publishes one ``fetch_file_source`` message per file,
+Web dataset → publishes one ``validate_source`` message for ``dataset.url``,
+carrying the run's ``pipeline_id``.
+
+Local dataset → enumerates matching files under each path in
+``dataset.paths`` and publishes one ``validate_source`` message per file,
 carrying the run's ``pipeline_id``.
 """
 
@@ -23,15 +27,12 @@ from typing import List
 import dramatiq
 
 from backend.server.source_files.source_root import resolve_for_seed
-from backend.shared.clients.queue.process_file_payload import ProcessFileSourcePayload
-from backend.shared.clients.queue.process_link_payload import ProcessLinkSourcePayload
 from backend.shared.clients.queue.queue_client import QueueClient
 from backend.shared.clients.queue.queue_names import (
-    CRAWL_FRONTIER_MANAGER_ACTOR,
-    CRAWL_FRONTIER_MANAGER_QUEUE,
-    FETCH_FILE_SOURCE_ACTOR,
-    FETCH_FILE_SOURCE_QUEUE,
+    VALIDATE_SOURCE_ACTOR,
+    VALIDATE_SOURCE_QUEUE,
 )
+from backend.shared.clients.queue.validate_source_payload import ValidateSourcePayload
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,8 @@ def seed_pipeline(
         ``source_type`` ("web" or "local") plus the type-specific fields.
     file_glob:
         Glob used to enumerate files under a local dataset's folder paths
-        (from the run's ``fetch_file_source`` config). Ignored for web datasets.
+        (from the run's ``fetch_source.file_glob`` config). Ignored for web
+        datasets.
     broker:
         Dramatiq broker to enqueue on.  When ``None`` a fresh ``QueueClient``
         broker is created (production path); inject a mock in tests.
@@ -104,33 +106,33 @@ def seed_pipeline(
     return count
 
 
-def _seed_web(*, dataset: dict, pipeline_id_str: str, broker) -> int:
-    """Enqueue a single crawl-frontier message for a web dataset."""
-    url = ensure_scheme(dataset.get("url", ""))
-
-    payload = ProcessLinkSourcePayload(
-        url=url,
-        pipeline_id=pipeline_id_str,
-    )
+def _enqueue_validate_source(*, url: str, pipeline_id_str: str, broker) -> None:
+    """Publish one validate_source message for *url* (web URL or file path)."""
+    payload = ValidateSourcePayload(url=url, pipeline_id=pipeline_id_str)
     broker.enqueue(
         dramatiq.Message(
-            queue_name=CRAWL_FRONTIER_MANAGER_QUEUE,
-            actor_name=CRAWL_FRONTIER_MANAGER_ACTOR,
+            queue_name=VALIDATE_SOURCE_QUEUE,
+            actor_name=VALIDATE_SOURCE_ACTOR,
             args=[],
             kwargs=payload.to_actor_kwargs(),
             options={},
         )
     )
-    logger.info(
-        "enqueued web seed url=%s pipeline_id=%s", url, pipeline_id_str
-    )
+
+
+def _seed_web(*, dataset: dict, pipeline_id_str: str, broker) -> int:
+    """Enqueue a single validate-source message for a web dataset."""
+    url = ensure_scheme(dataset.get("url", ""))
+
+    _enqueue_validate_source(url=url, pipeline_id_str=pipeline_id_str, broker=broker)
+    logger.info("enqueued web seed url=%s pipeline_id=%s", url, pipeline_id_str)
     return 1
 
 
 def _seed_local(
     *, dataset: dict, pipeline_id_str: str, file_glob: str = "*.xml", broker
 ) -> int:
-    """Enumerate matching files and enqueue one fetch-file-source message each.
+    """Enumerate matching files and enqueue one validate-source message each.
 
     Each entry in ``dataset["paths"]`` is one of:
     - A path relative to the source root, as produced by the UI's server-side
@@ -155,7 +157,8 @@ def _seed_local(
         if p.is_dir():
             xml_files: List[Path] = sorted(p.rglob(file_glob))
         # Individual file — the common file-picker selection. Classified by
-        # suffix so a not-yet-on-disk file path is still enqueued.
+        # suffix so a not-yet-on-disk file path is still enqueued (the
+        # validate_source local strategy rejects missing files with a skip).
         elif p.suffix:
             xml_files = [p]
         else:
@@ -166,24 +169,9 @@ def _seed_local(
             )
             xml_files = []
 
-        logger.info(
-            "xml_files=%s",
-            xml_files,
-        )
-
         for file_path in xml_files:
-            payload = ProcessFileSourcePayload(
-                file_path=str(file_path),
-                pipeline_id=pipeline_id_str,
-            )
-            broker.enqueue(
-                dramatiq.Message(
-                    queue_name=FETCH_FILE_SOURCE_QUEUE,
-                    actor_name=FETCH_FILE_SOURCE_ACTOR,
-                    args=[],
-                    kwargs=payload.to_actor_kwargs(),
-                    options={},
-                )
+            _enqueue_validate_source(
+                url=str(file_path), pipeline_id_str=pipeline_id_str, broker=broker
             )
             count += 1
 

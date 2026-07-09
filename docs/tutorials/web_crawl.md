@@ -40,9 +40,9 @@ start). Launch.
 
 The crawl is a loop, gated for safety:
 
-1. **crawl_frontier_manager** — the dedup gate. Normalizes each URL and skips it
-   if an active target already exists, otherwise queues a fetch. Discovered links
-   loop back here carrying the same run id.
+1. **validate_source** — the validation/dedup gate. Normalizes each URL (web
+   strategy), skips it if an active target already exists, otherwise queues a
+   fetch. Discovered links loop back here carrying the same run id.
 2. **fetch_source** — fetches over TLS, sorts failures into transient (retry) vs
    permanent (give up), and **rejects unsupported content types**.
 3. **parse_source → chunk_document** — extract text, split into chunks, and
@@ -59,7 +59,7 @@ is on. The **seed** URL is always exempt from the same-origin check.
 
 ```sh
 docker compose logs -f worker-fetch-source
-docker compose logs -f worker-crawl-frontier-manager
+docker compose logs -f worker-validate-source
 ls tmp/pipeline_run/<run-id>/                 # per-URL logs + raw/parsed files
 ```
 

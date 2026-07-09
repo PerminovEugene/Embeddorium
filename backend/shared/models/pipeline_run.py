@@ -68,11 +68,12 @@ class ScheduleEmbeddingsSettings(BaseModel):
     batch_size: int = 32
 
 
-class CrawlFrontierManagerSettings(BaseModel):
-    """Settings consumed by the ``crawl_frontier_manager`` actor.
+class ValidateSourceSettings(BaseModel):
+    """Settings consumed by the ``validate_source`` actor (both strategies).
 
-    ``normalize_urls`` toggles URL normalization before dedup; ``dedup``
-    toggles the already-queued gate.
+    ``normalize_urls`` toggles URL normalization before dedup (web strategy
+    only — local file paths are always resolved to their absolute form);
+    ``dedup`` toggles the already-queued gate for both strategies.
     """
 
     normalize_urls: bool = True
@@ -80,17 +81,22 @@ class CrawlFrontierManagerSettings(BaseModel):
 
 
 class FetchSourceSettings(BaseModel):
-    """Settings consumed by the ``fetch_source`` actor.
+    """Settings consumed by the merged ``fetch_source`` actor.
 
-    ``verify_tls`` toggles TLS verification; ``timeout_seconds`` is the read
-    timeout; ``allowed_content_types`` is an optional comma-separated allowlist
-    that further restricts the parser-registry-supported types. Empty means "no
-    extra restriction" — the parser registry alone decides what is supported.
+    Web strategy: ``verify_tls`` toggles TLS verification; ``timeout_seconds``
+    is the read timeout; ``allowed_content_types`` is an optional
+    comma-separated allowlist that further restricts the
+    parser-registry-supported types. Empty means "no extra restriction" — the
+    parser registry alone decides what is supported.
+
+    Local-file strategy: ``file_glob`` selects which files a folder seed
+    enumerates (applied at seed time, not in the actor).
     """
 
     verify_tls: bool = True
     timeout_seconds: int = 30
     allowed_content_types: str = ""
+    file_glob: str = "*.xml"
 
 
 class ScheduleDiscoveredLinksSettings(BaseModel):
@@ -105,17 +111,6 @@ class ScheduleDiscoveredLinksSettings(BaseModel):
     follow_child_links: bool = True
     follow_cross_domain: bool = False
     max_depth: int = 3
-
-
-class FetchFileSourceSettings(BaseModel):
-    """Settings consumed by the local-file chain.
-
-    ``glob`` selects which files a folder seed enumerates (applied at seed
-    time); ``dedup`` toggles the already-queued gate in the actor.
-    """
-
-    glob: str = "*.xml"
-    dedup: bool = True
 
 
 class FilterDocumentsSettings(BaseModel):
@@ -153,15 +148,12 @@ class PipelineActorConfigs(BaseModel):
     schedule_embeddings: ScheduleEmbeddingsSettings = Field(
         default_factory=ScheduleEmbeddingsSettings
     )
-    crawl_frontier_manager: CrawlFrontierManagerSettings = Field(
-        default_factory=CrawlFrontierManagerSettings
+    validate_source: ValidateSourceSettings = Field(
+        default_factory=ValidateSourceSettings
     )
     fetch_source: FetchSourceSettings = Field(default_factory=FetchSourceSettings)
     schedule_discovered_links: ScheduleDiscoveredLinksSettings = Field(
         default_factory=ScheduleDiscoveredLinksSettings
-    )
-    fetch_file_source: FetchFileSourceSettings = Field(
-        default_factory=FetchFileSourceSettings
     )
     filter_documents: FilterDocumentsSettings = Field(
         default_factory=FilterDocumentsSettings
