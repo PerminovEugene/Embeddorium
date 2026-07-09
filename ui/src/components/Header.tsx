@@ -1,12 +1,12 @@
 import { NavLink } from "react-router-dom";
 
 const navItems = [
-  { to: "/", label: "Compare", end: true },
-  { to: "/providers", label: "Providers", end: false },
+  { to: "/", label: "Search", end: true },
+  { to: "/search-comparison", label: "Search Lab", end: false },
   { to: "/datasets", label: "Datasets", end: false },
+  { to: "/providers", label: "LLM Providers", end: false },
   { to: "/ingestion-pipelines", label: "Pipelines", end: false },
-  { to: "/pipeline-runs", label: "Runs", end: false },
-  { to: "/search-comparison", label: "Searches", end: false },
+  { to: "/pipeline-runs", label: "Indexing Runs", end: false },
 ];
 
 const Header = () => {
@@ -20,21 +20,21 @@ const Header = () => {
           <img
             src="logo-1.png"
             alt="Embeddorium logo"
-            className="w-16 h-16 object-contain transition-transform duration-300 group-hover:scale-105"
+            className="w-10 h-10 sm:w-16 sm:h-16 object-contain transition-transform duration-300 group-hover:scale-105"
           />
-          <h1 className="font-display tracking-widest font-bold text-emd-primary uppercase text-4xl sm:text-5xl">
+          <h1 className="font-display tracking-widest font-bold text-emd-primary uppercase text-2xl sm:text-4xl lg:text-5xl">
             Embeddorium
           </h1>
         </NavLink>
 
-        <nav className="flex items-center justify-center gap-7 mt-3">
+        <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 sm:gap-x-7 mt-3">
           {navItems.map(({ to, label, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `relative font-display uppercase tracking-widest text-base sm:text-lg transition-colors duration-200 after:absolute after:left-0 after:-bottom-1.5 after:h-0.5 after:rounded-full after:bg-emd-primary after:transition-all after:duration-300 ${
+                `relative whitespace-nowrap font-display uppercase tracking-widest text-sm sm:text-lg transition-colors duration-200 after:absolute after:left-0 after:-bottom-1.5 after:h-0.5 after:rounded-full after:bg-emd-primary after:transition-all after:duration-300 ${
                   isActive
                     ? "text-emd-primary after:w-full"
                     : "text-emd-panel/80 hover:text-emd-primary after:w-0 hover:after:w-full"
