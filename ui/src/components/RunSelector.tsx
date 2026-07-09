@@ -14,6 +14,7 @@ const runLabel = (run: PipelineRun): string =>
 interface PipelineRunRaw {
   id: string;
   name?: string | null;
+  status?: string;
   dataset?: { name?: string; source_type?: string };
   actorConfigs?: {
     chunk_document?: {
@@ -75,7 +76,11 @@ const RunSelector: React.FC = () => {
         const raw: PipelineRunRaw[] = Array.isArray(result)
           ? result
           : result?.runs ?? [];
-        const loaded: PipelineRun[] = raw.map(toRun);
+        // Only completed runs have a fully populated vector collection, so
+        // pending/running/failed runs are not offered for search.
+        const loaded: PipelineRun[] = raw
+          .filter((r) => r.status === "completed")
+          .map(toRun);
         setRuns(loaded);
         // Re-sync the selected run with the freshly loaded list (its config may
         // have changed), or clear it if it no longer exists.

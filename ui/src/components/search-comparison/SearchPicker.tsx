@@ -20,7 +20,7 @@ function formatDateTime(dt: string | null | undefined): string {
 // Checkbox list of saved searches. Results are only comparable between
 // searches over the same dataset — and, unless different inputs are allowed,
 // with the same input text — so once one search is selected every
-// incompatible entry is disabled until the selection is cleared.
+// incompatible entry is hidden until the selection is cleared.
 const SearchPicker: React.FC<SearchPickerProps> = ({
   searches,
   selectedIds,
@@ -33,6 +33,13 @@ const SearchPicker: React.FC<SearchPickerProps> = ({
     anchor === null ||
     (s.datasetName === anchor.datasetName &&
       (allowDifferentInputs || s.inputText === anchor.inputText));
+
+  // Already-selected searches stay visible even if the compatibility rule
+  // tightens (e.g. "allow different inputs" is toggled off mid-selection).
+  const visible = searches.filter(
+    (s) => selectedIds.includes(s.id) || isCompatible(s),
+  );
+  const hiddenCount = searches.length - visible.length;
 
   const toggle = (id: string) =>
     onChange(
@@ -66,33 +73,24 @@ const SearchPicker: React.FC<SearchPickerProps> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-emd-border/10">
-          {searches.map((s) => {
+          {visible.map((s) => {
             const selected = selectedIds.includes(s.id);
-            const disabled = !selected && !isCompatible(s);
             const colorIdx = selectedIds.indexOf(s.id);
             return (
               <tr
                 key={s.id}
-                onClick={() => !disabled && toggle(s.id)}
-                title={
-                  disabled
-                    ? "Different dataset or query — not comparable with the current selection"
-                    : undefined
-                }
-                className={`text-emd-text transition-colors ${
-                  disabled
-                    ? "cursor-not-allowed opacity-40"
-                    : "cursor-pointer hover:bg-emd-primary/5"
-                } ${selected ? "bg-emd-primary/10" : ""}`}
+                onClick={() => toggle(s.id)}
+                className={`text-emd-text transition-colors cursor-pointer hover:bg-emd-primary/5 ${
+                  selected ? "bg-emd-primary/10" : ""
+                }`}
               >
                 <td className="py-3 pr-2">
                   <input
                     type="checkbox"
                     checked={selected}
-                    disabled={disabled}
                     onChange={() => toggle(s.id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="accent-emd-primary w-4 h-4 disabled:cursor-not-allowed"
+                    className="accent-emd-primary w-4 h-4"
                     aria-label={`Select search on ${s.runName || s.pipelineId}`}
                   />
                 </td>
@@ -136,6 +134,15 @@ const SearchPicker: React.FC<SearchPickerProps> = ({
           })}
         </tbody>
       </table>
+      {hiddenCount > 0 && (
+        <p className="mt-3 text-xs text-emd-placeholder">
+          {hiddenCount} {hiddenCount === 1 ? "search" : "searches"} hidden —{" "}
+          {allowDifferentInputs
+            ? "different dataset, so"
+            : "different dataset or query, so"}{" "}
+          not comparable with the current selection.
+        </p>
+      )}
     </div>
   );
 };
