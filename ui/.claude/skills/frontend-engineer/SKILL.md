@@ -1,7 +1,6 @@
 ---
 name: frontend-engineer
 description: Conventions for the browser UI in ui/. Use when editing React components, hooks, routing, forms, or Tailwind styling.
-paths: ui/**
 ---
 
 # Frontend engineer

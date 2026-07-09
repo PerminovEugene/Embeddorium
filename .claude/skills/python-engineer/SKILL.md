@@ -14,8 +14,11 @@ Target: Python 3.11+, Pydantic v2, SQLAlchemy 2, Dramatiq. Match the style of `b
 - Plugins (chunkers, embedders) are auto-discovered — follow the existing base class and register by dropping the file in the right `backend/plugins/` dir; touch no core code.
 - Fail loud: raise typed exceptions, never swallow. Log with the module logger, not `print`.
 - Keep functions pure where possible; push I/O to the edges.
+- Server code is one directory per feature under `backend/server/` (datasets, providers, pipeline, search, …) — new endpoints go in their feature dir, not `main.py`.
+- New table/column/repository? Follow the `db-entity` skill checklist — migrations are hand-written numbered SQL files, no autogenerate.
+- Layers stay separated: actors and server code use domain models from `backend/shared/models` and repos on the store; ORM types never cross out of `storage/sql/`.
 
 ## Checks before done
 - `ruff check` and `ruff format` clean (config in `setup.cfg`/`pyproject.toml`).
-- `pytest` passes; add a test under `backend/tests/` for new behavior.
-- No new dependency without adding it to the correct extra in `pyproject.toml`.
+- `.venv/bin/python -m pytest backend/tests -q` passes; add a test under `backend/tests/` for new behavior.
+- New dependency added to the correct extra in `pyproject.toml` (extras are per-worker: `web`, `embed`, `embedding`, `server`, `mcp`, `agent`, `dev`) and `requirements.txt` regenerated (`pip freeze > requirements.txt`).

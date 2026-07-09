@@ -14,6 +14,15 @@ Local-first stack: Postgres, Qdrant, RabbitMQ, and Dramatiq workers, wired by `d
 - Pin image versions in compose; don't use `latest` for stateful services.
 - Persist state via named volumes for Postgres/Qdrant; treat workers as disposable.
 - Logs to stdout, structured where possible; no logging to files inside containers.
+- Migrations run automatically via the Compose `migrate` service before workers start; by hand: `python -m backend.shared.storage.sql.migrate`.
+
+## Reset & rebuild helpers (`scripts/`)
+- `clean-postgres.sh` / `clean-qdrant.sh` / `purge-queues.sh` — wipe one store.
+- `full-clean.sh` — wipe all three between experiment runs.
+- `rebuild-workers.sh` — rebuild + restart worker containers after backend changes.
+
+## Service URLs (local)
+UI :5173 · API :8000/docs · Qdrant dashboard :6333/dashboard · RabbitMQ management :15672.
 
 ## Checks before done
 - `docker compose config` validates.
