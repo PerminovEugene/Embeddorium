@@ -44,7 +44,7 @@ def test_happy_path_upserts_chunks_links_and_enqueues_embeddings():
     ]
     store = _store_with_document(target, doc_id=doc_id, saved_chunks=saved_chunks)
     chunker = _chunker(
-        [Chunk(text="c0 [Decl](https://emta.ee/decl)")]
+        [Chunk(text="c0 [Decl](https://emta.ee/decl)", start_offset=0, end_offset=31)]
     )
 
     chunk_document(
@@ -53,10 +53,12 @@ def test_happy_path_upserts_chunks_links_and_enqueues_embeddings():
 
     uow = uow_of(store)
 
-    # chunks built with sequential indices
+    # chunks built with sequential indices, carrying the chunker's offsets
     chunk_models = uow.upsert_chunks.call_args.args[0]
     assert [c.chunk_index for c in chunk_models] == [0]
     assert chunk_models[0].document_id == doc_id
+    assert chunk_models[0].start_offset == 0
+    assert chunk_models[0].end_offset == 31
 
     # discovered link persisted with normalized url + parent chunk
     links = uow.upsert_discovered_links.call_args.args[0]

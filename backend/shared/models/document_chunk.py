@@ -19,6 +19,12 @@ class DocumentChunk(BaseModel):
     # legal_metadata for chunks produced by the legal XML chunker.
     chunk_type: str = "passage"
     chunk_metadata: dict = Field(default_factory=dict)
+    # Character offsets of this chunk within the parsed source text
+    # (document.text_path content): start inclusive, end exclusive. None when
+    # the chunker doesn't track positions (structure-aware chunkers) or for
+    # rows created before offsets existed.
+    start_offset: Optional[int] = None
+    end_offset: Optional[int] = None
     # Embedding lifecycle: "pending" until embed_chunks upserts this chunk's
     # vector into Qdrant, then "embedded". See
     # UnitOfWork.finalize_target_if_all_chunks_embedded.

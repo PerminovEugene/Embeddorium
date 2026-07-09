@@ -12,6 +12,7 @@ from typing import List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from backend.plugins.chunkers._offsets import chunks_with_offsets
 from backend.plugins.chunkers._size_fields import size_overlap_fields
 from backend.plugins.chunkers.base import Chunk, Chunker, ChunkerConfig, ChunkInput
 
@@ -36,5 +37,6 @@ class RecursiveChunker(Chunker):
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=int(self._get("chunk_size")),
             chunk_overlap=int(self._get("chunk_overlap")),
+            add_start_index=True,
         )
-        return [Chunk(text=text) for text in splitter.split_text(ctx.text)]
+        return chunks_with_offsets(splitter, ctx.text)

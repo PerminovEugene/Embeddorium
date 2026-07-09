@@ -22,7 +22,7 @@ from backend.plugins.chunkers.base import (
     ChunkInput,
 )
 
-_WORD_SPLIT_RE = re.compile(r"\s+")
+_WORD_RE = re.compile(r"\S+")
 
 
 class SlidingWindowChunker(Chunker):
@@ -62,18 +62,28 @@ class SlidingWindowChunker(Chunker):
         window = max(1, int(self._get("window_size")))
         step = max(1, int(self._get("step_size")))
 
-        words = [w for w in _WORD_SPLIT_RE.split(ctx.text.strip()) if w]
+        # Match words with their spans so each chunk can report where it
+        # sits in the source text: start of its first word to end of its
+        # last word (chunk text normalises inter-word whitespace, but the
+        # source range is exact).
+        words = list(_WORD_RE.finditer(ctx.text))
         if not words:
             return []
 
-        chunks: List[str] = []
+        chunks: List[Chunk] = []
         for start in range(0, len(words), step):
             window_words = words[start : start + window]
             if window_words:
-                chunks.append(" ".join(window_words))
+                chunks.append(
+                    Chunk(
+                        text=" ".join(m.group() for m in window_words),
+                        start_offset=window_words[0].start(),
+                        end_offset=window_words[-1].end(),
+                    )
+                )
             # The final window reaches the end of the document; stop so we
             # don't emit further chunks that only repeat the tail.
             if start + window >= len(words):
                 break
 
-        return [Chunk(text=text) for text in chunks]
+        return chunks

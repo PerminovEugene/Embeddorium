@@ -34,3 +34,15 @@ def test_uses_declared_defaults_when_settings_omitted():
     chunker = MarkdownChunker({})
     assert chunker.settings["chunk_size"] == 1200
     assert chunker.settings["chunk_overlap"] == 150
+
+
+def test_chunks_carry_source_offsets():
+    text = "# Title\n\npara one here now\n\npara two follows here"
+    chunker = MarkdownChunker({"chunk_size": 20, "chunk_overlap": 0})
+    chunks = chunker.chunk(ChunkInput(text=text))
+
+    assert len(chunks) > 1
+    for c in chunks:
+        assert c.start_offset is not None and c.end_offset is not None
+        # Offsets point at the exact slice of the source the chunk came from.
+        assert text[c.start_offset : c.end_offset] == c.text

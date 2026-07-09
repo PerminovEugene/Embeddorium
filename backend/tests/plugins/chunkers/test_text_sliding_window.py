@@ -51,3 +51,17 @@ def test_uses_declared_defaults_when_settings_omitted():
     chunker = SlidingWindowChunker({})
     assert chunker.settings["window_size"] == 200
     assert chunker.settings["step_size"] == 100
+
+
+def test_chunks_carry_source_offsets():
+    text = "  0 1  2 3 4 5\n6 7   8 9  "
+    chunker = SlidingWindowChunker({"window_size": 4, "step_size": 2})
+    chunks = chunker.chunk(ChunkInput(text=text))
+
+    assert [c.text for c in chunks] == ["0 1 2 3", "2 3 4 5", "4 5 6 7", "6 7 8 9"]
+    # Offsets span from the first word's start to the last word's end in the
+    # *original* text, so slicing the source recovers the (un-normalised)
+    # window content.
+    assert (chunks[0].start_offset, chunks[0].end_offset) == (2, 10)
+    assert text[chunks[0].start_offset : chunks[0].end_offset] == "0 1  2 3"
+    assert text[chunks[-1].start_offset : chunks[-1].end_offset] == "6 7   8 9"

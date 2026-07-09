@@ -33,11 +33,20 @@ class Chunk:
     structure-aware chunker (e.g. ``legal_xml``) may emit other types
     (``legal_body``, ``act_title``, ...) via ``metadata``/``chunk_type`` so
     downstream retrieval can distinguish them.
+
+    ``start_offset``/``end_offset`` are character offsets of the chunk within
+    ``ChunkInput.text`` (start inclusive, end exclusive). Optional: chunkers
+    whose output is not a contiguous slice of the input (e.g. structure-aware
+    chunkers that re-parse raw content, or chunkers that normalise
+    whitespace beyond locating word boundaries) leave them ``None`` rather
+    than inventing offsets.
     """
 
     text: str
     chunk_type: str = "passage"
     metadata: Dict[str, Any] = field(default_factory=dict)
+    start_offset: Optional[int] = None
+    end_offset: Optional[int] = None
 
 
 @dataclass

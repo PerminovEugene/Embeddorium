@@ -14,8 +14,9 @@ indexed with (matching dimensions), with no chance of the user mismatching them:
    ``actor_configs.vector_store`` and the embed provider snapshot from
    ``actor_configs.embed_chunks.provider``.
 2. Embed the query with that model (via Ollama or mock).
-3. Ask Qdrant for the nearest ``TOP_K`` vectors. The distance metric is fixed
-   at collection-creation time; Qdrant ranks for us.
+3. Ask Qdrant for the nearest ``topK`` vectors (a per-request parameter,
+   defaulting to ``DEFAULT_TOP_K``). The distance metric is fixed at
+   collection-creation time; Qdrant ranks for us.
 4. Each hit's payload carries ``chunk_id``/``document_id`` (written by the
    embed_chunks actor), so we join back to Postgres for chunk text and document
    metadata.
@@ -30,16 +31,44 @@ from typing import List, Optional
 from backend.server.compare.embedder import get_embeddings
 from backend.server.pipeline.runs import get_pipeline_run
 from backend.shared import config
+from backend.shared.models import Search, SearchInput
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
 
-TOP_K = 10
+DEFAULT_TOP_K = 10
+
+
+def parse_top_k(value) -> int | None:
+    """Coerce the request's ``topK`` to a positive int.
+
+    Missing/empty falls back to ``DEFAULT_TOP_K``; anything that isn't a
+    positive integer yields ``None`` so the caller can reject the request.
+    """
+    if value is None or value == "":
+        return DEFAULT_TOP_K
+    try:
+        top_k = int(value)
+    except (TypeError, ValueError):
+        return None
+    # int() truncates floats; only accept values with no fractional part
+    # (JSON may deliver a whole number as e.g. 10.0).
+    if top_k != float(value):
+        return None
+    return top_k if top_k >= 1 else None
 
 
 async def search_db(request) -> dict:
     run_id = request.configuration.get("runId")
     if not run_id:
         return {"status": "error", "detail": "No pipeline run selected", "results": []}
+
+    top_k = parse_top_k(request.configuration.get("topK"))
+    if top_k is None:
+        return {
+            "status": "error",
+            "detail": "topK must be a positive integer",
+            "results": [],
+        }
 
     run = get_pipeline_run(run_id)
     if run is None:
@@ -82,13 +111,14 @@ async def search_db(request) -> dict:
 
     queries = request.source.inputs
     logging.info(
-        "DB search: run=%s collection=%s provider=%s model=%s pipeline=%s queries=%d",
+        "DB search: run=%s collection=%s provider=%s model=%s pipeline=%s queries=%d top_k=%d",
         run_id,
         collection,
         provider_type,
         model_name,
         pipeline_id,
         len(queries),
+        top_k,
     )
 
     query_embeddings = await get_embeddings(
@@ -105,7 +135,7 @@ async def search_db(request) -> dict:
     results: List[dict] = []
     try:
         for query, embedding in zip(queries, query_embeddings):
-            hits = store.search(embedding, top_k=TOP_K, pipeline_id=pipeline_id)
+            hits = store.search(embedding, top_k=top_k, pipeline_id=pipeline_id)
 
             # One batched Postgres round-trip per query instead of one per hit.
             chunk_ids = [
@@ -116,12 +146,13 @@ async def search_db(request) -> dict:
                 for chunk in store_sql.chunks.get_many([c for c in chunk_ids if c])
             }
 
+            query_results: List[dict] = []
             for hit in hits:
                 chunk_id = hit.get("chunk_id")
                 chunk = chunks_by_id.get(str(chunk_id)) if chunk_id else None
                 document = chunk.document if chunk else None
 
-                results.append(
+                query_results.append(
                     {
                         "source_id": query.id,
                         "queryText": query.text,
@@ -135,6 +166,9 @@ async def search_db(request) -> dict:
                         "sourceUrl": document.source_url if document else None,
                     }
                 )
+
+            results.extend(query_results)
+            _persist_search(store_sql, query, run.id, query_results, top_k)
     finally:
         store_sql.close()
 
@@ -146,3 +180,31 @@ def _as_uuid(value) -> Optional[uuid.UUID]:
         return uuid.UUID(str(value))
     except (ValueError, TypeError):
         return None
+
+
+def _persist_search(
+    store_sql: SqlStore,
+    query,
+    pipeline_id: uuid.UUID,
+    query_results: List[dict],
+    top_k: int,
+) -> None:
+    """Save one query launch (input text + results) to Postgres.
+
+    Best-effort: a persistence failure must never break search for the user,
+    so any error is logged and swallowed.
+    """
+    try:
+        search_input = store_sql.search_inputs.create(SearchInput(text=query.text))
+        store_sql.searches.create(
+            Search(
+                pipeline_id=pipeline_id,
+                user_input_id=search_input.id,
+                search_config={"top_n": top_k, "search_method": "embedding"},
+                results=query_results,
+            )
+        )
+    except Exception:
+        logging.exception(
+            "Failed to persist search query/results for pipeline=%s", pipeline_id
+        )

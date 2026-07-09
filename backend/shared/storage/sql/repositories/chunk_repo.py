@@ -22,6 +22,8 @@ class ChunkRepository:
                 document_id=chunk.document_id,
                 text=chunk.text,
                 chunk_index=chunk.chunk_index,
+                start_offset=chunk.start_offset,
+                end_offset=chunk.end_offset,
             )
             session.add(orm_chunk)
             session.commit()
@@ -36,6 +38,8 @@ class ChunkRepository:
                     document_id=chunk.document_id,
                     text=chunk.text,
                     chunk_index=chunk.chunk_index,
+                    start_offset=chunk.start_offset,
+                    end_offset=chunk.end_offset,
                 )
                 for chunk in chunks
             ]

@@ -14,6 +14,8 @@ from backend.shared.models import (
     PipelineRun,
     Provider,
     RemoteProvider,
+    Search,
+    SearchInput,
     SourceFetch,
     WebDataset,
 )
@@ -24,6 +26,8 @@ from backend.shared.storage.sql.models.chunk import DocumentChunkORM
 from backend.shared.storage.sql.models.outbox_event import OutboxEventORM
 from backend.shared.storage.sql.models.pipeline_run import PipelineRunORM
 from backend.shared.storage.sql.models.provider import ProviderORM
+from backend.shared.storage.sql.models.search import SearchORM
+from backend.shared.storage.sql.models.search_input import SearchInputORM
 from backend.shared.storage.sql.models.source_fetch import SourceFetchORM
 
 
@@ -56,6 +60,8 @@ def _to_chunk(orm: DocumentChunkORM) -> DocumentChunk:
         chunk_index=orm.chunk_index,
         chunk_type=orm.chunk_type,
         chunk_metadata=orm.chunk_metadata or {},
+        start_offset=orm.start_offset,
+        end_offset=orm.end_offset,
         status=orm.status,
         created_at=orm.created_at,
     )
@@ -139,6 +145,25 @@ def _to_dataset(orm: DatasetORM) -> Dataset:
             created_at=orm.created_at,
         )
     raise ValueError(f"Unknown dataset source_type: {orm.source_type!r}")
+
+
+def _to_search_input(orm: SearchInputORM) -> SearchInput:
+    return SearchInput(
+        id=orm.id,
+        text=orm.text,
+        created_at=orm.created_at,
+    )
+
+
+def _to_search(orm: SearchORM) -> Search:
+    return Search(
+        id=orm.id,
+        pipeline_id=orm.pipeline_id,
+        user_input_id=orm.user_input_id,
+        search_config=dict(orm.search_config or {}),
+        results=list(orm.results or []),
+        created_at=orm.created_at,
+    )
 
 
 def _to_provider(orm: ProviderORM) -> Provider:

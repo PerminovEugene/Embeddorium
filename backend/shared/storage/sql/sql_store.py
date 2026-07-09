@@ -16,6 +16,10 @@ from backend.shared.storage.sql.repositories.pipeline_run_repo import (
     PipelineRunRepository,
 )
 from backend.shared.storage.sql.repositories.provider_repo import ProviderRepository
+from backend.shared.storage.sql.repositories.search_input_repo import (
+    SearchInputRepository,
+)
+from backend.shared.storage.sql.repositories.search_repo import SearchRepository
 from backend.shared.storage.sql.repositories.source_fetch_repo import SourceFetchRepository
 from backend.shared.storage.sql.unit_of_work import UnitOfWork
 
@@ -41,6 +45,8 @@ class SqlStore:
         self.pipeline_runs = PipelineRunRepository(self.engine)
         self.datasets = DatasetRepository(self.engine)
         self.providers = ProviderRepository(self.engine)
+        self.search_inputs = SearchInputRepository(self.engine)
+        self.searches = SearchRepository(self.engine)
 
     def unit_of_work(self) -> UnitOfWork:
         """Open a single-transaction unit of work for atomic multi-table writes

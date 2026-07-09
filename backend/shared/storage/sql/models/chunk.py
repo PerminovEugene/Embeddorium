@@ -57,6 +57,17 @@ class DocumentChunkORM(Base):
         nullable=False,
         server_default=sql_text("'{}'"),
     )
+    # Character offsets of the chunk within the parsed source text (start
+    # inclusive, end exclusive). Nullable: pre-migration rows and chunkers
+    # that don't track positions leave them NULL.
+    start_offset: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    end_offset: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
     # Embedding lifecycle for this chunk: "pending" until embed_chunks upserts
     # its vector into Qdrant, then "embedded". A crawl target only reaches
     # PROCESSED once every chunk of its document is "embedded" — see

@@ -26,6 +26,8 @@ from backend.shared.models.provider import (
     Provider,
     RemoteProvider,
 )
+from backend.shared.models.search import Search
+from backend.shared.models.search_input import SearchInput
 
 # Resolve forward references created by TYPE_CHECKING guards
 Document.model_rebuild()
@@ -61,4 +63,6 @@ __all__ = [
     "RemoteProvider",
     "MockProvider",
     "ModelType",
+    "Search",
+    "SearchInput",
 ]

@@ -114,6 +114,8 @@ def chunk_document(
             chunk_index=index,
             chunk_type=raw.chunk_type,
             chunk_metadata=raw.metadata,
+            start_offset=raw.start_offset,
+            end_offset=raw.end_offset,
         )
         for index, raw in enumerate(raw_chunks)
     ]

@@ -235,6 +235,8 @@ class UnitOfWork:
                 "chunk_index": c.chunk_index,
                 "chunk_type": c.chunk_type,
                 "chunk_metadata": c.chunk_metadata,
+                "start_offset": c.start_offset,
+                "end_offset": c.end_offset,
             }
             for c in chunks
         ]
@@ -248,6 +250,8 @@ class UnitOfWork:
                 "text": stmt.excluded.text,
                 "chunk_type": stmt.excluded.chunk_type,
                 "chunk_metadata": stmt.excluded.chunk_metadata,
+                "start_offset": stmt.excluded.start_offset,
+                "end_offset": stmt.excluded.end_offset,
             },
         ).returning(DocumentChunkORM)
         orms = (
