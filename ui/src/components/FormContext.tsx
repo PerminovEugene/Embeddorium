@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from "react";
 import { Input, VariableGroup, Variable, Model } from "./types";
-import { Match, DbMatch, SourceType, PipelineRun } from "./types";
+import { Match, DbMatch, SourceType, SearchMethod, PipelineRun } from "./types";
 import { Provider } from "./providers/types";
 import { options, Similarity } from "./consts";
 
@@ -22,6 +22,16 @@ export interface FormState {
 
   similarities: Similarity[];
   ollamaPort: string;
+
+  // DB-search mode: how many results (nearest chunks) to return per query.
+  topK: string;
+
+  // DB-search mode: how queries are matched (dense vectors vs lexical BM25).
+  searchMethod: SearchMethod;
+
+  // DB-search mode: whether this launch should be persisted to the search
+  // history (and thus appear on the comparison page).
+  saveResults: boolean;
 
   // Source mode: "manual" compares user inputs against user candidates;
   // "db" searches the collection of the selected pipeline run for each source
@@ -77,6 +87,9 @@ interface FormContextType {
 
   checkSimilarity: (similarity: Similarity) => void;
   changeOllamaPort: (value: string) => void;
+  changeTopK: (value: string) => void;
+  setSearchMethod: (method: SearchMethod) => void;
+  setSaveResults: (save: boolean) => void;
 
   setSourceType: (sourceType: SourceType) => void;
   setSelectedRun: (run: PipelineRun | null) => void;
@@ -133,6 +146,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     models: [createModel()],
     similarities: [Similarity.COSINE],
     ollamaPort: "11434",
+    topK: "10",
+    searchMethod: "embedding",
+    saveResults: true,
     sourceType: "manual",
     selectedRun: null,
     selectedProvider: null,
@@ -159,6 +175,11 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         merged.similarities =
           similarities.length > 0 ? similarities : defaults.similarities;
+        // Same guard for the search method: fall back to the default if the
+        // persisted value is no longer a supported method.
+        if (!["embedding", "bm25"].includes(merged.searchMethod)) {
+          merged.searchMethod = defaults.searchMethod;
+        }
         return merged;
       } catch (e) {
         console.error("Failed to parse stored form state", e);
@@ -261,6 +282,27 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     setState((prev) => ({
       ...prev,
       ollamaPort: port,
+    }));
+  };
+
+  const changeTopK = (topK: string) => {
+    setState((prev) => ({
+      ...prev,
+      topK,
+    }));
+  };
+
+  const setSearchMethod = (searchMethod: SearchMethod) => {
+    setState((prev) => ({
+      ...prev,
+      searchMethod,
+    }));
+  };
+
+  const setSaveResults = (saveResults: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      saveResults,
     }));
   };
 
@@ -385,6 +427,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         errors.push("Ollama port should not be empty");
       if (!state.selectedRun)
         errors.push("Please select a pipeline run to search");
+      const topK = Number(state.topK);
+      if (state.topK.trim() === "" || !Number.isInteger(topK) || topK < 1)
+        errors.push("Top K should be a positive whole number");
     } else {
       // The provider supplies the embedding model (and its port), replacing the
       // old manual model-name + Ollama-port inputs.
@@ -429,6 +474,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
 
         checkSimilarity,
         changeOllamaPort,
+        changeTopK,
+        setSearchMethod,
+        setSaveResults,
 
         setSourceType,
         setSelectedRun,

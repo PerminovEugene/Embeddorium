@@ -198,7 +198,7 @@ const ResultTable: React.FC = () => {
               {renderHeader("Model", "model")}
               {state.similarities.map((similarity: Similarity) =>
                 renderHeader(
-                  options.find((o) => o.id === similarity)?.label,
+                  options.find((o) => o.id === similarity)?.label ?? similarity,
                   similarity
                 )
               )}

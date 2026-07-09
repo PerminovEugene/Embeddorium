@@ -48,6 +48,12 @@ const SubmitButton = () => {
         ollamaPort: state.ollamaPort,
         // The run supplies the collection + embedding model server-side.
         runId: state.selectedRun?.id,
+        // How many results to return per query.
+        topK: Number(state.topK),
+        // How queries are matched (dense vectors vs lexical BM25).
+        searchMethod: state.searchMethod,
+        // Whether to persist this launch to the search history.
+        saveResults: state.saveResults,
       },
       source: { inputs: processedSourceInputs },
     };

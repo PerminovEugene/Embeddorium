@@ -14,6 +14,9 @@ import { PipelineStatus } from "../components/ingestion-pipelines/types";
 // Number of target rows per page.
 const PAGE_SIZE = 50;
 
+// How often to re-fetch a running pipeline's data.
+const POLL_INTERVAL_MS = 10_000;
+
 // Format an ISO datetime string for display; returns "—" for null/undefined.
 function formatDateTime(dt: string | null | undefined): string {
   if (!dt) return "—";
@@ -81,6 +84,9 @@ const PipelineRunsPage = () => {
   const [runsLoading, setRunsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped each time a poll cycle starts; used as a React key to restart the
+  // countdown-bar CSS animation so the fill always tracks the next poll.
+  const [pollCycle, setPollCycle] = useState(0);
 
   // Load the runs list on mount; auto-select the newest (index 0 = newest
   // because the endpoint returns newest-first).
@@ -146,7 +152,11 @@ const PipelineRunsPage = () => {
   useEffect(() => {
     if (!selectedId || !runInfo || runInfo.status !== "running") return;
     let cancelled = false;
+    // Restart the countdown bar whenever a new poll window opens (both when
+    // polling begins and after each interval tick below).
+    setPollCycle((c) => c + 1);
     const id = setInterval(() => {
+      setPollCycle((c) => c + 1);
       Promise.all([
         fetchPipelineRun(selectedId),
         fetchPipelineRunTargets(selectedId, { limit: PAGE_SIZE, offset }),
@@ -193,8 +203,31 @@ const PipelineRunsPage = () => {
   const rangeStart = total === 0 ? 0 : offset + 1;
   const rangeEnd = Math.min(offset + PAGE_SIZE, total);
 
+  // The countdown bar is shown only while we're actively polling a running run.
+  const isPolling = Boolean(selectedId) && runInfo?.status === "running";
+
   return (
     <section>
+      {/* Poll-countdown bar: fills over one poll interval, restarting on each
+          poll (keyed by pollCycle), so the user can see when the next data
+          refresh will happen. Hidden when the pipeline isn't in progress. */}
+      {isPolling && (
+        <div
+          className="mb-6 h-1.5 overflow-hidden rounded-full bg-white/10"
+          role="progressbar"
+          aria-label="Time until next data refresh"
+          title="Live run — the bar shows when the data refreshes next"
+        >
+          <div
+            key={pollCycle}
+            className="h-full rounded-full bg-emd-primary"
+            style={{
+              animation: `emd-poll-progress ${POLL_INTERVAL_MS}ms linear forwards`,
+            }}
+          />
+        </div>
+      )}
+
       {error && (
         <p className="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 shadow-sm">
           {error}

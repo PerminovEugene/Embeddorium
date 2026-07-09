@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import VariablesSection from "./VariablesSection";
 import InputsSection from "./InputsSection";
 import ResultTable from "./ResultTable";
@@ -7,9 +8,10 @@ import ProviderSelector from "./ProviderSelector";
 import SubmitButton from "./Submit";
 import SourceModeSelector from "./SourceModeSelector";
 import RunSelector from "./RunSelector";
+import SearchParamsSection from "./SearchParamsSection";
 import { useFormContext } from "./FormContext";
 
-const H2 = ({ children }) => (
+const H2 = ({ children }: { children: ReactNode }) => (
   <h2
     style={{
       fontSize: "1.25rem",
@@ -63,6 +65,13 @@ const CompareComponent = () => {
             </>
           )}
         </section>
+
+        {isDb && (
+          <section style={sectionStyle} className="bg-emd-panel">
+            <H2>Search parameters</H2>
+            <SearchParamsSection />
+          </section>
+        )}
 
         {isDb && (
           <section style={sectionStyle} className="bg-emd-panel">

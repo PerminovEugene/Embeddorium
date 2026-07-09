@@ -6,6 +6,7 @@ const navItems = [
   { to: "/datasets", label: "Datasets", end: false },
   { to: "/ingestion-pipelines", label: "Pipelines", end: false },
   { to: "/pipeline-runs", label: "Runs", end: false },
+  { to: "/search-comparison", label: "Searches", end: false },
 ];
 
 const Header = () => {

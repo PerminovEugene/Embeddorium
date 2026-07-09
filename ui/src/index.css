@@ -48,3 +48,13 @@ body {
 .emd-panel {
   @apply bg-emd-panel rounded-2xl border border-white/40 shadow-lg shadow-black/20;
 }
+
+/* Fill animation for the poll-countdown bar on the runs page. */
+@keyframes emd-poll-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}

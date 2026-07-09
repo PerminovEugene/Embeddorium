@@ -11,7 +11,7 @@ export const inputStyle = {
   border: "1px solid #d1d5db",
   borderRadius: "0.375rem",
   outline: "none",
-  boxSizing: "border-box" as "border-box",
+  boxSizing: "border-box" as const,
   backgroundColor: "white",
 };
 

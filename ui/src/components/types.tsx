@@ -37,17 +37,20 @@ export interface FormState {
   models: Model[];
 }
 
-export interface Match {
+export type Match = {
   source_id: string;
   candidate_id: string;
 
   sourceText: string;
   candidateText: string;
   model: string;
-  [key in Similarity]?: number;
-}
+} & Partial<Record<Similarity, number>>;
 
 export type SourceType = "manual" | "db";
+
+// DB-search mode: how a query is matched against the collection — dense
+// vectors ("embedding") or lexical Postgres BM25 ("bm25").
+export type SearchMethod = "embedding" | "bm25";
 
 // A recorded ingestion pipeline run, as listed by GET /pipeline-runs. Selecting
 // one in DB-search mode supplies the collection to search and the embedding
