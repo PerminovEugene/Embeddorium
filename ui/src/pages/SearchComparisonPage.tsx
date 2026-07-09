@@ -17,18 +17,35 @@ const VIEWS: { value: ComparisonView; label: string }[] = [
 ];
 
 // Compare the stored results of several saved searches side by side. Only
-// searches over the same dataset with the same input text can be combined —
-// the picker enforces that once the first search is selected.
+// searches over the same dataset can be combined; by default they must also
+// share the same input text, unless "Allow different inputs" is enabled. The
+// picker enforces the active rule once the first search is selected.
 const SearchComparisonPage = () => {
   const [summaries, setSummaries] = useState<SearchSummary[]>([]);
   const [summariesLoading, setSummariesLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [allowDifferentInputs, setAllowDifferentInputs] = useState(false);
   // Cache of loaded search details keyed by id; selection changes only fetch
   // ids not seen before.
   const [details, setDetails] = useState<Record<string, SearchDetail>>({});
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [view, setView] = useState<ComparisonView>("chunks");
   const [error, setError] = useState<string | null>(null);
+
+  // Turning the option off can leave searches with mismatching queries in the
+  // selection; drop everything that no longer matches the anchor's query.
+  const handleAllowDifferentInputsChange = (allow: boolean) => {
+    setAllowDifferentInputs(allow);
+    if (allow || selectedIds.length < 2) return;
+    const anchor = summaries.find((s) => s.id === selectedIds[0]);
+    if (!anchor) return;
+    setSelectedIds(
+      selectedIds.filter(
+        (id) =>
+          summaries.find((s) => s.id === id)?.inputText === anchor.inputText,
+      ),
+    );
+  };
 
   useEffect(() => {
     let active = true;
@@ -91,6 +108,7 @@ const SearchComparisonPage = () => {
 
   const hits = useMemo(() => flattenHits(selectedDetails), [selectedDetails]);
   const anchor = selectedDetails[0] ?? null;
+  const distinctQueries = new Set(selectedDetails.map((d) => d.inputText)).size;
 
   return (
     <section>
@@ -105,11 +123,28 @@ const SearchComparisonPage = () => {
           {summariesLoading ? (
             <p className="text-sm text-emd-placeholder">Loading searches…</p>
           ) : (
-            <SearchPicker
-              searches={summaries}
-              selectedIds={selectedIds}
-              onChange={setSelectedIds}
-            />
+            <>
+              <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-sm text-emd-text">
+                <input
+                  type="checkbox"
+                  checked={allowDifferentInputs}
+                  onChange={(e) =>
+                    handleAllowDifferentInputsChange(e.target.checked)
+                  }
+                  className="accent-emd-primary w-4 h-4"
+                />
+                <span>Allow different inputs</span>
+                <span className="text-xs text-emd-placeholder">
+                  — compare searches with different queries on the same dataset
+                </span>
+              </label>
+              <SearchPicker
+                searches={summaries}
+                selectedIds={selectedIds}
+                onChange={setSelectedIds}
+                allowDifferentInputs={allowDifferentInputs}
+              />
+            </>
           )}
         </Card>
       </div>
@@ -118,7 +153,9 @@ const SearchComparisonPage = () => {
         <Card
           title={
             anchor
-              ? `Combined results — “${anchor.inputText}” on ${anchor.datasetName || "unknown dataset"}`
+              ? distinctQueries > 1
+                ? `Combined results — ${distinctQueries} queries on ${anchor.datasetName || "unknown dataset"}`
+                : `Combined results — “${anchor.inputText}” on ${anchor.datasetName || "unknown dataset"}`
               : "Combined results"
           }
         >

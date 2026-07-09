@@ -6,6 +6,9 @@ interface SearchPickerProps {
   // Selection order matters: index in this array drives each search's color.
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  // When true, searches only need to share a dataset to be comparable; the
+  // input text may differ between them.
+  allowDifferentInputs: boolean;
 }
 
 // Format an ISO datetime string for display; returns "—" for null/undefined.
@@ -15,19 +18,21 @@ function formatDateTime(dt: string | null | undefined): string {
 }
 
 // Checkbox list of saved searches. Results are only comparable between
-// searches over the same dataset with the same input text, so once one search
-// is selected every incompatible entry is disabled until the selection is
-// cleared.
+// searches over the same dataset — and, unless different inputs are allowed,
+// with the same input text — so once one search is selected every
+// incompatible entry is disabled until the selection is cleared.
 const SearchPicker: React.FC<SearchPickerProps> = ({
   searches,
   selectedIds,
   onChange,
+  allowDifferentInputs,
 }) => {
   const anchor = searches.find((s) => s.id === selectedIds[0]) ?? null;
 
   const isCompatible = (s: SearchSummary) =>
     anchor === null ||
-    (s.datasetName === anchor.datasetName && s.inputText === anchor.inputText);
+    (s.datasetName === anchor.datasetName &&
+      (allowDifferentInputs || s.inputText === anchor.inputText));
 
   const toggle = (id: string) =>
     onChange(

@@ -15,12 +15,16 @@ interface ComparisonTableProps {
   view: ComparisonView;
 }
 
+// Column order mirrors the search results table: who searched, the chunk
+// text, its source document, and the rank/score last.
 const HEADER_ROW = (
   <tr className="border-b border-emd-border/15 text-left text-xs uppercase tracking-wide text-emd-placeholder">
     <th className="py-3 pr-4 font-semibold first:pl-1">Search</th>
-    <th className="py-3 pr-4 font-semibold whitespace-nowrap"># in search</th>
+    <th className="py-3 pr-4 font-semibold">Chunk</th>
     <th className="py-3 pr-4 font-semibold">Document</th>
-    <th className="py-3 pl-4 font-semibold last:pr-1">Chunk</th>
+    <th className="py-3 pl-4 font-semibold whitespace-nowrap last:pr-1">
+      Rank
+    </th>
   </tr>
 );
 
@@ -95,7 +99,13 @@ function ChunkRowTr({ row }: { row: ChunkRow }) {
           <SearchChip key={`${hit.searchId}:${hit.rank}`} hit={hit} />
         ))}
       </td>
-      <td className="py-3 pr-4 whitespace-nowrap tabular-nums">
+      <td className="py-3 pr-4">
+        <ChunkTextCell text={row.chunkText} />
+      </td>
+      <td className="py-3 pr-4 max-w-[14rem] text-xs">
+        <DocumentCell sourceUrl={row.sourceUrl} documentId={row.documentId} />
+      </td>
+      <td className="py-3 pl-4 last:pr-1 whitespace-nowrap tabular-nums">
         {row.hits.map((hit) => (
           <span key={`${hit.searchId}:${hit.rank}`} className="block leading-6">
             #{hit.rank + 1}
@@ -104,12 +114,6 @@ function ChunkRowTr({ row }: { row: ChunkRow }) {
             </span>
           </span>
         ))}
-      </td>
-      <td className="py-3 pr-4 max-w-[14rem] text-xs">
-        <DocumentCell sourceUrl={row.sourceUrl} documentId={row.documentId} />
-      </td>
-      <td className="py-3 pl-4 last:pr-1">
-        <ChunkTextCell text={row.chunkText} />
       </td>
     </tr>
   );
@@ -199,11 +203,8 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ hits, view }) => {
                   <td className="py-3 pr-4 first:pl-1 max-w-[16rem]">
                     <SearchChip hit={hit} />
                   </td>
-                  <td className="py-3 pr-4 whitespace-nowrap tabular-nums">
-                    #{hit.rank + 1}
-                    <span className="text-xs text-emd-placeholder">
-                      {formatScore(hit.score)}
-                    </span>
+                  <td className="py-3 pr-4">
+                    <ChunkTextCell text={hit.chunkText} />
                   </td>
                   <td className="py-3 pr-4 max-w-[14rem] text-xs">
                     <DocumentCell
@@ -211,8 +212,11 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ hits, view }) => {
                       documentId={hit.documentId}
                     />
                   </td>
-                  <td className="py-3 pl-4 last:pr-1">
-                    <ChunkTextCell text={hit.chunkText} />
+                  <td className="py-3 pl-4 last:pr-1 whitespace-nowrap tabular-nums">
+                    #{hit.rank + 1}
+                    <span className="text-xs text-emd-placeholder">
+                      {formatScore(hit.score)}
+                    </span>
                   </td>
                 </tr>
               ))}

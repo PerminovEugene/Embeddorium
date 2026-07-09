@@ -89,10 +89,16 @@ function chunkKeyOf(
 }
 
 export function flattenHits(details: SearchDetail[]): CombinedHit[] {
+  // When the selection spans several queries ("allow different inputs"), the
+  // run name alone no longer identifies a search, so the query is folded into
+  // each search's display label.
+  const multiQuery = new Set(details.map((d) => d.inputText)).size > 1;
   return details.flatMap((detail, searchIdx) =>
     detail.results.map((hit, rank) => ({
       searchId: detail.id,
-      searchName: searchLabel(detail),
+      searchName: multiQuery
+        ? `${searchLabel(detail)} · “${detail.inputText}”`
+        : searchLabel(detail),
       colorIndex: searchIdx,
       rank,
       score: hit.score ?? null,
