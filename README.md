@@ -124,46 +124,10 @@ Ollama listens on) and select it for a run.
 
 ## Architecture
 
-Ingestion is a chain of single-purpose [Dramatiq](https://dramatiq.io/) actors,
-one per stage. There are two ways in — a **web crawler** and a **local XML
-importer** — that share one chain: the `validate_source` and `fetch_source`
-stages pick a per-source-type strategy plugin (web vs local file), and
-everything downstream is identical.
-
-```
-POST /pipeline-runs
-      │
-      ▼
-validate_source ─► fetch_source ─► parse_source ─► chunk_document ─► schedule_embeddings ─► embed_chunks ─► Qdrant
-                        │               ▲                                                        │
-                        └─ (local) ─► filter_documents                          track_pipeline_status
-```
-
-(A local-file target detours through `filter_documents` between fetch and
-parse; web targets go straight to `parse_source`.)
-
-- **Why separate stages?** Each stage does one thing and records its result, so
-  when retrieval is off you can pinpoint the stage that produced the bad output.
-- **Where do artifacts live?** Raw fetched bytes and parsed text are real files
-  under `tmp/pipeline_run/<run-id>/`. Postgres stores paths and metadata, not
-  giant blobs.
-- **Where do vectors live?** In **Qdrant**, keyed by chunk id (re-embedding
-  overwrites instead of duplicating).
-- **Why an outbox + retries?** Each stage writes its rows *and* the next message
-  in one transaction; a dispatcher publishes it. A message exists only if its
-  data committed, and every stage is idempotent — so retries are safe and runs
-  are restartable.
-- **Reproducible runs.** Each run snapshots its dataset and provider, so its
-  settings and Qdrant collection stay pinned to that run.
+<img src="docs/assets/Architecture.png" alt="Embeddorium architecture" >
 
 Full walk-through — both chains, the outbox, the status machine, and where data
 lives — in [docs/architecture.md](docs/architecture.md).
-
-## Screenshots
-
-| Datasets / sources | Provider configuration |
-| ------------------ | ---------------------- |
-| ![Datasets](docs/screenshots/sources.png) | ![Provider config](docs/screenshots/config.png) |
 
 ## Project layout
 
@@ -185,19 +149,19 @@ docker-compose.yml
 
 ## Documentation
 
-| Guide | Contents |
-| ----- | -------- |
-| [Quick start](docs/quickstart.md) | Detailed first run, service URLs, reset, common failures |
-| [Usage](docs/usage.md) | Starting runs, local XML sources, the agent, the embeddings tester |
-| [Search](docs/search.md) | Querying a run's collection from the UI and the API |
-| [Architecture](docs/architecture.md) | Pipeline stages, outbox, status machine, storage model |
-| [Configuration](docs/configuration.md) | Every environment variable, for host and Docker |
-| [Embeddings](docs/embeddings.md) | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
-| [Concurrency](docs/concurrency.md) | Per-stage threads/processes, fan-out, embedding load |
-| [Plugins](docs/plugins.md) | Writing your own chunker plugin, auto-discovery, the built-ins |
-| [Development](docs/development.md) | Setup, tests, linting, migrations, resetting local state |
-| [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs |
-| [Roadmap](docs/roadmap.md) | What's shipped, what's next (hybrid search, reranking, evaluation) |
+| Guide                                      | Contents                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| [Quick start](docs/quickstart.md)          | Detailed first run, service URLs, reset, common failures              |
+| [Usage](docs/usage.md)                     | Starting runs, local XML sources, the agent, the embeddings tester    |
+| [Search](docs/search.md)                   | Querying a run's collection from the UI and the API                   |
+| [Architecture](docs/architecture.md)       | Pipeline stages, outbox, status machine, storage model                |
+| [Configuration](docs/configuration.md)     | Every environment variable, for host and Docker                       |
+| [Embeddings](docs/embeddings.md)           | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
+| [Concurrency](docs/concurrency.md)         | Per-stage threads/processes, fan-out, embedding load                  |
+| [Plugins](docs/plugins.md)                 | Writing your own chunker plugin, auto-discovery, the built-ins        |
+| [Development](docs/development.md)         | Setup, tests, linting, migrations, resetting local state              |
+| [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs                     |
+| [Roadmap](docs/roadmap.md)                 | What's shipped, what's next (hybrid search, reranking, evaluation)    |
 
 **Tutorials:**
 [First mock run](docs/tutorials/first_mock_run.md) ·
