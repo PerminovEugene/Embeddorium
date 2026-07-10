@@ -3,7 +3,6 @@ import {
   createProvider,
   deleteProvider,
   fetchProviders,
-  updateProvider,
 } from "../api/providers";
 import ProviderList from "../components/providers/ProviderList";
 import ProviderForm from "../components/providers/ProviderForm";
@@ -44,20 +43,14 @@ const ProvidersPage = () => {
   const handleCreateNew = () => setSelectedId(null);
 
   const handleSubmit = async (values: ProviderFormValues) => {
+    if (selectedProvider) return;
     setSubmitting(true);
     setError(null);
     try {
-      if (selectedProvider) {
-        const updated = await updateProvider(selectedProvider.id, values);
-        setProviders((prev) =>
-          prev.map((p) => (p.id === updated.id ? updated : p)),
-        );
-      } else {
-        const created = await createProvider(values);
-        // list endpoint returns newest first, so prepend.
-        setProviders((prev) => [created, ...prev]);
-        setSelectedId(created.id);
-      }
+      const created = await createProvider(values);
+      // list endpoint returns newest first, so prepend.
+      setProviders((prev) => [created, ...prev]);
+      setSelectedId(created.id);
     } catch (err) {
       console.error("Failed to save provider:", err);
       setError("Failed to save provider");
@@ -116,7 +109,7 @@ const ProvidersPage = () => {
         </aside>
 
         {/* Right: form prefilled by the selection, or empty for "create new". */}
-        <Card title={selectedProvider ? "Edit provider" : "New provider"}>
+        <Card title={selectedProvider ? "Provider details" : "New provider"}>
           <ProviderForm
             provider={selectedProvider}
             onSubmit={handleSubmit}

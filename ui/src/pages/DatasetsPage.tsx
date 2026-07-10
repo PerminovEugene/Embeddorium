@@ -3,7 +3,6 @@ import {
   createDataset,
   deleteDataset,
   fetchDatasets,
-  updateDataset,
 } from "../api/datasets";
 import DatasetList from "../components/datasets/DatasetList";
 import DatasetForm from "../components/datasets/DatasetForm";
@@ -44,20 +43,14 @@ const DatasetsPage = () => {
   const handleCreateNew = () => setSelectedId(null);
 
   const handleSubmit = async (values: DatasetFormValues) => {
+    if (selectedDataset) return;
     setSubmitting(true);
     setError(null);
     try {
-      if (selectedDataset) {
-        const updated = await updateDataset(selectedDataset.id, values);
-        setDatasets((prev) =>
-          prev.map((d) => (d.id === updated.id ? updated : d)),
-        );
-      } else {
-        const created = await createDataset(values);
-        // list endpoint returns newest first, so prepend.
-        setDatasets((prev) => [created, ...prev]);
-        setSelectedId(created.id);
-      }
+      const created = await createDataset(values);
+      // list endpoint returns newest first, so prepend.
+      setDatasets((prev) => [created, ...prev]);
+      setSelectedId(created.id);
     } catch (err) {
       console.error("Failed to save dataset:", err);
       setError("Failed to save dataset");
@@ -116,7 +109,7 @@ const DatasetsPage = () => {
         </aside>
 
         {/* Right: form prefilled by the selection, or empty for "create new". */}
-        <Card title={selectedDataset ? "Edit dataset" : "New dataset"}>
+        <Card title={selectedDataset ? "Dataset details" : "New dataset"}>
           <DatasetForm
             dataset={selectedDataset}
             onSubmit={handleSubmit}
