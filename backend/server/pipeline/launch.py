@@ -136,16 +136,17 @@ def _seed_local(
 
     Each entry in ``dataset["paths"]`` is one of:
     - A path relative to the source root, as produced by the UI's server-side
-      source-file browser (e.g. ``xml.2026.en/act.xml`` for a file, or
-      ``xml.2026.en`` for a folder). Relative entries are anchored onto the
+      source-file browser (e.g. ``docs.2026.en/act.xml`` for a file, or
+      ``docs.2026.en`` for a folder). Relative entries are anchored onto the
       source root so the resulting absolute path matches what the file actor
       sees through its ``./sources`` mount.
     - An absolute path (admin/API use-case), passed through unchanged.
 
-    A ``.xml`` entry is enqueued directly; a directory entry is enumerated
-    recursively (``**/*.xml``) so nested subfolders are included. The old
-    browser file-picker recorded only bare filenames (``f.name``), which the
-    actor could not resolve to a real file — that is why the path looked broken.
+    A file entry is enqueued directly; a directory entry is enumerated
+    recursively (``file_glob`` applied via ``rglob``) so nested subfolders are
+    included. The old browser file-picker recorded only bare filenames
+    (``f.name``), which the actor could not resolve to a real file — that is why
+    the path looked broken.
     """
     paths: List[str] = dataset.get("paths", [])
     count = 0
@@ -155,21 +156,21 @@ def _seed_local(
 
         # Directory — enumerate descendants matching the configured glob.
         if p.is_dir():
-            xml_files: List[Path] = sorted(p.rglob(file_glob))
+            matched_files: List[Path] = sorted(p.rglob(file_glob))
         # Individual file — the common file-picker selection. Classified by
         # suffix so a not-yet-on-disk file path is still enqueued (the
         # validate_source local strategy rejects missing files with a skip).
         elif p.suffix:
-            xml_files = [p]
+            matched_files = [p]
         else:
             logger.warning(
                 "local seed path is not a file (no suffix) or an existing "
                 "directory, skipping path=%s",
                 root_path,
             )
-            xml_files = []
+            matched_files = []
 
-        for file_path in xml_files:
+        for file_path in matched_files:
             _enqueue_validate_source(
                 url=str(file_path), pipeline_id_str=pipeline_id_str, broker=broker
             )
@@ -178,7 +179,7 @@ def _seed_local(
         logger.info(
             "enqueued local seed path=%s files=%d",
             root_path,
-            len(xml_files),
+            len(matched_files),
         )
 
     return count

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from backend.plugins._fields import FieldSpec
 from backend.plugins.fetch_source.base import (
     FetchContext,
     FetchedSource,
@@ -51,6 +52,30 @@ class WebSourceFetch(SourceFetchStrategy):
             "Fetches the target URL over HTTP(S) and routes the raw content "
             "to parse_source."
         ),
+        # Mirrors the web knobs the fetch_source actor reads out of
+        # FetchSourceSettings; keys/defaults must match that model exactly.
+        fields=[
+            FieldSpec(
+                key="verify_tls",
+                label="Verify TLS certificates",
+                type="checkbox",
+                default=True,
+            ),
+            FieldSpec(
+                key="timeout_seconds",
+                label="Read timeout (seconds)",
+                type="number",
+                default=30,
+                min=1,
+            ),
+            FieldSpec(
+                key="allowed_content_types",
+                label="Allowed content types",
+                type="text",
+                default="",
+                placeholder="text/html, application/xml",
+            ),
+        ],
     )
 
     def fetch(self, *, target: CrawlTarget, ctx: FetchContext) -> FetchedSource:

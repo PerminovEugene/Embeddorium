@@ -11,7 +11,6 @@ from backend.shared.storage.sql.models.chunk import DocumentChunkORM
 from backend.shared.storage.sql.models.crawl_target import CrawlTargetORM
 
 
-
 class ChunkRepository:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
@@ -67,7 +66,7 @@ class ChunkRepository:
             result.document = _to_document(orm_chunk.document)
 
             return result
-        
+
     def get_neighbors(self, document_id: str, chunk_index: int) -> list[DocumentChunk]:
         with Session(self.engine) as session:
             statement = (
@@ -154,7 +153,10 @@ class ChunkRepository:
             return {status: int(count) for status, count in rows}
 
     def search_bm25(
-        self, query: str, limit: int = 10
+        self,
+        query: str,
+        limit: int = 10,
+        pipeline_id: uuid.UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         """BM25 full-text search over ``document_chunks.text`` via the
         ``pg_textsearch`` extension (see migration 025 and
@@ -164,8 +166,20 @@ class ChunkRepository:
         operator. The operator is not modeled by the ORM (SQLAlchemy has no
         concept of it), so ranking is done with a raw, parameter-bound
         ``sqlalchemy.text()`` statement rather than ``select()`` — *never*
-        string-format ``query`` into the SQL, it is bound as ``:query`` so it
-        is always treated as data, not SQL.
+        string-format ``query`` (or ``pipeline_id``) into the SQL, both are
+        bound as ``:query``/``:pipeline_id`` so they are always treated as
+        data, not SQL.
+
+        When ``pipeline_id`` is given, the ranking is scoped to the chunks of
+        that pipeline run only, by joining ``document_chunks`` to
+        ``crawl_targets`` on ``document_id`` and filtering on
+        ``crawl_targets.pipeline_id`` — the same join
+        ``status_counts_for_pipeline`` uses to scope chunks to a run. This
+        mirrors how dense search is scoped to one run via Qdrant's
+        ``pipeline_run_id`` payload filter, so a run's BM25 half only ranks its
+        own chunks rather than every chunk ever written across all runs. When
+        omitted (the default), the search spans every chunk, preserving the
+        original all-runs behaviour for existing callers.
 
         Importantly, ``<@>`` returns a *negated* BM25 score: lower (more
         negative) means a *better* match, which is why this method
@@ -196,17 +210,34 @@ class ChunkRepository:
         show/compare it.
         """
         with Session(self.engine) as session:
-            rank_stmt = sql_text(
-                """
-                SELECT id, text <@> :query AS score
-                FROM document_chunks
-                ORDER BY score ASC
-                LIMIT :limit
-                """
-            )
-            ranked_rows = session.execute(
-                rank_stmt, {"query": query, "limit": limit}
-            ).all()
+            params: dict[str, object] = {"query": query, "limit": limit}
+            if pipeline_id is None:
+                rank_stmt = sql_text(
+                    """
+                    SELECT id, text <@> :query AS score
+                    FROM document_chunks
+                    ORDER BY score ASC
+                    LIMIT :limit
+                    """
+                )
+            else:
+                # Scope the ranking to this run's chunks by joining to
+                # crawl_targets on document_id (the join
+                # ``status_counts_for_pipeline`` uses). pipeline_id is bound and
+                # CAST to uuid so the raw driver never has to guess its type.
+                rank_stmt = sql_text(
+                    """
+                    SELECT dc.id, dc.text <@> :query AS score
+                    FROM document_chunks AS dc
+                    JOIN crawl_targets AS ct
+                        ON ct.document_id = dc.document_id
+                    WHERE ct.pipeline_id = CAST(:pipeline_id AS uuid)
+                    ORDER BY score ASC
+                    LIMIT :limit
+                    """
+                )
+                params["pipeline_id"] = str(pipeline_id)
+            ranked_rows = session.execute(rank_stmt, params).all()
 
             if not ranked_rows:
                 return []

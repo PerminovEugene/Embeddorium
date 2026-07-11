@@ -19,51 +19,43 @@ from backend.shared.models import PipelineRun, Search
 from backend.shared.storage.sql.sql_store import SqlStore
 
 
-def list_searches(limit: int = 100) -> list[SearchSummaryOut]:
+def list_searches(store: SqlStore, limit: int = 100) -> list[SearchSummaryOut]:
     """Return persisted searches, newest first, with run/input info joined in."""
-    store = SqlStore(application_name="embeddorium-search-history")
-    try:
-        searches = store.searches.list_recent(limit=limit)
-        input_texts: dict[uuid.UUID, str] = {}
-        runs: dict[uuid.UUID, PipelineRun | None] = {}
+    searches = store.searches.list_recent(limit=limit)
+    input_texts: dict[uuid.UUID, str] = {}
+    runs: dict[uuid.UUID, PipelineRun | None] = {}
 
-        summaries: list[SearchSummaryOut] = []
-        for search in searches:
-            if search.user_input_id not in input_texts:
-                search_input = store.search_inputs.get(search.user_input_id)
-                input_texts[search.user_input_id] = (
-                    search_input.text if search_input else ""
-                )
-            if search.pipeline_id not in runs:
-                runs[search.pipeline_id] = store.pipeline_runs.get(search.pipeline_id)
-            summaries.append(
-                _summarize(
-                    search,
-                    input_texts[search.user_input_id],
-                    runs[search.pipeline_id],
-                )
+    summaries: list[SearchSummaryOut] = []
+    for search in searches:
+        if search.user_input_id not in input_texts:
+            search_input = store.search_inputs.get(search.user_input_id)
+            input_texts[search.user_input_id] = (
+                search_input.text if search_input else ""
             )
-        return summaries
-    finally:
-        store.close()
-
-
-def get_search(search_id: uuid.UUID) -> SearchDetailOut | None:
-    """Load one persisted search with its stored results, or ``None``."""
-    store = SqlStore(application_name="embeddorium-search-history")
-    try:
-        search = store.searches.get(search_id)
-        if search is None:
-            return None
-        search_input = store.search_inputs.get(search.user_input_id)
-        run = store.pipeline_runs.get(search.pipeline_id)
-        summary = _summarize(search, search_input.text if search_input else "", run)
-        return SearchDetailOut(
-            **summary.model_dump(by_alias=False),
-            results=_results_list(search),
+        if search.pipeline_id not in runs:
+            runs[search.pipeline_id] = store.pipeline_runs.get(search.pipeline_id)
+        summaries.append(
+            _summarize(
+                search,
+                input_texts[search.user_input_id],
+                runs[search.pipeline_id],
+            )
         )
-    finally:
-        store.close()
+    return summaries
+
+
+def get_search(store: SqlStore, search_id: uuid.UUID) -> SearchDetailOut | None:
+    """Load one persisted search with its stored results, or ``None``."""
+    search = store.searches.get(search_id)
+    if search is None:
+        return None
+    search_input = store.search_inputs.get(search.user_input_id)
+    run = store.pipeline_runs.get(search.pipeline_id)
+    summary = _summarize(search, search_input.text if search_input else "", run)
+    return SearchDetailOut(
+        **summary.model_dump(by_alias=False),
+        results=_results_list(search),
+    )
 
 
 def _summarize(

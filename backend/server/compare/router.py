@@ -9,11 +9,12 @@ import uuid
 from typing import Optional, Tuple
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.server.compare.embedder import get_embeddings
 from backend.server.compare.matcher import match_embeddings
 from backend.server.compare.schemas import CompareRequest
+from backend.server.dependencies import get_sql_store
 from backend.shared import config
 from backend.shared.storage.sql.sql_store import SqlStore
 
@@ -21,11 +22,12 @@ router = APIRouter(tags=["compare"])
 
 
 @router.post("/compare")
-async def compare(request: CompareRequest):
-    return await compare_embeddings(request)
+async def compare(request: CompareRequest, store: SqlStore = Depends(get_sql_store)):
+    return await compare_embeddings(store, request)
 
 
 def _resolve_compare_provider(
+    store: SqlStore,
     provider_id: Optional[str],
 ) -> Tuple[str, Optional[str], Optional[str], Optional[int]]:
     """Load the provider selected in the UI and return the args ``get_embeddings``
@@ -42,11 +44,7 @@ def _resolve_compare_provider(
     except (ValueError, TypeError):
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    store = SqlStore(application_name="embeddorium-compare")
-    try:
-        provider = store.providers.get(parsed)
-    finally:
-        store.close()
+    provider = store.providers.get(parsed)
     if provider is None:
         raise HTTPException(status_code=404, detail="Provider not found")
 
@@ -61,12 +59,12 @@ def _resolve_compare_provider(
     )
 
 
-async def compare_embeddings(request):
+async def compare_embeddings(store: SqlStore, request):
     request_uuid = str(uuid4())
 
     provider_id = request.configuration.get("providerId")
     provider_type, model_name, ollama_port, mock_dim = _resolve_compare_provider(
-        provider_id
+        store, provider_id
     )
 
     logging.info("Comparing with provider=%s model=%s", provider_type, model_name)

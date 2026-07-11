@@ -20,7 +20,12 @@ const cellStyle = { border: "1px solid #d1d5db", padding: "0.5rem" } as const;
 const fileName = (path: string): string => path.split(/[\\/]/).pop() || path;
 
 const DbResultTable: React.FC = () => {
-  const [sortKey, setSortKey] = useState<SortKey>("score");
+  // Default to the order the backend returned (best-first rank order). Score
+  // semantics vary by strategy — keyword (BM25) scores are negated so lower is
+  // better, while semantic/hybrid scores are higher-is-better — so we must not
+  // re-sort by raw score. Users can still opt into a column sort by clicking a
+  // header (null = keep received order).
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const { state } = useFormContext();
   const { dbMatches = [], selectedRun } = state;
@@ -39,16 +44,19 @@ const DbResultTable: React.FC = () => {
     }
   };
 
-  const sortedMatches = [...dbMatches].sort((a, b) => {
-    const aVal = a[sortKey];
-    const bVal = b[sortKey];
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
-    }
-    return sortDirection === "asc"
-      ? String(aVal).localeCompare(String(bVal))
-      : String(bVal).localeCompare(String(aVal));
-  });
+  const sortedMatches =
+    sortKey === null
+      ? dbMatches
+      : [...dbMatches].sort((a, b) => {
+          const aVal = a[sortKey];
+          const bVal = b[sortKey];
+          if (typeof aVal === "number" && typeof bVal === "number") {
+            return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+          }
+          return sortDirection === "asc"
+            ? String(aVal).localeCompare(String(bVal))
+            : String(bVal).localeCompare(String(aVal));
+        });
 
   const renderHeader = (label: string, key: SortKey) => {
     let arrow = "⇅";

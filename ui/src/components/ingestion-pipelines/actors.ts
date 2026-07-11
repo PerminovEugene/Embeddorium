@@ -2,7 +2,7 @@ import { SelectOption } from "../common/Select";
 import { DatasetSourceType } from "../datasets/types";
 import { options as SIMILARITY_OPTIONS } from "../consts";
 import { Provider } from "../providers/types";
-import { ChunkerConfig, ChunkerFieldDef, SettingValue } from "./types";
+import { ActorConfigMap, PluginFieldDef, SettingValue } from "./types";
 
 // Chunker used when none is selected / recorded. Must match the backend
 // registry's DEFAULT_CHUNKER (backend/plugins/chunkers/registry.py).
@@ -46,25 +46,15 @@ const similaritySelectOptions: SelectOption[] = SIMILARITY_OPTIONS.map((o) => ({
 
 // ---- Actors shared by both chains --------------------------------------
 
+// parse_source is plugin-backed (backend/plugins/parse_source): its settings
+// are discovered from GET /actor-configs and injected by the form. The base
+// def carries no settings.
 const parseSource: ActorDef = {
   key: "parse_source",
   name: "parse_source",
   description:
     "Picks a parser by content type, extracts normalized text, saves the Document with metadata/hashes.",
-  settings: [
-    {
-      key: "parser",
-      label: "Parser",
-      type: "select",
-      options: [
-        { value: "auto", label: "Auto (by content type)" },
-        { value: "html", label: "HTML → Markdown" },
-        { value: "xml", label: "XML" },
-        { value: "pdf", label: "PDF" },
-      ],
-      default: "auto",
-    },
-  ],
+  settings: [],
 };
 
 // The chunk_document actor's settings are NOT static: the chunker options and
@@ -87,77 +77,61 @@ const scheduleEmbeddings: ActorDef = {
   ],
 };
 
+// embed_chunks' provider field is plugin-described (backend/plugins/embed_chunks
+// "standard" strategy → a required provider_id field) and injected by the form
+// via embedChunksFields; the base def carries no settings. The similarity field
+// is appended there — it is a vector_store concern, not an embed plugin field.
 const embedChunks: ActorDef = {
   key: "embed_chunks",
   name: "embed_chunks",
   description: "Embeds chunks and upserts vectors into Qdrant (point id = chunk id).",
-  settings: [
-    // "provider" is resolved at render time from the providers list (see
-    // ActorSection / SettingControl). The stored value is the provider's id.
-    {
-      key: "providerId",
-      label: "Embedding provider",
-      type: "provider",
-      default: "",
-    },
-    {
-      key: "similarity",
-      label: "Similarity",
-      type: "select",
-      options: similaritySelectOptions,
-      default: similaritySelectOptions[0]?.value ?? "cosine",
-    },
-  ],
+  settings: [],
+};
+
+// The stored value of the embedding-provider field is the provider's id (see
+// SettingControl's "provider" case). Used as a fallback when the backend config
+// hasn't loaded yet so the required picker still renders.
+const FALLBACK_PROVIDER_FIELD: SettingField = {
+  key: "provider",
+  label: "Embedding provider",
+  type: "provider",
+  default: "",
+};
+
+// Similarity is chosen inside embed_chunks but persisted under vector_store, so
+// it is not an embed plugin field; it is appended to the actor's form here.
+const SIMILARITY_FIELD: SettingField = {
+  key: "similarity",
+  label: "Similarity",
+  type: "select",
+  options: similaritySelectOptions,
+  default: similaritySelectOptions[0]?.value ?? "cosine",
 };
 
 // ---- Web crawl chain ---------------------------------------------------
 
-const crawlFrontierManager: ActorDef = {
-  key: "crawl_frontier_manager",
-  name: "crawl_frontier_manager",
+// validate_source is plugin-backed (backend/plugins/validate_source): the
+// former UI "crawl_frontier_manager" step. Its settings (normalize_urls,
+// dedup) are discovered from GET /actor-configs; the strategy (web/local) is
+// resolved from the selected datasets' source types.
+const validateSource: ActorDef = {
+  key: "validate_source",
+  name: "validate_source",
   description:
-    "Dedup gate; normalizes the URL, creates a crawl_target (queued), enqueues fetch. Discovered links loop back here.",
-  settings: [
-    { key: "normalizeUrls", label: "Normalize URLs", type: "checkbox", default: true },
-    { key: "dedup", label: "Dedup by normalized URL", type: "checkbox", default: true },
-  ],
+    "Dedup + origin gate; normalizes the source, creates a crawl_target (queued), enqueues fetch. Discovered links loop back here.",
+  settings: [],
 };
 
+// fetch_source is plugin-backed (backend/plugins/fetch_source): its settings
+// (web: verify_tls/timeout_seconds/allowed_content_types, local: file_glob)
+// are discovered from GET /actor-configs; the strategy is resolved from the
+// selected datasets' source types.
 const fetchSource: ActorDef = {
   key: "fetch_source",
   name: "fetch_source",
   description:
-    "Fetches the URL (TLS verified), classifies failures, rejects unsupported content types, stores the raw fetch + provenance.",
-  settings: [
-    {
-      key: "verifyTls",
-      label: "Verify TLS",
-      type: "checkbox",
-      default: true,
-      description:
-        "Reject an HTTPS page whose TLS certificate can't be verified. Turn off only to crawl hosts with self-signed or expired certificates.",
-    },
-    {
-      key: "timeoutSeconds",
-      label: "Timeout (seconds)",
-      type: "number",
-      default: 30,
-      min: 1,
-      description:
-        "Read timeout for each fetch. The request is aborted (and retried with backoff) if the server doesn't respond within this many seconds.",
-    },
-    {
-      // Empty means "no extra restriction" — the parser registry decides what
-      // is supported. A non-empty list further narrows the accepted types.
-      key: "allowedContentTypes",
-      label: "Allowed content types",
-      type: "text",
-      placeholder: "Any supported (e.g. text/html, text/xml)",
-      default: "",
-      description:
-        "Comma-separated allowlist that further narrows the content types the parsers already support. Leave empty to accept any supported type; a page whose Content-Type isn't listed is skipped.",
-    },
-  ],
+    "Fetches the source (URL over TLS or local file), classifies failures, rejects unsupported content types, stores the raw fetch + provenance.",
+  settings: [],
 };
 
 const scheduleDiscoveredLinks: ActorDef = {
@@ -174,39 +148,19 @@ const scheduleDiscoveredLinks: ActorDef = {
 
 // ---- Local XML file chain ----------------------------------------------
 
-const fetchFileSource: ActorDef = {
-  key: "fetch_file_source",
-  name: "fetch_file_source",
-  description:
-    "Normalizes the path to file://<abs_path>, dedups against an already-queued target, reads the file, stores raw content as a SourceFetch.",
-  settings: [
-    { key: "glob", label: "File glob", type: "text", placeholder: "*.xml", default: "*.xml" },
-    { key: "dedup", label: "Dedup by normalized path", type: "checkbox", default: true },
-  ],
-};
-
+// filter_documents is plugin-backed (backend/plugins/filter_documents): its
+// settings (enabled, keywords) are discovered from GET /actor-configs.
 const filterDocuments: ActorDef = {
   key: "filter_documents",
   name: "filter_documents",
   description:
     "Extracts the document title and classifies it with a keyword filter; non-matching documents are skipped.",
-  settings: [
-    { key: "enabled", label: "Enabled", type: "checkbox", default: false },
-    {
-      // Empty means no keyword filtering — every document passes through. A
-      // non-empty list keeps only documents matching one of the keywords.
-      key: "keywords",
-      label: "Keywords",
-      type: "text",
-      placeholder: "keyword1, keyword2",
-      default: "",
-    },
-  ],
+  settings: [],
 };
 
 // Web crawl chain (README "Web crawl chain").
 const WEB_CHAIN: ActorDef[] = [
-  crawlFrontierManager,
+  validateSource,
   fetchSource,
   parseSource,
   chunkDocument,
@@ -218,7 +172,8 @@ const WEB_CHAIN: ActorDef[] = [
 // Local XML file chain (README "Local XML file chain"). The seed runner
 // (add_file_source_job) is not a Dramatiq actor, so it isn't configurable here.
 const FILE_CHAIN: ActorDef[] = [
-  fetchFileSource,
+  validateSource,
+  fetchSource,
   filterDocuments,
   parseSource,
   chunkDocument,
@@ -258,12 +213,44 @@ export function providerOptions(providers: Provider[]): SelectOption[] {
 // The default value for a single setting field.
 export const settingDefault = (field: SettingField): SettingValue => field.default;
 
-// ---- Dynamic chunk_document fields (from discovered chunkers) -----------
+// ---- Dynamic fields (from discovered strategy plugins) ------------------
 
-// Map one backend-declared chunker field to the form's SettingField. The
-// field `key` is preserved verbatim (snake_case) so the submitted value
-// round-trips into the server's ChunkDocumentSettings.settings.
-function toSettingField(field: ChunkerFieldDef): SettingField {
+// Actors whose settings are discovered from the backend (GET /actor-configs)
+// rather than hardcoded above. The value selects which strategy's fields to
+// render: "bySourceType" resolves web/local from the selected datasets; a
+// literal strategy name selects that single strategy. chunk_document is driven
+// separately (its chunker is user-picked; see chunkDocumentFields) and
+// embed_chunks stays hardcoded (its provider snapshot + vector-store similarity
+// are cross-cutting concerns, not plain plugin fields).
+const PLUGIN_ACTORS: Record<string, "bySourceType" | string> = {
+  validate_source: "bySourceType",
+  fetch_source: "bySourceType",
+  parse_source: "content_type",
+  filter_documents: "keyword",
+};
+
+// Whether an actor's settings come from GET /actor-configs.
+export function isPluginActor(actorKey: string): boolean {
+  return actorKey in PLUGIN_ACTORS;
+}
+
+// Resolve which strategy's fields to render for a plugin actor. web/local
+// strategies are keyed by dataset source type; when both are present the web
+// strategy wins (mirroring the merged chain's actor de-duplication).
+function strategyForActor(
+  actorKey: string,
+  sourceTypes: Set<DatasetSourceType>
+): string {
+  const selector = PLUGIN_ACTORS[actorKey];
+  if (selector !== "bySourceType") return selector;
+  return sourceTypes.has("web") ? "web" : "local";
+}
+
+// Map one backend-declared plugin field to the form's SettingField. The field
+// `key` is preserved verbatim (snake_case) so the submitted value round-trips
+// into the actor's stored settings block. "provider_id" fields render with the
+// live provider picker (same control as embed_chunks).
+function toSettingField(field: PluginFieldDef): SettingField {
   switch (field.type) {
     case "number":
       return {
@@ -291,6 +278,13 @@ function toSettingField(field: ChunkerFieldDef): SettingField {
         })),
         default: String(field.default ?? ""),
       };
+    case "provider_id":
+      return {
+        key: field.key,
+        label: field.label,
+        type: "provider",
+        default: String(field.default ?? ""),
+      };
     default:
       return {
         key: field.key,
@@ -302,14 +296,38 @@ function toSettingField(field: ChunkerFieldDef): SettingField {
   }
 }
 
+// Build a plugin-backed actor's settings for the currently-selected datasets:
+// the fields declared by its resolved strategy (web/local or the single
+// strategy). Empty when the actor isn't plugin-backed or configs are still
+// loading.
+export function pluginActorFields(
+  actorConfigs: ActorConfigMap,
+  actorKey: string,
+  sourceTypes: Set<DatasetSourceType>
+): SettingField[] {
+  if (!isPluginActor(actorKey)) return [];
+  const strategies = actorConfigs[actorKey] ?? [];
+  const wanted = strategyForActor(actorKey, sourceTypes);
+  const strategy =
+    strategies.find((s) => s.name === wanted) ?? strategies[0];
+  return (strategy?.fields ?? []).map(toSettingField);
+}
+
+// The discovered chunkers are chunk_document's strategies in the unified
+// GET /actor-configs payload (they share the strategy-config shape).
+function chunkStrategies(actorConfigs: ActorConfigMap) {
+  return actorConfigs["chunk_document"] ?? [];
+}
+
 // Build the chunk_document actor's settings for the currently-selected chunker:
 // a "chunker" picker (options from the discovered plugins) followed by that
 // chunker's own declared fields. Falls back to the default chunker when the
 // selection is unknown (e.g. the list is still loading).
 export function chunkDocumentFields(
-  chunkers: ChunkerConfig[],
+  actorConfigs: ActorConfigMap,
   selected: string
 ): SettingField[] {
+  const chunkers = chunkStrategies(actorConfigs);
   const chunkerField: SettingField = {
     key: "chunker",
     label: "Chunker",
@@ -327,8 +345,27 @@ export function chunkDocumentFields(
 // The selected chunker's free-text restrictions, for display under the actor
 // description. Empty string when none / not found.
 export function chunkerRestrictions(
-  chunkers: ChunkerConfig[],
+  actorConfigs: ActorConfigMap,
   selected: string
 ): string {
-  return chunkers.find((c) => c.name === selected)?.restrictions ?? "";
+  return (
+    chunkStrategies(actorConfigs).find((c) => c.name === selected)
+      ?.restrictions ?? ""
+  );
+}
+
+// Build the embed_chunks actor's settings: the plugin-described provider field
+// (from the "standard" strategy) followed by the similarity field. Falls back
+// to a hardcoded provider picker while the backend config is still loading, so
+// the required field always renders.
+export function embedChunksFields(
+  actorConfigs: ActorConfigMap
+): SettingField[] {
+  const strategies = actorConfigs["embed_chunks"] ?? [];
+  const standard =
+    strategies.find((s) => s.name === "standard") ?? strategies[0];
+  const pluginFields = (standard?.fields ?? []).map(toSettingField);
+  const providerFields =
+    pluginFields.length > 0 ? pluginFields : [FALLBACK_PROVIDER_FIELD];
+  return [...providerFields, SIMILARITY_FIELD];
 }

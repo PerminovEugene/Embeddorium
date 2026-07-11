@@ -7,11 +7,11 @@ import {
 } from "../api/ingestionPipelines";
 import { fetchProviders } from "../api/providers";
 import { fetchDatasets } from "../api/datasets";
-import { fetchChunkers } from "../api/chunkers";
+import { fetchActorConfigs } from "../api/actorConfigs";
 import IngestionPipelineList from "../components/ingestion-pipelines/IngestionPipelineList";
 import IngestionPipelineForm from "../components/ingestion-pipelines/IngestionPipelineForm";
 import {
-  ChunkerConfig,
+  ActorConfigMap,
   IngestionPipeline,
   IngestionPipelineFormValues,
 } from "../components/ingestion-pipelines/types";
@@ -23,7 +23,7 @@ const IngestionPipelinesPage = () => {
   const [pipelines, setPipelines] = useState<IngestionPipeline[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [chunkers, setChunkers] = useState<ChunkerConfig[]>([]);
+  const [actorConfigs, setActorConfigs] = useState<ActorConfigMap>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // Id of the pipeline whose launch/delete request is in flight, if any.
@@ -53,17 +53,17 @@ const IngestionPipelinesPage = () => {
         console.error("Failed to load datasets:", err);
         return [] as Dataset[];
       }),
-      fetchChunkers().catch((err) => {
-        console.error("Failed to load chunkers:", err);
-        return [] as ChunkerConfig[];
+      fetchActorConfigs().catch((err) => {
+        console.error("Failed to load actor configs:", err);
+        return {} as ActorConfigMap;
       }),
     ])
-      .then(([pipelineData, providerData, datasetData, chunkerData]) => {
+      .then(([pipelineData, providerData, datasetData, actorConfigData]) => {
         if (!active) return;
         setPipelines(pipelineData);
         setProviders(providerData);
         setDatasets(datasetData);
-        setChunkers(chunkerData);
+        setActorConfigs(actorConfigData);
       })
       .catch((err) => {
         console.error("Failed to load ingestion pipelines:", err);
@@ -175,7 +175,7 @@ const IngestionPipelinesPage = () => {
             pipeline={selectedPipeline}
             providers={providers}
             datasets={datasets}
-            chunkers={chunkers}
+            actorConfigs={actorConfigs}
             onSubmit={handleSubmit}
             submitting={submitting}
             disabled={selectedPipeline !== null}

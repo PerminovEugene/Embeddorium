@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from backend.plugins._fields import FieldSpec
 from backend.plugins.validate_source.base import (
     NormalizedSource,
     SourceValidationError,
@@ -32,6 +33,17 @@ class LocalFileSourceValidation(SourceValidationStrategy):
             "Resolves the path to its absolute form and rejects files that "
             "do not exist or are not readable."
         ),
+        # Local paths are always resolved to their absolute form, so
+        # normalize_urls does not apply; only the shared dedup gate is
+        # configurable here. Key/default mirror ValidateSourceSettings.
+        fields=[
+            FieldSpec(
+                key="dedup",
+                label="Skip already-queued sources",
+                type="checkbox",
+                default=True,
+            ),
+        ],
     )
 
     def normalize(

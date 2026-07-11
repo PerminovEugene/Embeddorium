@@ -12,12 +12,15 @@ import {
   SettingField,
   chunkDocumentFields,
   chunkerRestrictions,
+  embedChunksFields,
+  isPluginActor,
+  pluginActorFields,
   providerOptions,
   resolveActorChain,
 } from "./actors";
 import {
+  ActorConfigMap,
   ActorSettings,
-  ChunkerConfig,
   IngestionPipeline,
   IngestionPipelineFormValues,
   SettingValue,
@@ -29,9 +32,10 @@ interface IngestionPipelineFormProps {
   // Available providers/datasets to choose from.
   providers: Provider[];
   datasets: Dataset[];
-  // Chunker plugins discovered from the backend; feed the chunk_document
-  // actor's chunker picker and its per-chunker settings fields.
-  chunkers: ChunkerConfig[];
+  // Per-actor strategy configs discovered from the backend (GET
+  // /actor-configs); feed every plugin-backed actor's settings fields —
+  // including chunk_document's chunker picker and embed_chunks' provider field.
+  actorConfigs: ActorConfigMap;
   onSubmit: (values: IngestionPipelineFormValues) => void;
   // Delete the pipeline being edited. Only rendered when editing.
   onDelete?: () => void;
@@ -61,7 +65,7 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
   pipeline,
   providers,
   datasets,
-  chunkers,
+  actorConfigs,
   onSubmit,
   onDelete,
   submitting = false,
@@ -89,29 +93,36 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
     const opts = providerOptions(providers);
     if (opts.length === 0) return;
     setValues((prev) => {
-      if (prev.actorSettings["embed_chunks"]?.["providerId"]) return prev;
+      if (prev.actorSettings["embed_chunks"]?.["provider"]) return prev;
       return {
         ...prev,
         actorSettings: {
           ...prev.actorSettings,
           embed_chunks: {
             ...prev.actorSettings["embed_chunks"],
-            providerId: opts[0].value,
+            provider: opts[0].value,
           },
         },
       };
     });
   }, [pipeline, providers, disabled]);
 
-  // The actor chain is derived from the source types of the selected datasets.
-  const actorChain = useMemo<ActorDef[]>(() => {
-    const sourceTypes = new Set<DatasetSourceType>();
+  // Source types of the selected datasets — drives both which actors are in
+  // the chain and which strategy (web/local) a plugin actor's fields come from.
+  const sourceTypes = useMemo<Set<DatasetSourceType>>(() => {
+    const types = new Set<DatasetSourceType>();
     for (const id of values.datasetIds) {
       const dataset = datasets.find((d) => d.id === id);
-      if (dataset) sourceTypes.add(dataset.sourceType);
+      if (dataset) types.add(dataset.sourceType);
     }
-    return resolveActorChain(sourceTypes);
+    return types;
   }, [values.datasetIds, datasets]);
+
+  // The actor chain is derived from the source types of the selected datasets.
+  const actorChain = useMemo<ActorDef[]>(
+    () => resolveActorChain(sourceTypes),
+    [sourceTypes]
+  );
 
   // Currently-selected chunker (defaults to the backend default). Drives which
   // dynamic settings fields the chunk_document actor renders.
@@ -119,22 +130,35 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
     values.actorSettings["chunk_document"]?.["chunker"] ?? DEFAULT_CHUNKER
   );
 
-  // chunk_document's settings are discovered at runtime, so replace this
-  // actor's static (empty) settings with the picker + the selected chunker's
-  // fields. All other actors pass through unchanged. Used for both rendering
-  // and submit so the persisted payload matches exactly what's shown.
+  // Actor settings are discovered at runtime, so replace each actor's static
+  // (empty) settings with its resolved fields: chunk_document gets the chunker
+  // picker + the selected chunker's fields; every other plugin-backed actor
+  // gets its strategy's fields from GET /actor-configs. Non-plugin actors pass
+  // through unchanged. Used for both rendering and submit so the persisted
+  // payload matches exactly what's shown.
   const resolvedChain = useMemo<ActorDef[]>(
     () =>
-      actorChain.map((actor) =>
-        actor.key === "chunk_document"
-          ? {
-              ...actor,
-              settings: chunkDocumentFields(chunkers, selectedChunker),
-              note: chunkerRestrictions(chunkers, selectedChunker) || undefined,
-            }
-          : actor
-      ),
-    [actorChain, chunkers, selectedChunker]
+      actorChain.map((actor) => {
+        if (actor.key === "chunk_document") {
+          return {
+            ...actor,
+            settings: chunkDocumentFields(actorConfigs, selectedChunker),
+            note:
+              chunkerRestrictions(actorConfigs, selectedChunker) || undefined,
+          };
+        }
+        if (actor.key === "embed_chunks") {
+          return { ...actor, settings: embedChunksFields(actorConfigs) };
+        }
+        if (isPluginActor(actor.key)) {
+          return {
+            ...actor,
+            settings: pluginActorFields(actorConfigs, actor.key, sourceTypes),
+          };
+        }
+        return actor;
+      }),
+    [actorChain, selectedChunker, actorConfigs, sourceTypes]
   );
 
   const getSetting = (actorKey: string, field: SettingField): SettingValue =>

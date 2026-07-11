@@ -29,8 +29,17 @@ def similarity_to_distance(similarity: str) -> Distance:
 
 
 class VectorStore:
-    def __init__(self, collection: str, url: str = config.QDRANT_URL) -> None:
-        self.client = QdrantClient(url=url)
+    def __init__(
+        self,
+        collection: str,
+        url: str = config.QDRANT_URL,
+        client: QdrantClient | None = None,
+    ) -> None:
+        # A ``QdrantClient`` owns an HTTP connection pool and is safe to share
+        # process-wide, so callers that already hold one (e.g. the API server,
+        # via ``Depends(get_qdrant_client)``) pass it in rather than opening a
+        # fresh client per request. When omitted, one is created from ``url``.
+        self.client = client or QdrantClient(url=url)
         self.collection = collection
 
     def create_collection(

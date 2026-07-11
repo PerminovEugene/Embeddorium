@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from backend.server.dependencies import get_sql_store
 from backend.server.providers.schemas import (
     ProviderIn,
     ProviderOut,
@@ -31,67 +32,55 @@ def _parse_id(provider_id: str) -> uuid.UUID:
 
 
 @router.get("", response_model=list[ProviderOut], response_model_by_alias=True)
-async def list_providers() -> list[ProviderOut]:
+async def list_providers(store: SqlStore = Depends(get_sql_store)) -> list[ProviderOut]:
     """List every provider, newest first."""
-    store = SqlStore(application_name="embeddorium-providers")
-    try:
-        return [provider_to_out(p) for p in store.providers.list_recent()]
-    finally:
-        store.close()
+    return [provider_to_out(p) for p in store.providers.list_recent()]
 
 
 @router.post("", response_model=ProviderOut, response_model_by_alias=True)
-async def create_provider(payload: ProviderIn) -> ProviderOut:
+async def create_provider(
+    payload: ProviderIn, store: SqlStore = Depends(get_sql_store)
+) -> ProviderOut:
     """Create a provider and return it with its generated id."""
-    store = SqlStore(application_name="embeddorium-providers")
-    try:
-        created = store.providers.create(provider_in_to_domain(payload))
-        return provider_to_out(created)
-    finally:
-        store.close()
+    created = store.providers.create(provider_in_to_domain(payload))
+    return provider_to_out(created)
 
 
 @router.get(
     "/{provider_id}", response_model=ProviderOut, response_model_by_alias=True
 )
-async def get_provider(provider_id: str) -> ProviderOut:
+async def get_provider(
+    provider_id: str, store: SqlStore = Depends(get_sql_store)
+) -> ProviderOut:
     """Fetch a single provider by id, or 404 if it doesn't exist."""
     parsed = _parse_id(provider_id)
-    store = SqlStore(application_name="embeddorium-providers")
-    try:
-        provider = store.providers.get(parsed)
-        if provider is None:
-            raise HTTPException(status_code=404, detail="Provider not found")
-        return provider_to_out(provider)
-    finally:
-        store.close()
+    provider = store.providers.get(parsed)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return provider_to_out(provider)
 
 
 @router.put(
     "/{provider_id}", response_model=ProviderOut, response_model_by_alias=True
 )
-async def update_provider(provider_id: str, payload: ProviderIn) -> ProviderOut:
+async def update_provider(
+    provider_id: str, payload: ProviderIn, store: SqlStore = Depends(get_sql_store)
+) -> ProviderOut:
     """Replace a provider's fields, or 404 if it doesn't exist."""
     parsed = _parse_id(provider_id)
-    store = SqlStore(application_name="embeddorium-providers")
-    try:
-        updated = store.providers.update(parsed, provider_in_to_domain(payload))
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Provider not found")
-        return provider_to_out(updated)
-    finally:
-        store.close()
+    updated = store.providers.update(parsed, provider_in_to_domain(payload))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return provider_to_out(updated)
 
 
 @router.delete("/{provider_id}")
-async def delete_provider(provider_id: str) -> dict:
+async def delete_provider(
+    provider_id: str, store: SqlStore = Depends(get_sql_store)
+) -> dict:
     """Delete a provider, or 404 if it doesn't exist."""
     parsed = _parse_id(provider_id)
-    store = SqlStore(application_name="embeddorium-providers")
-    try:
-        deleted = store.providers.delete(parsed)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Provider not found")
-        return {"status": "deleted"}
-    finally:
-        store.close()
+    deleted = store.providers.delete(parsed)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return {"status": "deleted"}

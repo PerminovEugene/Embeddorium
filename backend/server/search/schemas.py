@@ -20,8 +20,12 @@ class TextGroup(BaseModel):
 class SearchRequest(BaseModel):
     # configuration carries: runId (the pipeline run to search — its saved
     # config supplies the Qdrant collection and the embedding provider/model),
-    # ollamaPort (where to reach Ollama for embedding the query), and topK
-    # (how many results to return per query; defaults server-side when omitted).
+    # ollamaPort (where to reach Ollama for embedding the query), topK (how
+    # many results to return per query; defaults server-side when omitted), and
+    # searchMethod — the retrieval strategy: "semantic" (dense vectors, the
+    # default and legacy behaviour; "embedding" is accepted as an alias),
+    # "keyword" (BM25 sparse), or "hybrid" (dense + BM25 fused via Reciprocal
+    # Rank Fusion). Absent falls back to "semantic".
     configuration: dict
     source: TextGroup
 

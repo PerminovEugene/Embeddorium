@@ -10,6 +10,10 @@ from backend.actors.embed_chunks_actor.handler import (
     embed_chunks as _embed_chunks,
     get_model_and_size,
 )
+from backend.plugins.embed_chunks.registry import (
+    DEFAULT_EMBED_STRATEGY,
+    build_embed_strategy,
+)
 from backend.shared import config
 from backend.shared.clients.queue.queue_client import QueueClient
 from backend.shared.clients.queue.queue_names import (
@@ -74,25 +78,16 @@ def _load_embed_config(pipeline_id: Optional[str]):
         if run is not None:
             try:
                 actor_cfg = PipelineActorConfigs.model_validate(run.actor_configs)
-                # Provider snapshot lives in embed_chunks.provider, not top-level.
+                # Provider snapshot lives in embed_chunks.provider, not
+                # top-level. The embed strategy plugin owns the snapshot →
+                # (provider, model, mock_dim) mapping.
                 provider_snap = actor_cfg.embed_chunks.provider
-                provider_type = provider_snap.get("provider_type", "")
-                model_name = provider_snap.get("model_name") or provider_snap.get(
-                    "model", None
-                )
-                mock_dim: Optional[int] = None
-
-                if provider_type == "ollama":
-                    embed_provider = "ollama"
-                    model = model_name or config.OLLAMA_EMBED_MODEL
-                elif provider_type == "mock":
-                    embed_provider = "mock"
-                    model = "mock"
-                    mock_dim = provider_snap.get("mock_dim", config.MOCK_EMBED_DIM)
-                else:
-                    # Remote provider or unknown → treat as huggingface/external.
-                    embed_provider = "huggingface"
-                    model = model_name or "Qwen/Qwen3-Embedding-8B"
+                resolved = build_embed_strategy(
+                    DEFAULT_EMBED_STRATEGY, {"provider": provider_snap}
+                ).resolve()
+                embed_provider = resolved.provider
+                model = resolved.model
+                mock_dim = resolved.mock_dim
 
                 collection = actor_cfg.vector_store.collection
                 similarity = actor_cfg.vector_store.similarity

@@ -1,9 +1,11 @@
 """Tests for the /pipeline-runs endpoints.
 
 Uses FastAPI's TestClient against the real router (no live DB or broker):
-- ``SqlStore`` is patched at the import site in ``pipeline.router`` so every
-  handler receives a MagicMock store.
-- ``seed_pipeline`` is patched at the same site so broker setup is skipped.
+- The shared ``SqlStore`` is supplied via a ``get_sql_store`` dependency
+  override, so every handler receives a MagicMock store. The ``get_broker``
+  dependency (used by the launch handler) is overridden with a MagicMock too.
+- ``seed_pipeline`` is patched at its import site in ``pipeline.router`` so
+  broker setup is skipped.
 
 Each test exercises exactly one behaviour; see the docstring for the rule
 under test.
@@ -12,6 +14,7 @@ under test.
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
@@ -19,6 +22,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.server.dependencies import get_broker, get_sql_store
 from backend.server.pipeline.router import router
 from backend.shared.models import MockProvider, PipelineRun, WebDataset
 
@@ -29,6 +33,20 @@ from backend.shared.models import MockProvider, PipelineRun, WebDataset
 _app = FastAPI()
 _app.include_router(router)
 client = TestClient(_app)
+
+
+@contextmanager
+def _override_store(store: MagicMock):
+    """Inject *store* as the shared ``SqlStore`` (plus a stub broker) for the
+    duration of a request."""
+    _app.dependency_overrides[get_sql_store] = lambda: store
+    _app.dependency_overrides[get_broker] = lambda: MagicMock()
+    try:
+        yield
+    finally:
+        _app.dependency_overrides.pop(get_sql_store, None)
+        _app.dependency_overrides.pop(get_broker, None)
+
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -107,10 +125,11 @@ def _make_store(
     return store
 
 
-# Standard valid create payload — providerId lives inside actorSettings.embed_chunks.
+# Standard valid create payload — the provider id lives inside
+# actorSettings.embed_chunks under the plugin field key "provider".
 _CREATE_PAYLOAD: Dict[str, Any] = {
     "datasetId": str(_DATASET_ID),
-    "actorSettings": {"embed_chunks": {"providerId": str(_PROVIDER_ID)}},
+    "actorSettings": {"embed_chunks": {"provider": str(_PROVIDER_ID)}},
 }
 
 # ---------------------------------------------------------------------------
@@ -127,9 +146,7 @@ def test_create_returns_pending_run_and_does_not_call_seed_pipeline() -> None:
         run=pending_run,
         created_run=pending_run,
     )
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
@@ -142,8 +159,7 @@ def test_create_returns_pending_run_and_does_not_call_seed_pipeline() -> None:
     mock_seed.assert_not_called()
 
     # The store was used (create was called once).
-    store_instance = mock_store_cls.return_value
-    store_instance.pipeline_runs.create.assert_called_once()
+    store_mock.pipeline_runs.create.assert_called_once()
 
 
 def test_create_persists_full_actor_settings_snapshot() -> None:
@@ -162,7 +178,7 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
                 "chunker": "text_section",
                 "settings": {"chunk_size": 800, "chunk_overlap": 80},
             },
-            "embed_chunks": {"providerId": str(_PROVIDER_ID), "similarity": "dot"},
+            "embed_chunks": {"provider": str(_PROVIDER_ID), "similarity": "dot"},
             "parse_source": {"parser": "html"},
             "schedule_embeddings": {"batchSize": 16},
             "validate_source": {"normalizeUrls": False, "dedup": False},
@@ -171,15 +187,13 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
             "filter_documents": {"enabled": False, "keywords": "vat, customs"},
         },
     }
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=payload)
 
     assert resp.status_code == 200, resp.text
 
-    created_run = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0]
+    created_run = store_mock.pipeline_runs.create.call_args[0][0]
     cfg = created_run.actor_configs
     # The chunk_document block is stored verbatim: {chunker, settings}.
     assert cfg["chunk_document"] == {
@@ -200,7 +214,8 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
 
 def test_create_accepts_legacy_actor_settings_keys() -> None:
     """Pre-merge UI builds send crawl_frontier_manager / fetch_file_source
-    blocks; those map onto validate_source / fetch_source."""
+    blocks and the legacy embed_chunks.providerId key; those map onto
+    validate_source / fetch_source / embed_chunks.provider."""
     pending_run = _make_run("pending")
     store_mock = _make_store(
         dataset=_make_dataset(),
@@ -216,14 +231,12 @@ def test_create_accepts_legacy_actor_settings_keys() -> None:
             "fetch_file_source": {"glob": "*.html", "dedup": False},
         },
     }
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=payload)
 
     assert resp.status_code == 200, resp.text
-    cfg = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0].actor_configs
+    cfg = store_mock.pipeline_runs.create.call_args[0][0].actor_configs
     assert cfg["validate_source"]["normalize_urls"] is False
     # Legacy fetch_file_source.dedup feeds the merged validate_source gate...
     assert cfg["validate_source"]["dedup"] is False
@@ -240,36 +253,34 @@ def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
         run=pending_run,
         created_run=pending_run,
     )
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 200, resp.text
-    cfg = mock_store_cls.return_value.pipeline_runs.create.call_args[0][0].actor_configs
+    cfg = store_mock.pipeline_runs.create.call_args[0][0].actor_configs
     assert cfg["fetch_source"]["verify_tls"] is True
     assert cfg["schedule_embeddings"]["batch_size"] == 32
     assert cfg["filter_documents"]["enabled"] is True
 
 
 def test_create_400_when_provider_id_missing() -> None:
-    """Returns 400 when embed_chunks.providerId is absent."""
+    """Returns 400 when embed_chunks.provider is absent."""
     store_mock = _make_store(dataset=_make_dataset(), provider=_make_provider())
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.post(
             "/pipeline-runs",
             json={"datasetId": str(_DATASET_ID), "actorSettings": {}},
         )
 
     assert resp.status_code == 400
-    assert "providerId" in resp.json()["detail"]
+    assert "provider" in resp.json()["detail"]
 
 
 def test_create_404_when_dataset_missing() -> None:
     """Returns 404 when the dataset doesn't exist."""
     store_mock = _make_store(dataset=None, provider=_make_provider())
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 404
@@ -279,7 +290,7 @@ def test_create_404_when_dataset_missing() -> None:
 def test_create_404_when_provider_missing() -> None:
     """Returns 404 when the provider doesn't exist."""
     store_mock = _make_store(dataset=_make_dataset(), provider=None)
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 404
@@ -295,7 +306,7 @@ def test_create_400_when_provider_not_embedding() -> None:
         provider_type="mock",
     )
     store_mock = _make_store(dataset=_make_dataset(), provider=text_provider)
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 400
@@ -313,9 +324,7 @@ def test_launch_pending_run_calls_seed_pipeline_and_transitions_to_running() -> 
     running_run = _make_run("running")
     store_mock = _make_store(run=pending_run, updated_run=running_run)
 
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
@@ -325,9 +334,8 @@ def test_launch_pending_run_calls_seed_pipeline_and_transitions_to_running() -> 
     mock_seed.assert_called_once()
 
     # update_status must be called with status="running" and reset_finished=True.
-    store_instance = mock_store_cls.return_value
-    store_instance.pipeline_runs.update_status.assert_called_once()
-    call_kwargs = store_instance.pipeline_runs.update_status.call_args
+    store_mock.pipeline_runs.update_status.assert_called_once()
+    call_kwargs = store_mock.pipeline_runs.update_status.call_args
     assert call_kwargs[0][1] == "running"
     assert call_kwargs[1].get("reset_finished") is True
 
@@ -337,7 +345,7 @@ def test_launch_running_run_returns_409_and_does_not_call_seed() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=running_run)
 
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
@@ -352,7 +360,7 @@ def test_launch_failed_run_is_allowed_relaunch() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=failed_run, updated_run=running_run)
 
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
@@ -367,7 +375,7 @@ def test_launch_completed_run_is_allowed_relaunch() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=completed_run, updated_run=running_run)
 
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
@@ -379,7 +387,7 @@ def test_launch_returns_404_when_run_not_found() -> None:
     """Returns 404 when the run id doesn't exist."""
     store_mock = _make_store(run=None)
 
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         with patch("backend.server.pipeline.router.seed_pipeline"):
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
@@ -397,9 +405,7 @@ def test_patch_status_to_failed_sets_finished_at() -> None:
     failed_run = _make_run("failed")
     store_mock = _make_store(run=pending_run, updated_run=failed_run)
 
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "failed"},
@@ -408,9 +414,8 @@ def test_patch_status_to_failed_sets_finished_at() -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "failed"
 
-    store_instance = mock_store_cls.return_value
-    store_instance.pipeline_runs.update_status.assert_called_once()
-    call_kwargs = store_instance.pipeline_runs.update_status.call_args
+    store_mock.pipeline_runs.update_status.assert_called_once()
+    call_kwargs = store_mock.pipeline_runs.update_status.call_args
     assert call_kwargs[1].get("finished_at") is not None
 
 
@@ -420,17 +425,14 @@ def test_patch_status_to_completed_sets_finished_at() -> None:
     completed_run = _make_run("completed")
     store_mock = _make_store(run=pending_run, updated_run=completed_run)
 
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "completed"},
         )
 
     assert resp.status_code == 200, resp.text
-    store_instance = mock_store_cls.return_value
-    call_kwargs = store_instance.pipeline_runs.update_status.call_args
+    call_kwargs = store_mock.pipeline_runs.update_status.call_args
     assert call_kwargs[1].get("finished_at") is not None
 
 
@@ -440,24 +442,21 @@ def test_patch_status_to_running_does_not_set_finished_at() -> None:
     running_run = _make_run("running")
     store_mock = _make_store(run=pending_run, updated_run=running_run)
 
-    with patch(
-        "backend.server.pipeline.router.SqlStore", return_value=store_mock
-    ) as mock_store_cls:
+    with _override_store(store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "running"},
         )
 
     assert resp.status_code == 200, resp.text
-    store_instance = mock_store_cls.return_value
-    call_kwargs = store_instance.pipeline_runs.update_status.call_args
+    call_kwargs = store_mock.pipeline_runs.update_status.call_args
     assert call_kwargs[1].get("finished_at") is None
 
 
 def test_patch_returns_404_when_run_not_found() -> None:
     """Returns 404 when the run id doesn't exist."""
     store_mock = _make_store(run=None)
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "failed"},
@@ -471,7 +470,7 @@ def test_patch_returns_422_for_invalid_status() -> None:
     run = _make_run("pending")
     store_mock = _make_store(run=run)
 
-    with patch("backend.server.pipeline.router.SqlStore", return_value=store_mock):
+    with _override_store(store_mock):
         resp = client.patch(
             "/pipeline-runs/{}".format(_RUN_ID),
             json={"status": "invalid-status"},

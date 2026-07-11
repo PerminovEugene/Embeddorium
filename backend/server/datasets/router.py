@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.server.datasets.schemas import (
     DatasetIn,
@@ -18,6 +18,7 @@ from backend.server.datasets.schemas import (
     dataset_in_to_domain,
     dataset_to_out,
 )
+from backend.server.dependencies import get_sql_store
 from backend.shared.storage.sql.sql_store import SqlStore
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -31,63 +32,51 @@ def _parse_id(dataset_id: str) -> uuid.UUID:
 
 
 @router.get("", response_model=list[DatasetOut], response_model_by_alias=True)
-async def list_datasets() -> list[DatasetOut]:
+async def list_datasets(store: SqlStore = Depends(get_sql_store)) -> list[DatasetOut]:
     """List every dataset, newest first."""
-    store = SqlStore(application_name="embeddorium-datasets")
-    try:
-        return [dataset_to_out(d) for d in store.datasets.list_recent()]
-    finally:
-        store.close()
+    return [dataset_to_out(d) for d in store.datasets.list_recent()]
 
 
 @router.post("", response_model=DatasetOut, response_model_by_alias=True)
-async def create_dataset(payload: DatasetIn) -> DatasetOut:
+async def create_dataset(
+    payload: DatasetIn, store: SqlStore = Depends(get_sql_store)
+) -> DatasetOut:
     """Create a dataset and return it with its generated id."""
-    store = SqlStore(application_name="embeddorium-datasets")
-    try:
-        created = store.datasets.create(dataset_in_to_domain(payload))
-        return dataset_to_out(created)
-    finally:
-        store.close()
+    created = store.datasets.create(dataset_in_to_domain(payload))
+    return dataset_to_out(created)
 
 
 @router.get("/{dataset_id}", response_model=DatasetOut, response_model_by_alias=True)
-async def get_dataset(dataset_id: str) -> DatasetOut:
+async def get_dataset(
+    dataset_id: str, store: SqlStore = Depends(get_sql_store)
+) -> DatasetOut:
     """Fetch a single dataset by id, or 404 if it doesn't exist."""
     parsed = _parse_id(dataset_id)
-    store = SqlStore(application_name="embeddorium-datasets")
-    try:
-        dataset = store.datasets.get(parsed)
-        if dataset is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        return dataset_to_out(dataset)
-    finally:
-        store.close()
+    dataset = store.datasets.get(parsed)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset_to_out(dataset)
 
 
 @router.put("/{dataset_id}", response_model=DatasetOut, response_model_by_alias=True)
-async def update_dataset(dataset_id: str, payload: DatasetIn) -> DatasetOut:
+async def update_dataset(
+    dataset_id: str, payload: DatasetIn, store: SqlStore = Depends(get_sql_store)
+) -> DatasetOut:
     """Replace a dataset's fields, or 404 if it doesn't exist."""
     parsed = _parse_id(dataset_id)
-    store = SqlStore(application_name="embeddorium-datasets")
-    try:
-        updated = store.datasets.update(parsed, dataset_in_to_domain(payload))
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        return dataset_to_out(updated)
-    finally:
-        store.close()
+    updated = store.datasets.update(parsed, dataset_in_to_domain(payload))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset_to_out(updated)
 
 
 @router.delete("/{dataset_id}")
-async def delete_dataset(dataset_id: str) -> dict:
+async def delete_dataset(
+    dataset_id: str, store: SqlStore = Depends(get_sql_store)
+) -> dict:
     """Delete a dataset, or 404 if it doesn't exist."""
     parsed = _parse_id(dataset_id)
-    store = SqlStore(application_name="embeddorium-datasets")
-    try:
-        deleted = store.datasets.delete(parsed)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        return {"status": "deleted"}
-    finally:
-        store.close()
+    deleted = store.datasets.delete(parsed)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return {"status": "deleted"}

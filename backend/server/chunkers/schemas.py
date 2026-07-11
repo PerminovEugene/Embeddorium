@@ -40,6 +40,7 @@ class ChunkerFieldOut(_CamelModel):
     max: Optional[int] = None
     options: Optional[List[Dict[str, Any]]] = None
     placeholder: Optional[str] = None
+    required: bool = False
 
 
 class ChunkerConfigOut(_CamelModel):
@@ -69,6 +70,7 @@ def chunker_config_to_out(config: ChunkerConfig) -> ChunkerConfigOut:
                 max=f.max,
                 options=f.options,
                 placeholder=f.placeholder,
+                required=f.required,
             )
             for f in config.fields
         ],

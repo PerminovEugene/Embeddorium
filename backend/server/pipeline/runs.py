@@ -41,24 +41,16 @@ def _serialize(run: PipelineRun) -> dict:
     }
 
 
-def list_pipeline_runs() -> list:
+def list_pipeline_runs(store: SqlStore) -> list:
     """Return every recorded pipeline run, newest first, for the run selector."""
-    store = SqlStore(application_name="embeddorium-runs")
-    try:
-        return [_serialize(run) for run in store.pipeline_runs.list_recent()]
-    finally:
-        store.close()
+    return [_serialize(run) for run in store.pipeline_runs.list_recent()]
 
 
-def get_pipeline_run(run_id: str) -> Optional[PipelineRun]:
+def get_pipeline_run(store: SqlStore, run_id: str) -> Optional[PipelineRun]:
     """Load a single run by id, or ``None`` if the id is unknown/malformed."""
     try:
         parsed = uuid.UUID(str(run_id))
     except (ValueError, TypeError):
         return None
 
-    store = SqlStore(application_name="embeddorium-runs")
-    try:
-        return store.pipeline_runs.get(parsed)
-    finally:
-        store.close()
+    return store.pipeline_runs.get(parsed)

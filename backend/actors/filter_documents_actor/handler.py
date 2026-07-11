@@ -12,9 +12,13 @@ documents that do not match are marked SKIPPED with
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
+from backend.plugins.filter_documents.registry import (
+    DEFAULT_FILTER_STRATEGY,
+    build_filter_strategy,
+)
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
 from backend.shared.clients.queue.pipeline_payloads import (
     FilterDocumentsPayload,
@@ -31,18 +35,12 @@ from backend.shared.models import (
     FilterDocumentsSettings,
     OutboxEvent,
 )
-from backend.shared.parsers.keyword_filter import matches_keywords
 from backend.shared.parsers.xml_parser import extract_act_title
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.source_files import read_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_keywords(raw: str) -> List[str]:
-    """Split a comma-separated keyword string into a clean list ([] if empty)."""
-    return [kw.strip() for kw in raw.split(",") if kw.strip()]
 
 
 def filter_documents(
@@ -85,17 +83,16 @@ def filter_documents(
     title = extract_act_title(raw)
     logger.info("title_extracted id=%s title=%r", target_id, title)
 
-    # Relevance gate: when disabled, every document passes through; a non-empty
-    # keyword list restricts which documents advance.
+    # The filter strategy owns the relevance decision (gate toggle + keyword
+    # matching); the actor only feeds it the extracted title and raw body.
     cfg = load_actor_configs(store, payload.pipeline_id)
     settings = cfg.filter_documents if cfg else FilterDocumentsSettings()
-    keywords = _parse_keywords(settings.keywords) or None
-
-    relevant = (
-        True
-        if not settings.enabled
-        else matches_keywords(title, text=raw, keywords=keywords)
+    strategy = build_filter_strategy(
+        DEFAULT_FILTER_STRATEGY,
+        {"enabled": settings.enabled, "keywords": settings.keywords},
     )
+
+    relevant = strategy.is_relevant(title=title, text=raw)
     if not relevant:
         logger.info(
             "relevance_decision id=%s title=%r decision=skipped_not_relevant",
@@ -109,9 +106,7 @@ def filter_documents(
         )
         return
 
-    logger.info(
-        "relevance_decision id=%s title=%r decision=filtered", target_id, title
-    )
+    logger.info("relevance_decision id=%s title=%r decision=filtered", target_id, title)
 
     parse_payload = ParseSourcePayload(
         crawl_target_id=target_id,
@@ -129,6 +124,4 @@ def filter_documents(
             )
         )
 
-    logger.info(
-        "advanced_to_filtered id=%s enqueued=%s", target_id, PARSE_SOURCE_QUEUE
-    )
+    logger.info("advanced_to_filtered id=%s enqueued=%s", target_id, PARSE_SOURCE_QUEUE)

@@ -40,29 +40,43 @@ interface PipelineRunOut {
     };
     vector_store?: { collection?: string; similarity?: string };
     embed_chunks?: { provider?: { id?: string; model_name?: string; model?: string } };
-    parse_source?: { parser?: string };
-    schedule_embeddings?: { batch_size?: number };
-    crawl_frontier_manager?: {
-      normalize_urls?: boolean;
-      dedup?: boolean;
-    };
+    // Plugin-backed actors: their settings are stored verbatim under the
+    // strategy's snake_case field keys and read back into the form under the
+    // same keys (the form renders those keys directly from GET /actor-configs).
+    validate_source?: { normalize_urls?: boolean; dedup?: boolean };
     fetch_source?: {
       verify_tls?: boolean;
       timeout_seconds?: number;
       allowed_content_types?: string;
+      file_glob?: string;
     };
+    parse_source?: { parser?: string };
+    filter_documents?: { enabled?: boolean; keywords?: string };
+    // Non-plugin actors: still hardcoded in the form under camelCase keys.
+    schedule_embeddings?: { batch_size?: number };
     schedule_discovered_links?: {
       follow_child_links?: boolean;
       follow_cross_domain?: boolean;
       max_depth?: number;
     };
-    fetch_file_source?: { glob?: string; dedup?: boolean };
-    filter_documents?: { enabled?: boolean; keywords?: string };
   };
   status: IngestionPipeline["status"];
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string | null;
+}
+
+// Pass a stored plugin-actor block through verbatim, dropping keys the
+// snapshot left unset (their value type is `T | undefined`). The form fills
+// any dropped key from its field's declared default.
+function definedBlock(
+  block: Record<string, SettingValue | undefined>
+): Record<string, SettingValue> {
+  const out: Record<string, SettingValue> = {};
+  for (const [key, value] of Object.entries(block)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
 }
 
 // Map a backend run onto the UI's IngestionPipeline shape. Actor settings are
@@ -82,31 +96,32 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
       ...(chunk.settings ?? {}),
     },
     embed_chunks: {
-      providerId: provider.id ?? "",
+      // The plugin-declared provider field holds the provider's id; the stored
+      // snapshot is a full provider dump, so read its id back out.
+      provider: provider.id ?? "",
       similarity: vector.similarity ?? "",
     },
   };
-  if (cfg.parse_source) {
-    actorSettings.parse_source = { parser: cfg.parse_source.parser ?? "auto" };
+  // Plugin-backed actors — stored under the strategy's snake_case field keys
+  // and read back under the same keys (the form renders those keys directly
+  // from GET /actor-configs). Values pass through verbatim; the form fills any
+  // gaps from each field's declared default.
+  if (cfg.validate_source) {
+    actorSettings.validate_source = definedBlock(cfg.validate_source);
   }
+  if (cfg.fetch_source) {
+    actorSettings.fetch_source = definedBlock(cfg.fetch_source);
+  }
+  if (cfg.parse_source) {
+    actorSettings.parse_source = definedBlock(cfg.parse_source);
+  }
+  if (cfg.filter_documents) {
+    actorSettings.filter_documents = definedBlock(cfg.filter_documents);
+  }
+  // Non-plugin actors — still hardcoded in the form under camelCase keys.
   if (cfg.schedule_embeddings) {
     actorSettings.schedule_embeddings = {
       batchSize: cfg.schedule_embeddings.batch_size ?? 32,
-    };
-  }
-  if (cfg.crawl_frontier_manager) {
-    const c = cfg.crawl_frontier_manager;
-    actorSettings.crawl_frontier_manager = {
-      normalizeUrls: c.normalize_urls ?? true,
-      dedup: c.dedup ?? true,
-    };
-  }
-  if (cfg.fetch_source) {
-    const f = cfg.fetch_source;
-    actorSettings.fetch_source = {
-      verifyTls: f.verify_tls ?? true,
-      timeoutSeconds: f.timeout_seconds ?? 30,
-      allowedContentTypes: f.allowed_content_types ?? "",
     };
   }
   if (cfg.schedule_discovered_links) {
@@ -115,18 +130,6 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
       followChildLinks: s.follow_child_links ?? true,
       followCrossDomain: s.follow_cross_domain ?? false,
       maxDepth: s.max_depth ?? 3,
-    };
-  }
-  if (cfg.fetch_file_source) {
-    actorSettings.fetch_file_source = {
-      glob: cfg.fetch_file_source.glob ?? "*.xml",
-      dedup: cfg.fetch_file_source.dedup ?? true,
-    };
-  }
-  if (cfg.filter_documents) {
-    actorSettings.filter_documents = {
-      enabled: cfg.filter_documents.enabled ?? true,
-      keywords: cfg.filter_documents.keywords ?? "",
     };
   }
   return {
@@ -170,7 +173,7 @@ function reshapeActorSettings(
 // Build the create body for a single dataset. Per-actor settings are forwarded
 // keyed by actor; the server resolves them into a typed PipelineActorConfigs
 // snapshot and fills any gaps with defaults. The chunk_document block is
-// re-nested into { chunker, settings }. embed_chunks.providerId is required
+// re-nested into { chunker, settings }. embed_chunks.provider is required
 // (validated server-side).
 function toCreateBody(datasetId: string, values: IngestionPipelineFormValues) {
   return {
@@ -188,7 +191,7 @@ export async function createIngestionPipelines(
   if (values.datasetIds.length === 0) {
     throw new Error("Select at least one dataset");
   }
-  const providerId = String(values.actorSettings["embed_chunks"]?.["providerId"] ?? "");
+  const providerId = String(values.actorSettings["embed_chunks"]?.["provider"] ?? "");
   if (!providerId) {
     throw new Error("Select an embedding provider");
   }

@@ -49,8 +49,9 @@ export type Match = {
 export type SourceType = "manual" | "db";
 
 // DB-search mode: how a query is matched against the collection — dense
-// vectors ("embedding") or lexical Postgres BM25 ("bm25").
-export type SearchMethod = "embedding" | "bm25";
+// vectors ("semantic"), lexical BM25 ("keyword"), or both fused via reciprocal
+// rank fusion ("hybrid"). Mirrors the backend's configuration.searchMethod.
+export type SearchMethod = "semantic" | "keyword" | "hybrid";
 
 // A recorded ingestion pipeline run, as listed by GET /pipeline-runs. Selecting
 // one in DB-search mode supplies the collection to search and the embedding

@@ -35,11 +35,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Type, TypeVar
 
-from fastapi import APIRouter, HTTPException
+from dramatiq.brokers.rabbitmq import RabbitmqBroker
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from pydantic.alias_generators import to_snake
 
 from backend.plugins.chunkers.registry import DEFAULT_CHUNKER
+from backend.server.dependencies import get_broker, get_sql_store
 from backend.server.pipeline.launch import seed_pipeline
 from backend.server.pipeline.schemas import (
     PipelineRunIn,
@@ -87,11 +89,11 @@ def _parse_id(run_id: str) -> uuid.UUID:
 
 
 def _parse_provider_id(raw: Any) -> uuid.UUID:
-    """Parse the required embed_chunks providerId, or 400 if missing/invalid."""
+    """Parse the required embed_chunks provider id, or 400 if missing/invalid."""
     if not raw:
         raise HTTPException(
             status_code=400,
-            detail="actorSettings.embed_chunks.providerId is required.",
+            detail="actorSettings.embed_chunks.provider is required.",
         )
     try:
         return uuid.UUID(str(raw))
@@ -151,17 +153,17 @@ def _fetch_source_block(settings: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
 
 
 @router.get("", response_model=List[PipelineRunOut], response_model_by_alias=True)
-async def list_pipeline_runs() -> List[PipelineRunOut]:
+async def list_pipeline_runs(
+    store: SqlStore = Depends(get_sql_store),
+) -> List[PipelineRunOut]:
     """List every pipeline run, newest first."""
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        return [pipeline_run_to_out(r) for r in store.pipeline_runs.list_recent()]
-    finally:
-        store.close()
+    return [pipeline_run_to_out(r) for r in store.pipeline_runs.list_recent()]
 
 
 @router.post("", response_model=PipelineRunOut, response_model_by_alias=True)
-async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
+async def create_pipeline_run(
+    payload: PipelineRunIn, store: SqlStore = Depends(get_sql_store)
+) -> PipelineRunOut:
     """Create a pipeline run row with ``status="pending"``; do not launch yet.
 
     Steps
@@ -181,100 +183,100 @@ async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
     To publish seed messages and advance the run to ``"running"``, call
     ``POST /pipeline-runs/{id}/launch`` on the returned id.
     """
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        dataset = store.datasets.get(payload.dataset_id)
-        if dataset is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
+    dataset = store.datasets.get(payload.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
 
-        settings = payload.actor_settings or {}
-        embed_block = settings.get("embed_chunks") or {}
-        chunk_block = settings.get("chunk_document") or {}
+    settings = payload.actor_settings or {}
+    embed_block = settings.get("embed_chunks") or {}
+    chunk_block = settings.get("chunk_document") or {}
 
-        # provider_id lives inside embed_chunks (it is an embed_chunks concern).
-        provider_id = _parse_provider_id(embed_block.get("providerId"))
-        provider = store.providers.get(provider_id)
-        if provider is None:
-            raise HTTPException(status_code=404, detail="Provider not found")
+    # The provider id lives inside embed_chunks (it is an embed_chunks concern).
+    # "provider" is the plugin-declared field key; "providerId" is the legacy
+    # key older UI builds send.
+    provider_id = _parse_provider_id(
+        embed_block.get("provider") or embed_block.get("providerId")
+    )
+    provider = store.providers.get(provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
 
-        if provider.model_type != "embedding":
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Provider '{provider.name}' has model_type "
-                    f"'{provider.model_type}', but an 'embedding' provider "
-                    "is required for the embed_chunks actor."
-                ),
-            )
-
-        # Resolve the three actor blocks the pipeline already consumes from the
-        # request overrides + global defaults.
-        collection = build_collection_name(dataset.name)
-        # chunk_block now arrives as {"chunker": <name>, "settings": {...}};
-        # "settings" is the chunker's own declared field values and is stored
-        # verbatim — its keys are chunker-declared snake_case, not form
-        # camelCase, so (unlike every other block here) they must NOT be
-        # run through to_snake.
-        similarity = embed_block.get("similarity")
-        chunk_cfg = ChunkDocumentSettings(
-            chunker=chunk_block.get("chunker") or DEFAULT_CHUNKER,
-            settings=chunk_block.get("settings") or {},
-        )
-        vector_cfg = VectorStoreSettings(
-            collection=collection,
-            similarity=(
-                similarity if similarity in _VALID_SIMILARITY else COLLECTION_SIMILARITY
+    if provider.model_type != "embedding":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Provider '{provider.name}' has model_type "
+                f"'{provider.model_type}', but an 'embedding' provider "
+                "is required for the embed_chunks actor."
             ),
         )
 
-        # Provider snapshot lives inside embed_chunks, not at the top level.
-        provider_snap = provider.model_dump(mode="json")
-        embed_cfg = EmbedChunksSettings(provider=provider_snap)
+    # Resolve the three actor blocks the pipeline already consumes from the
+    # request overrides + global defaults.
+    collection = build_collection_name(dataset.name)
+    # chunk_block now arrives as {"chunker": <name>, "settings": {...}};
+    # "settings" is the chunker's own declared field values and is stored
+    # verbatim — its keys are chunker-declared snake_case, not form
+    # camelCase, so (unlike every other block here) they must NOT be
+    # run through to_snake.
+    similarity = embed_block.get("similarity")
+    chunk_cfg = ChunkDocumentSettings(
+        chunker=chunk_block.get("chunker") or DEFAULT_CHUNKER,
+        settings=chunk_block.get("settings") or {},
+    )
+    vector_cfg = VectorStoreSettings(
+        collection=collection,
+        similarity=(
+            similarity if similarity in _VALID_SIMILARITY else COLLECTION_SIMILARITY
+        ),
+    )
 
-        # Remaining per-actor blocks pass through verbatim (defaults fill gaps),
-        # so every form setting is persisted and available to its actor.
-        actor_configs = PipelineActorConfigs(
-            chunk_document=chunk_cfg,
-            vector_store=vector_cfg,
-            embed_chunks=embed_cfg,
-            parse_source=_build_settings(
-                ParseSourceSettings, settings.get("parse_source", {})
-            ),
-            schedule_embeddings=_build_settings(
-                ScheduleEmbeddingsSettings, settings.get("schedule_embeddings", {})
-            ),
-            validate_source=_build_settings(
-                ValidateSourceSettings, _validate_source_block(settings)
-            ),
-            fetch_source=_build_settings(
-                FetchSourceSettings, _fetch_source_block(settings)
-            ),
-            schedule_discovered_links=_build_settings(
-                ScheduleDiscoveredLinksSettings,
-                settings.get("schedule_discovered_links", {}),
-            ),
-            filter_documents=_build_settings(
-                FilterDocumentsSettings, settings.get("filter_documents", {})
-            ),
-        )
+    # Provider snapshot lives inside embed_chunks, not at the top level.
+    provider_snap = provider.model_dump(mode="json")
+    embed_cfg = EmbedChunksSettings(provider=provider_snap)
 
-        # Snapshot the dataset so actors never re-query it.
-        dataset_snap = dataset.model_dump(mode="json")
+    # Remaining per-actor blocks pass through verbatim (defaults fill gaps),
+    # so every form setting is persisted and available to its actor.
+    actor_configs = PipelineActorConfigs(
+        chunk_document=chunk_cfg,
+        vector_store=vector_cfg,
+        embed_chunks=embed_cfg,
+        parse_source=_build_settings(
+            ParseSourceSettings, settings.get("parse_source", {})
+        ),
+        schedule_embeddings=_build_settings(
+            ScheduleEmbeddingsSettings, settings.get("schedule_embeddings", {})
+        ),
+        validate_source=_build_settings(
+            ValidateSourceSettings, _validate_source_block(settings)
+        ),
+        fetch_source=_build_settings(
+            FetchSourceSettings, _fetch_source_block(settings)
+        ),
+        schedule_discovered_links=_build_settings(
+            ScheduleDiscoveredLinksSettings,
+            settings.get("schedule_discovered_links", {}),
+        ),
+        filter_documents=_build_settings(
+            FilterDocumentsSettings, settings.get("filter_documents", {})
+        ),
+    )
 
-        # Use the user-supplied name, falling back to the dataset name so a run
-        # always has a sensible label even if the client omits one.
-        name = (payload.name or "").strip() or dataset.name
+    # Snapshot the dataset so actors never re-query it.
+    dataset_snap = dataset.model_dump(mode="json")
 
-        run = PipelineRun(
-            name=name,
-            dataset=dataset_snap,
-            actor_configs=actor_configs.model_dump(),
-            status="pending",
-        )
-        created = store.pipeline_runs.create(run)
-        return pipeline_run_to_out(created)
-    finally:
-        store.close()
+    # Use the user-supplied name, falling back to the dataset name so a run
+    # always has a sensible label even if the client omits one.
+    name = (payload.name or "").strip() or dataset.name
+
+    run = PipelineRun(
+        name=name,
+        dataset=dataset_snap,
+        actor_configs=actor_configs.model_dump(),
+        status="pending",
+    )
+    created = store.pipeline_runs.create(run)
+    return pipeline_run_to_out(created)
 
 
 @router.post(
@@ -282,7 +284,11 @@ async def create_pipeline_run(payload: PipelineRunIn) -> PipelineRunOut:
     response_model=PipelineRunOut,
     response_model_by_alias=True,
 )
-async def launch_pipeline_run(run_id: str) -> PipelineRunOut:
+async def launch_pipeline_run(
+    run_id: str,
+    store: SqlStore = Depends(get_sql_store),
+    broker: RabbitmqBroker = Depends(get_broker),
+) -> PipelineRunOut:
     """Launch (or relaunch) a pipeline run by publishing its seed messages.
 
     Allowed from statuses: ``"pending"``, ``"failed"``, ``"completed"``.
@@ -293,47 +299,45 @@ async def launch_pipeline_run(run_id: str) -> PipelineRunOut:
     window even when the previous run had already finished or failed).
     """
     parsed = _parse_id(run_id)
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        run = store.pipeline_runs.get(parsed)
-        if run is None:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
+    run = store.pipeline_runs.get(parsed)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
 
-        if run.status == "running":
-            raise HTTPException(
-                status_code=409,
-                detail="Pipeline run is already running",
-            )
-
-        # The local-file glob is a seed-time concern (it decides which files a
-        # folder path expands to), so resolve it here from the stored config.
-        # Read the raw dict rather than the typed model so runs recorded
-        # before the fetch actors were merged (fetch_file_source.glob) still
-        # relaunch with their original glob.
-        raw_cfgs = run.actor_configs or {}
-        file_glob = (
-            (raw_cfgs.get("fetch_source") or {}).get("file_glob")
-            or (raw_cfgs.get("fetch_file_source") or {}).get("glob")
-            or "*.xml"
+    if run.status == "running":
+        raise HTTPException(
+            status_code=409,
+            detail="Pipeline run is already running",
         )
 
-        # Publish seed messages — pipeline_id flows into every actor message.
-        seed_pipeline(
-            pipeline_id=run.id,
-            dataset_snapshot=run.dataset,
-            file_glob=file_glob,
-        )
+    # The local-file glob is a seed-time concern (it decides which files a
+    # folder path expands to), so resolve it here from the stored config.
+    # Read the raw dict rather than the typed model so runs recorded
+    # before the fetch actors were merged (fetch_file_source.glob) still
+    # relaunch with their original glob.
+    raw_cfgs = run.actor_configs or {}
+    file_glob = (
+        (raw_cfgs.get("fetch_source") or {}).get("file_glob")
+        or (raw_cfgs.get("fetch_file_source") or {}).get("glob")
+        or "*.xml"
+    )
 
-        # Advance to "running"; clear finished_at so a relaunch starts clean.
-        updated = store.pipeline_runs.update_status(
-            run.id,
-            "running",
-            started_at=datetime.now(tz=timezone.utc),
-            reset_finished=True,
-        )
-        return pipeline_run_to_out(updated or run)
-    finally:
-        store.close()
+    # Publish seed messages on the shared broker — pipeline_id flows into
+    # every actor message.
+    seed_pipeline(
+        pipeline_id=run.id,
+        dataset_snapshot=run.dataset,
+        file_glob=file_glob,
+        broker=broker,
+    )
+
+    # Advance to "running"; clear finished_at so a relaunch starts clean.
+    updated = store.pipeline_runs.update_status(
+        run.id,
+        "running",
+        started_at=datetime.now(tz=timezone.utc),
+        reset_finished=True,
+    )
+    return pipeline_run_to_out(updated or run)
 
 
 @router.patch(
@@ -344,6 +348,7 @@ async def launch_pipeline_run(run_id: str) -> PipelineRunOut:
 async def update_pipeline_run_status(
     run_id: str,
     payload: PipelineRunStatusIn,
+    store: SqlStore = Depends(get_sql_store),
 ) -> PipelineRunOut:
     """Manually update a pipeline run's status.
 
@@ -352,27 +357,23 @@ async def update_pipeline_run_status(
     operator overrides; the pipeline actors do not call it.
     """
     parsed = _parse_id(run_id)
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        run = store.pipeline_runs.get(parsed)
-        if run is None:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
+    run = store.pipeline_runs.get(parsed)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
 
-        finished_at = (
-            datetime.now(tz=timezone.utc)
-            if payload.status in _TERMINAL_STATUSES
-            else None
-        )
-        updated = store.pipeline_runs.update_status(
-            parsed,
-            payload.status,
-            finished_at=finished_at,
-        )
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
-        return pipeline_run_to_out(updated)
-    finally:
-        store.close()
+    finished_at = (
+        datetime.now(tz=timezone.utc)
+        if payload.status in _TERMINAL_STATUSES
+        else None
+    )
+    updated = store.pipeline_runs.update_status(
+        parsed,
+        payload.status,
+        finished_at=finished_at,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
+    return pipeline_run_to_out(updated)
 
 
 @router.get(
@@ -384,6 +385,7 @@ async def list_pipeline_run_targets(
     run_id: str,
     limit: int = 50,
     offset: int = 0,
+    store: SqlStore = Depends(get_sql_store),
 ) -> PipelineRunTargetsPage:
     """Paginated list of crawl targets (processed files/URLs) for a run.
 
@@ -401,29 +403,25 @@ async def list_pipeline_run_targets(
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     parsed = _parse_id(run_id)
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        run = store.pipeline_runs.get(parsed)
-        if run is None:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
+    run = store.pipeline_runs.get(parsed)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
 
-        total = store.crawl_targets.count_by_pipeline(parsed)
-        pairs = store.crawl_targets.list_by_pipeline(
-            parsed, limit=limit, offset=offset
-        )
-        items = [pipeline_run_target_to_out(t, n) for t, n in pairs]
-        return PipelineRunTargetsPage(
-            items=items,
-            total=total,
-            limit=limit,
-            offset=offset,
-        )
-    finally:
-        store.close()
+    total = store.crawl_targets.count_by_pipeline(parsed)
+    pairs = store.crawl_targets.list_by_pipeline(parsed, limit=limit, offset=offset)
+    items = [pipeline_run_target_to_out(t, n) for t, n in pairs]
+    return PipelineRunTargetsPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{run_id}", response_model=PipelineRunOut, response_model_by_alias=True)
-async def get_pipeline_run(run_id: str) -> PipelineRunOut:
+async def get_pipeline_run(
+    run_id: str, store: SqlStore = Depends(get_sql_store)
+) -> PipelineRunOut:
     """Fetch a single pipeline run by id, or 404 if it doesn't exist.
 
     Includes ``chunksEmbedded``/``chunksPending`` — a run-wide "N chunks
@@ -433,31 +431,25 @@ async def get_pipeline_run(run_id: str) -> PipelineRunOut:
     query beyond the run row itself.
     """
     parsed = _parse_id(run_id)
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        run = store.pipeline_runs.get(parsed)
-        if run is None:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
-        counts = store.chunks.status_counts_for_pipeline(parsed)
-        chunks_embedded = counts.get("embedded", 0)
-        chunks_pending = sum(n for status, n in counts.items() if status != "embedded")
-        return pipeline_run_to_out(
-            run, chunks_embedded=chunks_embedded, chunks_pending=chunks_pending
-        )
-    finally:
-        store.close()
+    run = store.pipeline_runs.get(parsed)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
+    counts = store.chunks.status_counts_for_pipeline(parsed)
+    chunks_embedded = counts.get("embedded", 0)
+    chunks_pending = sum(n for status, n in counts.items() if status != "embedded")
+    return pipeline_run_to_out(
+        run, chunks_embedded=chunks_embedded, chunks_pending=chunks_pending
+    )
 
 
 @router.delete("/{run_id}")
-async def delete_pipeline_run(run_id: str) -> dict:
+async def delete_pipeline_run(
+    run_id: str, store: SqlStore = Depends(get_sql_store)
+) -> dict:
     """Delete a pipeline run, or 404 if it doesn't exist."""
     parsed = _parse_id(run_id)
-    store = SqlStore(application_name="embeddorium-pipeline-runs")
-    try:
-        deleted = store.pipeline_runs.delete(parsed)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Pipeline run not found")
-        delete_run_files(str(parsed))
-        return {"status": "deleted"}
-    finally:
-        store.close()
+    deleted = store.pipeline_runs.delete(parsed)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
+    delete_run_files(str(parsed))
+    return {"status": "deleted"}

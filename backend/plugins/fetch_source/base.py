@@ -18,10 +18,11 @@ ones mark the target FAILED_PERMANENT.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, ClassVar
 from uuid import UUID
 
+from backend.plugins._fields import FieldSpec
 from backend.shared.models import CrawlTarget, FetchSourceSettings, OutboxEvent
 
 if TYPE_CHECKING:
@@ -33,12 +34,17 @@ class FetchStrategyConfig:
     """Static description of a fetch strategy plugin.
 
     ``name`` is the dataset ``source_type`` the strategy serves ("web" /
-    "local") and the key it is looked up under in the registry.
+    "local") and the key it is looked up under in the registry. ``fields``
+    describes the per-strategy knobs the actor reads out of
+    :class:`~backend.shared.models.pipeline_run.FetchSourceSettings`, so the UI
+    can render this strategy's settings form (served camelCased like every
+    other plugin config).
     """
 
     name: str
     label: str
     description: str
+    fields: list[FieldSpec] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

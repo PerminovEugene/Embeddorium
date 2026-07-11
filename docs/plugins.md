@@ -1,99 +1,245 @@
 # Plugins
 
-The `chunk_document` pipeline stage is pluggable: chunking strategies live as
-small, self-contained plugins under `backend/plugins/chunkers/` and are
-auto-discovered at process start — no registration step, no editing of the
-actor. Drop a file (or a subpackage) in that directory, implement one class,
-and it shows up in `GET /chunkers` and becomes selectable for any run.
+Every **configurable** pipeline stage in Embeddorium is pluggable. The
+per-stage behaviour a user can pick and tune — how a source is validated, how
+it's fetched, how it's parsed, how documents are filtered, how text is chunked,
+how chunks are embedded — lives as small, self-contained **strategy plugins**
+under `backend/plugins/<actor>/`. They are auto-discovered at process start:
+drop a module in the right directory, implement one class, and it shows up in
+the API and becomes selectable for any run — no registration, no editing of the
+actor.
 
-This is currently the only plugin kind, but the surrounding
-`backend/plugins/` package is deliberately generic so other plugin kinds
-(parsers, filters, ...) have an obvious place to land later.
+The plugin surface exists so that (a) the web UI can render each stage's
+options and settings form entirely from backend metadata, and (b) new
+strategies can be added without touching the pipeline plumbing.
 
 ## The mental model
 
-A chunker plugin is a **near-pure function**: given a document's text (and,
-optionally, its raw fetched content), return a list of chunks. Everything
-else — reading the parsed text and raw content off disk, extracting markdown
-links out of each chunk, building and upserting `DocumentChunk` rows,
-advancing the crawl target's status, publishing the outbox event that
-triggers embedding — is boilerplate the `chunk_document` actor handles for
-every chunker, so plugin authors never touch it.
+An actor is split in two:
+
+- **The actor** (`backend/actors/<actor>/`) owns all the plumbing that's the
+  same for every strategy: acquiring and locking the crawl target, reading and
+  writing artefacts on disk, status transitions, persisting rows, and
+  publishing the outbox event that triggers the next stage.
+- **The strategy plugin** (`backend/plugins/<actor>/`) owns only the part that
+  varies — ideally a **near-pure function**. The actor calls it and does
+  everything else.
 
 ```
-ChunkInput  ──►  YourChunker.chunk(ctx)  ──►  list[Chunk]  ──►  (actor persists + extracts links)
+raw input ──►  strategy.<method>(...)  ──►  result  ──►  (actor persists + advances the pipeline)
 ```
 
-## The interface
+### Which actors are plugin-backed
 
-Everything a plugin needs is in
-[`backend/plugins/chunkers/base.py`](../backend/plugins/chunkers/base.py):
+| Actor              | Plugin package                    | Strategy contract (near-pure function) |
+| ------------------ | --------------------------------- | -------------------------------------- |
+| `validate_source`  | `backend/plugins/validate_source` | seed value → canonical identity + admissibility |
+| `fetch_source`     | `backend/plugins/fetch_source`    | target → raw fetched content + next-stage routing |
+| `parse_source`     | `backend/plugins/parse_source`    | `(raw, content_type)` → normalized text |
+| `filter_documents` | `backend/plugins/filter_documents`| `(title, text)` → keep/skip predicate |
+| `chunk_document`   | `backend/plugins/chunkers`        | document text → `list[Chunk]` |
+| `embed_chunks`     | `backend/plugins/embed_chunks`    | provider snapshot → concrete embed target |
+
+The remaining actors (`schedule_embeddings`, `schedule_discovered_links`,
+`track_pipeline_status`) are pure plumbing with nothing for a user to
+configure, so they are intentionally **not** pluggable.
+
+## Anatomy of a plugin package
+
+Every package follows the same layout (`chunkers` is the historical outlier —
+same shape, slightly different names):
+
+```
+backend/plugins/<actor>/
+  __init__.py     # package docstring; explains the plugin surface
+  base.py         # the ABC + its *StrategyConfig + any typed context/result/error types
+  registry.py     # discovery + lookup: list_*_configs / get_*_class / build_*
+  <strategy>.py   # one concrete strategy per module (e.g. web.py, local_file.py)
+```
+
+Two shared building blocks live one level up, in `backend/plugins/`:
+
+- **`_fields.py` — `FieldSpec`**: the single field-descriptor dataclass every
+  plugin kind reuses to declare a configurable setting for the UI.
+- **`_strategy_discovery.py` — `discover_strategies()`**: the shared discovery
+  walker used by every registry.
+
+### `base.py` — the interface
+
+Each `base.py` defines an abstract base class and a frozen `*StrategyConfig`
+dataclass. Every config has the **same shape** — this is what lets one API
+schema serve all of them:
+
+```python
+@dataclass(frozen=True)
+class ParseStrategyConfig:          # …FetchStrategyConfig, EmbedStrategyConfig, etc.
+    name: str                       # unique, stable id — the registry key + stored run value
+    label: str                      # UI display name
+    description: str                # UI help text
+    fields: list[FieldSpec] = field(default_factory=list)   # the settings form
+
+
+class ParseStrategy(ABC):
+    config: ClassVar[ParseStrategyConfig]
+
+    @abstractmethod
+    def parse(self, *, raw: str, content_type: str | None, final_url: str) -> str | None:
+        ...
+```
+
+`ChunkerConfig` additionally carries a free-text `restrictions` field; the API
+treats it as optional so the shared schema still fits.
+
+### How settings reach a strategy
+
+There are two flavours, and the difference is worth understanding:
+
+- **Settings-resolved strategies** (`chunkers`, `parse_source`,
+  `filter_documents`, `embed_chunks`). The base class `__init__(settings)`
+  resolves the raw `settings` dict against `config.fields`, filling in each
+  field's `default` for any missing key. Subclasses read values via
+  `self._get(key)` and never touch the raw dict. The registry's `build_*(name,
+  settings)` instantiates with settings.
+
+- **Context-passed strategies** (`fetch_source`, `validate_source`). These are
+  **stateless** — `build_*(name)` takes no settings. The typed settings model
+  (`FetchSourceSettings`, `ValidateSourceSettings`) is handed to the strategy
+  per call via a context object or keyword argument (`ctx.settings`,
+  `settings=`). Their `config.fields` still exist, but purely to describe the
+  form to the UI; the actor reads the values off the typed model itself.
+
+Either way, `fields` is the single source of truth for **what** is
+configurable; the two flavours only differ in **how** the resolved values are
+delivered to the code.
+
+### How a strategy is selected
+
+The actor decides which strategy name to build:
+
+- `fetch_source` / `validate_source` select by the dataset's **`source_type`**
+  (`"web"` or `"local"`) — the strategy's `config.name` *is* the source type.
+- `parse_source` / `filter_documents` / `embed_chunks` have a single built-in
+  strategy, selected by a module-level `DEFAULT_*_STRATEGY` constant.
+- `chunk_document` is the only stage where the **user** picks the strategy from
+  many (the chunker picker); the choice is stored on the run.
+
+## FieldSpec and the UI
+
+`FieldSpec` (`backend/plugins/_fields.py`) describes one configurable setting:
 
 ```python
 @dataclass
-class ChunkInput:
-    text: str                          # parsed markdown/plain text
-    raw_content: Optional[str] = None  # raw fetched content (e.g. XML), if any
-    source_url: str = ""
-    language: str = "en"
-    content_type: Optional[str] = None
-
-
-@dataclass
-class Chunk:
-    text: str
-    chunk_type: str = "passage"        # "passage" unless your chunker has real types
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ChunkerField:
-    key: str            # snake_case; this is the exact key used in `settings`
-    label: str           # UI label
-    type: str            # "text" | "number" | "checkbox" | "select"
+class FieldSpec:
+    key: str                 # exact snake_case storage key — never transformed
+    label: str
+    type: str                # "text" | "number" | "checkbox" | "select" | "provider_id"
     default: Any
     min: Optional[int] = None
     max: Optional[int] = None
     options: Optional[List[Dict[str, Any]]] = None   # for type="select"
     placeholder: Optional[str] = None
-
-
-@dataclass
-class ChunkerConfig:
-    name: str             # unique, snake_case id — e.g. "text_markdown"
-    label: str            # UI display name
-    description: str
-    restrictions: str = ""            # free text, e.g. "Requires raw XML content"
-    fields: List[ChunkerField] = field(default_factory=list)
-
-
-class Chunker(ABC):
-    config: ClassVar[ChunkerConfig]
-
-    def __init__(self, settings: Dict[str, Any]) -> None: ...   # resolves settings vs. field defaults
-
-    @abstractmethod
-    def chunk(self, ctx: ChunkInput) -> List[Chunk]: ...
+    required: bool = False
 ```
 
-`Chunk` here intentionally has **no `links` field** — link extraction is not
-a chunker's job. The actor runs `LinkExtractor` over each returned chunk's
-text after your `chunk()` call returns, so you don't need to think about
-links at all.
+Two endpoints expose these configs to the frontend:
 
-## Writing a chunker
+- **`GET /actor-configs`** (`backend/server/actor_configs/router.py`) — the
+  single source of truth. Returns, per plugin-backed actor, every discovered
+  strategy plus its `fields`, camelCased for the UI. The ingestion-pipeline
+  form builds each stage's strategy picker and settings form entirely from this
+  response.
+- **`GET /chunkers`** (`backend/server/chunkers/router.py`) — the original
+  chunker-only endpoint, kept for backward compatibility. The UI no longer
+  calls it (chunkers now arrive via `/actor-configs` as `chunk_document`'s
+  strategies).
 
-1. Create a module (or subpackage) under `backend/plugins/chunkers/`, e.g.
-   `backend/plugins/chunkers/my_chunker.py`.
-2. Subclass `Chunker`, set a class-level `config`, and implement `chunk()`.
+Two rules make the round trip work:
+
+- **Object keys are camelCased on the wire, but a field's `key` *value* stays
+  snake_case.** The UI sends the value straight back under that exact key, so
+  it lands verbatim in the stored settings (e.g. `chunk_size`, `verify_tls`).
+- **`type="provider_id"`** tells the UI to render a picker over the configured
+  embedding providers; run-creation materialises the picked id into the stored
+  provider snapshot. This is how `embed_chunks` gets its required `provider`
+  field.
+
+## Discovery and registries
+
+### Libraries
+
+Discovery uses the **Python standard library only** — no third-party plugin
+framework (no setuptools entry points, no `pluggy`):
+
+- `pkgutil.walk_packages` — enumerate every module *and* subpackage under the
+  plugin package.
+- `importlib.import_module` — import each one.
+- `inspect` — find concrete (non-abstract) subclasses of the package's base
+  class that declare a `config`.
+- `dataclasses`, `abc`, `logging` — the config/interface types and warnings.
+
+`backend/plugins/_strategy_discovery.py` implements this once as
+`discover_strategies(package, base_cls) -> {config.name: strategy_class}`, and
+every registry calls it. (`chunkers/registry.py` predates the shared helper and
+carries an equivalent private `_discover`.)
+
+### Why a registry at all
+
+The registry is the thin indirection layer between "a class in a file" and
+"the actor / API". It buys:
+
+- **Zero-registration discovery** — no hand-maintained list to keep in sync.
+- **A shared entry point** — the actor and the API both go through
+  `list_*_configs()` / `get_*_class(name)` / `build_*(...)`, so there's one
+  place that knows how to find and instantiate a strategy.
+- **Caching** — discovery runs once per process and is memoised in a module
+  `_cache`; lookups afterward are dict hits.
+- **Graceful degradation** — a plugin that fails to import (bad dependency,
+  syntax error) is logged and skipped, not fatal. One broken plugin never
+  takes down the endpoint or the worker for the others.
+- **Stable string ids** — runs store a strategy by `config.name`, decoupling
+  persisted config from where the class actually lives, so internals can be
+  refactored freely.
+
+If two strategies claim the same `name`, the first one discovered wins and a
+warning is logged.
+
+## End to end: how a run uses a plugin
+
+1. **Configure.** The UI reads `/actor-configs`, renders the form, and submits
+   per-actor settings. Run-creation
+   (`backend/server/pipeline/router.py`) resolves them into the typed
+   `PipelineActorConfigs` snapshot stored on the run (see
+   `backend/shared/models/pipeline_run.py`). `chunk_document` is stored as
+   `{"chunker": "<name>", "settings": {...}}`; `embed_chunks` stores the picked
+   provider's full snapshot under `provider`.
+2. **Run.** When the stage's actor processes a message, it loads its settings
+   block from the run, asks the registry to `build_*` the right strategy, calls
+   the strategy's one method, and handles the result — persisting output and
+   publishing the next outbox event. For example
+   `fetch_source_actor/handler.py` does `build_fetch_strategy(source_type)` →
+   `strategy.fetch(...)` → `strategy.next_outbox_event(...)`, and
+   `chunk_document_actor/launcher.py` caches the built chunker per
+   `(name, settings)` so it isn't rebuilt on every message.
+
+## Adding a strategy to an existing actor
+
+The worked example below is a chunker (the richest, user-selectable case); the
+other actors follow the same three steps against their own base class.
+
+1. Create a module (or subpackage) under the actor's plugin directory, e.g.
+   `backend/plugins/chunkers/double_newline.py`.
+2. Subclass the base class, set a class-level `config`, implement the abstract
+   method.
+3. Restart the server/worker — discovery picks it up.
 
 ```python
-# backend/plugins/chunkers/my_chunker.py
+# backend/plugins/chunkers/double_newline.py
 from __future__ import annotations
 
 from typing import List
 
-from backend.plugins.chunkers.base import Chunk, Chunker, ChunkerConfig, ChunkerField, ChunkInput
+from backend.plugins._fields import FieldSpec
+from backend.plugins.chunkers.base import Chunk, Chunker, ChunkerConfig, ChunkInput
 
 
 class DoubleNewlineChunker(Chunker):
@@ -104,18 +250,16 @@ class DoubleNewlineChunker(Chunker):
         label="Double newline",
         description="Splits on blank lines, merging short paragraphs together.",
         fields=[
-            ChunkerField(
-                key="min_chars", label="Minimum chunk length",
-                type="number", default=200, min=0,
-            ),
+            FieldSpec(key="min_chars", label="Minimum chunk length",
+                      type="number", default=200, min=0),
         ],
     )
 
     def chunk(self, ctx: ChunkInput) -> List[Chunk]:
         if not ctx.text:
-            return []
+            return []                       # return [] for empty input; never raise
 
-        min_chars = int(self._get("min_chars"))
+        min_chars = int(self._get("min_chars"))     # read settings via _get
         paragraphs = [p.strip() for p in ctx.text.split("\n\n") if p.strip()]
 
         chunks: List[Chunk] = []
@@ -130,36 +274,32 @@ class DoubleNewlineChunker(Chunker):
         return chunks
 ```
 
-That's it — no registration. The next time the process (or worker) starts,
-`GET /chunkers` includes `double_newline`, and any pipeline run can select it
-via `actorSettings.chunk_document = {"chunker": "double_newline", "settings":
+That's it — no registration. On the next process start, `/actor-configs`
+includes `double_newline` under `chunk_document`, and a run can select it via
+`actorSettings.chunk_document = {"chunker": "double_newline", "settings":
 {"min_chars": 400}}`.
 
 ### Rules of thumb
 
-- **Return `[]` for empty/whitespace input** — don't raise.
-- **Read settings via `self._get(key)`** (or `self.settings[key]`) — never
-  read the raw `settings` dict passed to `__init__` yourself; `Chunker
-  .__init__` already resolves it against `config.fields`, filling in each
-  field's `default` for any key the caller omitted.
-- **`ctx.raw_content` may be `None`.** Only structure-aware chunkers (parsing
-  XML/HTML, say) need it; if yours does and the content isn't there or
-  doesn't parse, fall back to splitting `ctx.text` instead of raising — see
-  `legal_xml.py` for the reference pattern (it falls back to the markdown
-  chunker).
-- **`chunk_type`/`metadata` are optional.** Leave them at their defaults
-  (`"passage"` / `{}`) unless your chunker has genuinely distinct chunk
-  kinds worth surfacing to retrieval (the way `legal_xml` emits
-  `legal_body`/`act_title`/`amendment_history`/`legal_metadata`).
-- **A plugin that fails to import doesn't take down the others.** Discovery
-  logs a warning and skips it, so a bad dependency or syntax error in your
-  plugin degrades gracefully rather than breaking `GET /chunkers` or the
-  worker for everyone else.
+- **Keep the strategy near-pure.** No DB writes, no broker, no disk I/O the
+  actor already does. If you find yourself needing those, it probably belongs
+  in the actor.
+- **Read settings only via `self._get(key)`** (settings-resolved strategies) —
+  never re-read the raw dict; `__init__` already applied field defaults.
+- **Fail soft where the contract says so.** Chunkers return `[]` for empty
+  input; `parse_source` returns `None` when nothing supports the content
+  (the actor then marks the target `SKIPPED_UNSUPPORTED`).
+- **Keep top-level imports cheap.** Discovery imports every plugin at startup;
+  a heavy import slows the whole process. Import optional/heavy dependencies
+  lazily inside the method.
+- **`ctx.raw_content` may be `None`** (chunkers). Only structure-aware chunkers
+  need it; fall back to `ctx.text` rather than raising — see `legal_xml.py`.
 
 ### Subpackages
 
-For a chunker with real internals (multiple files, its own tests fixtures,
-etc.), use a subpackage instead of a single module:
+For a strategy with real internals (multiple files, fixtures), use a subpackage
+instead of a single module. `pkgutil.walk_packages` descends into it, so
+`my_strategy/impl.py` is discovered exactly like a flat module:
 
 ```
 backend/plugins/chunkers/my_chunker/
@@ -168,36 +308,57 @@ backend/plugins/chunkers/my_chunker/
   helpers.py
 ```
 
-Discovery (`backend.plugins.chunkers.registry`) walks every module *and*
-subpackage under `backend/plugins/chunkers/` (`pkgutil.walk_packages`), so
-`my_chunker/chunker.py` is found the same way a flat module would be —
-nothing extra to wire up.
+## Adding a brand-new pluggable actor
 
-## How it's used end to end
+To make a *new* stage pluggable, mirror an existing package (`fetch_source` is
+a good template):
 
-- `GET /chunkers` (`backend/server/chunkers_routes.py`) lists every
-  discovered chunker's `ChunkerConfig`, camelCased for the UI — this is what
-  powers the chunker picker and its settings form.
-- A pipeline run's `actor_configs.chunk_document` stores the choice as
-  `{"chunker": "<name>", "settings": {...}}` (see `ChunkDocumentSettings` in
-  `backend/shared/models/pipeline_run.py`); `settings` is stored **verbatim**
-  — its keys are exactly the `ChunkerField.key`s your plugin declared.
-- The `chunk_document` actor's launcher
-  (`backend/actors/chunk_document_actor/launcher.py`) reads that block from
-  the run, builds your chunker once via `registry.build_chunker(name,
-  settings)`, and caches the instance per `(name, settings)` so it isn't
-  rebuilt on every message.
-- `chunk_document`'s handler (`backend/actors/chunk_document_actor/handler.py`)
-  builds the `ChunkInput`, calls `chunker.chunk(ctx)`, extracts links from
-  each returned chunk's text, and persists everything.
+1. **`base.py`** — an ABC with a `config: ClassVar[<Name>StrategyConfig]` and
+   one abstract method that captures the varying behaviour. Choose the settings
+   flavour (resolved-dict `__init__` vs. context-passed) to match how the actor
+   already carries config.
+2. **`registry.py`** — a module `_cache`, a `_registry()` that calls
+   `discover_strategies(pkg, <Base>)`, and `list_*_configs()` /
+   `get_*_class(name)` / `build_*(...)`.
+3. **Wire the actor** — have the handler/launcher pick a strategy name, call
+   `build_*`, and invoke the method instead of doing the work inline.
+4. **Expose it** — add the actor + its `list_*_configs` to the `_ACTOR_LISTERS`
+   table in `backend/server/actor_configs/router.py` so the UI can see it.
+
+## Pros and cons
+
+**Pros**
+
+- **Zero-registration extensibility** — a new strategy is one file; it appears
+  in the API and the pipeline on restart.
+- **Thin, uniform actors** — the same split across six stages lowers cognitive
+  load, and strategy logic is isolated.
+- **Automatic UI** — add a `FieldSpec` and the settings form renders it with no
+  frontend change.
+- **Fault isolation** — a broken plugin is logged and skipped, not fatal.
+- **Refactor-safe persistence** — runs reference strategies by stable string
+  id, not by class path.
+
+**Cons / trade-offs**
+
+- **Restart to pick up changes** — discovery is import-time and cached per
+  process; adding/removing a plugin needs a server/worker restart.
+- **Import side effects at startup** — every plugin is imported during
+  discovery, so a heavy top-level import taxes everyone.
+- **Loosely-typed settings** — values are dicts resolved against `fields`; a
+  typo'd field `key` silently falls back to the default instead of erroring.
+- **Flat, unversioned names** — names are a global namespace per actor; a
+  collision is resolved by "first wins" with a warning.
+- **Only fits function-shaped variability** — plumbing-heavy stages don't fit
+  the model and shouldn't be forced into it.
 
 ## Testing a plugin
 
-Chunkers are plain Python objects — instantiate and call `chunk()` directly,
-no DB or broker needed:
+Strategies are plain Python objects — instantiate and call the method directly,
+no DB or broker:
 
 ```python
-from backend.plugins.chunkers.my_chunker import DoubleNewlineChunker
+from backend.plugins.chunkers.double_newline import DoubleNewlineChunker
 from backend.plugins.chunkers.base import ChunkInput
 
 def test_splits_on_blank_lines():
@@ -206,11 +367,24 @@ def test_splits_on_blank_lines():
     assert len(chunks) >= 1
 ```
 
-See `backend/tests/plugins/chunkers/` for the tests covering the built-in
-chunkers, and `backend/tests/server/test_chunkers_routes.py` for the
-`GET /chunkers` contract.
+See `backend/tests/plugins/` for per-plugin tests (including registry
+discovery), and `backend/tests/server/test_actor_configs_routes.py` /
+`test_chunkers_routes.py` for the endpoint contracts.
 
-## Built-in chunkers
+## Reference: built-in strategies
+
+| Actor              | Strategy       | Selected by       | Configurable fields |
+| ------------------ | -------------- | ----------------- | ------------------- |
+| `validate_source`  | `web`          | source type       | `normalize_urls`, `dedup` |
+|                    | `local`        | source type       | `dedup` |
+| `fetch_source`     | `web`          | source type       | `verify_tls`, `timeout_seconds`, `allowed_content_types` |
+|                    | `local`        | source type       | `file_glob` |
+| `parse_source`     | `content_type` | default           | `parser` (`auto`/`html`/`xml`/`plain`/`pdf`) |
+| `filter_documents` | `keyword`      | default           | `enabled`, `keywords` |
+| `embed_chunks`     | `standard`     | default           | `provider` (`provider_id`, required) |
+| `chunk_document`   | *(see below)*  | **user pick**     | *(per chunker)* |
+
+### Built-in chunkers
 
 | Name                  | What it does                                                              | Configurable fields                     |
 | --------------------- | -------------------------------------------------------------------------- | ---------------------------------------- |

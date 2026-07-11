@@ -24,6 +24,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Dict, List, Optional
 
+from backend.plugins._fields import FieldSpec
+
 
 @dataclass
 class Chunk:
@@ -67,25 +69,13 @@ class ChunkInput:
     content_type: Optional[str] = None
 
 
-@dataclass
-class ChunkerField:
-    """One UI-configurable setting exposed by a chunker plugin.
-
-    ``key`` is the exact snake_case key the value is stored/read under in
-    ``ChunkDocumentSettings.settings`` — it is never transformed, even
-    though the API layer camelCases every other JSON object key when
-    serving :class:`ChunkerConfig` to the frontend.
-    """
-
-    key: str
-    label: str
-    # One of "text" | "number" | "checkbox" | "select".
-    type: str
-    default: Any
-    min: Optional[int] = None
-    max: Optional[int] = None
-    options: Optional[List[Dict[str, Any]]] = None
-    placeholder: Optional[str] = None
+# A chunker field is just the shared plugin field descriptor. The alias is
+# kept so existing imports (``from ...chunkers.base import ChunkerField``) and
+# the chunker-specific docstring context keep working; all plugin kinds share
+# the one :class:`~backend.plugins._fields.FieldSpec` dataclass rather than
+# maintaining divergent copies. For chunkers, ``key`` is the exact snake_case
+# key the value is stored/read under in ``ChunkDocumentSettings.settings``.
+ChunkerField = FieldSpec
 
 
 @dataclass

@@ -2,9 +2,14 @@
 
 Acquires the target (FETCHED/FILTERED → PARSING; the latter is how the
 local-file XML chain re-joins this stage after ``filter_documents``), loads
-the persisted ``SourceFetch``, selects a parser by content type, and in one
+the persisted ``SourceFetch``, runs it through the run's parse strategy plugin
+(``backend/plugins/parse_source``) to get normalized text, and in one
 transaction stores the Document (with provenance + ``text_hash``), advances
 to PARSED and writes the outbox event that triggers ``chunk_document``.
+
+Parser selection (explicit override vs content type) lives in the strategy —
+see ``backend/plugins/parse_source/base.py`` for the plugin interface and
+``registry.py`` for how the strategy is resolved.
 """
 
 from __future__ import annotations
@@ -12,6 +17,10 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
+from backend.plugins.parse_source.registry import (
+    DEFAULT_PARSE_STRATEGY,
+    build_parse_strategy,
+)
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
 from backend.shared.clients.queue.pipeline_payloads import (
     ChunkDocumentPayload,
@@ -29,11 +38,7 @@ from backend.shared.models import (
     OutboxEvent,
     ParseSourceSettings,
 )
-from backend.shared.parsers.registry import (
-    PARSER_VERSION,
-    get_parser,
-    get_parser_by_name,
-)
+from backend.shared.parsers.registry import PARSER_VERSION
 from backend.shared.parsers.text_splitter import CHUNKER_VERSION
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
@@ -81,21 +86,23 @@ def parse_source(
         )
         raise RuntimeError(f"source fetch missing for target {target_id}")
 
-    # An explicit parser override (other than "auto") wins; otherwise pick by
-    # content type. An unknown override name falls back to content-type too.
+    # The parse strategy owns parser selection (explicit override vs content
+    # type); an unresolvable parser yields None → SKIPPED_UNSUPPORTED.
     cfg = load_actor_configs(store, payload.pipeline_id)
     settings = cfg.parse_source if cfg else ParseSourceSettings()
-    parser = get_parser_by_name(settings.parser) or get_parser(fetch.content_type)
-    if parser is None:
+    strategy = build_parse_strategy(DEFAULT_PARSE_STRATEGY, {"parser": settings.parser})
+
+    raw = read_source_file(fetch.raw_content_path)
+    text = strategy.parse(
+        raw=raw, content_type=fetch.content_type, final_url=fetch.final_url
+    )
+    if text is None:
         store.crawl_targets.update_status(
             target_id=target_id,
             status=CrawlTargetStatus.SKIPPED_UNSUPPORTED,
             skip_reason=f"content_type={fetch.content_type}",
         )
         return
-
-    raw = read_source_file(fetch.raw_content_path)
-    text = parser.parse(raw, fetch.final_url)
 
     text_path = write_source_file(
         pipeline_id=payload.pipeline_id,

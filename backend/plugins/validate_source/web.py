@@ -8,6 +8,7 @@ longer exists). Root seeds (no parent) are always allowed.
 
 from __future__ import annotations
 
+from backend.plugins._fields import FieldSpec
 from backend.plugins.validate_source.base import (
     NormalizedSource,
     SourceValidationError,
@@ -28,6 +29,23 @@ class WebSourceValidation(SourceValidationStrategy):
             "Normalizes the URL and rejects discovered links whose origin "
             "differs from their parent document's origin."
         ),
+        # normalize_urls is web-only; dedup is the shared already-queued gate
+        # the actor applies for every strategy. Keys/defaults mirror
+        # ValidateSourceSettings exactly.
+        fields=[
+            FieldSpec(
+                key="normalize_urls",
+                label="Normalize URLs before dedup",
+                type="checkbox",
+                default=True,
+            ),
+            FieldSpec(
+                key="dedup",
+                label="Skip already-queued sources",
+                type="checkbox",
+                default=True,
+            ),
+        ],
     )
 
     def normalize(

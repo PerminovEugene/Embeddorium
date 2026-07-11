@@ -50,7 +50,8 @@ const SubmitButton = () => {
         runId: state.selectedRun?.id,
         // How many results to return per query.
         topK: Number(state.topK),
-        // How queries are matched (dense vectors vs lexical BM25).
+        // How queries are matched: semantic (vectors), keyword (BM25) or
+        // hybrid (both fused via reciprocal rank fusion).
         searchMethod: state.searchMethod,
         // Whether to persist this launch to the search history.
         saveResults: state.saveResults,

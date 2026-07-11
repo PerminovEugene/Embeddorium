@@ -6,8 +6,9 @@ import TopKInput from "./TopKInput";
 import Checkbox from "./common/Checkbox";
 
 const methods: { id: SearchMethod; label: string }[] = [
-  { id: "embedding", label: "Embedding (vector)" },
-  { id: "bm25", label: "BM25 (lexical)" },
+  { id: "semantic", label: "Semantic (vector)" },
+  { id: "keyword", label: "Keyword (BM25)" },
+  { id: "hybrid", label: "Hybrid (RRF)" },
 ];
 
 // DB-search mode only: parameters of the search itself — how queries are
@@ -38,7 +39,7 @@ const SearchParamsSection: React.FC = () => {
           ))}
         </select>
         <span className="text-xs text-emd-text mt-1">
-          How queries are matched against the collection
+          Hybrid combines vector + keyword via reciprocal rank fusion
         </span>
       </div>
 

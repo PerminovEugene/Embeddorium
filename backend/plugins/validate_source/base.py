@@ -12,9 +12,10 @@ side-effect free.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
+from backend.plugins._fields import FieldSpec
 from backend.shared.clients.queue.validate_source_payload import ValidateSourcePayload
 from backend.shared.models import ValidateSourceSettings
 from backend.shared.storage.sql.sql_store import SqlStore
@@ -25,12 +26,17 @@ class ValidationStrategyConfig:
     """Static description of a validation strategy plugin.
 
     ``name`` is the dataset ``source_type`` the strategy serves ("web" /
-    "local") and the key it is looked up under in the registry.
+    "local") and the key it is looked up under in the registry. ``fields``
+    describes the per-strategy knobs the actor reads out of
+    :class:`~backend.shared.models.pipeline_run.ValidateSourceSettings`, so the
+    UI can render this strategy's settings form (served camelCased like every
+    other plugin config).
     """
 
     name: str
     label: str
     description: str
+    fields: list[FieldSpec] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

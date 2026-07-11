@@ -40,8 +40,10 @@ def test_list_chunkers_returns_builtins_with_camelcase_body():
     )
     # field keys stay snake_case; field-level object keys are camelCase.
     assert set(chunk_size_field) == {
-        "key", "label", "type", "default", "min", "max", "options", "placeholder",
+        "key", "label", "type", "default", "min", "max", "options",
+        "placeholder", "required",
     }
+    assert chunk_size_field["required"] is False
     assert chunk_size_field["default"] == 1200
     assert chunk_size_field["min"] == 1
 

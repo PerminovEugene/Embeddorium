@@ -147,7 +147,7 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     similarities: [Similarity.COSINE],
     ollamaPort: "11434",
     topK: "10",
-    searchMethod: "embedding",
+    searchMethod: "semantic",
     saveResults: true,
     sourceType: "manual",
     selectedRun: null,
@@ -175,9 +175,20 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         merged.similarities =
           similarities.length > 0 ? similarities : defaults.similarities;
-        // Same guard for the search method: fall back to the default if the
-        // persisted value is no longer a supported method.
-        if (!["embedding", "bm25"].includes(merged.searchMethod)) {
+        // Migrate the search method from the pre-rename vocabulary so a
+        // returning user keeps their selection: "embedding" → "semantic",
+        // "bm25" → "keyword". Fall back to the default for anything else no
+        // longer supported.
+        const searchMethodMigrations: Record<string, SearchMethod> = {
+          embedding: "semantic",
+          bm25: "keyword",
+        };
+        const persistedMethod = merged.searchMethod as string;
+        if (persistedMethod in searchMethodMigrations) {
+          merged.searchMethod = searchMethodMigrations[persistedMethod];
+        } else if (
+          !["semantic", "keyword", "hybrid"].includes(persistedMethod)
+        ) {
           merged.searchMethod = defaults.searchMethod;
         }
         return merged;
