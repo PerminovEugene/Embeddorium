@@ -4,8 +4,8 @@ Uses FastAPI's TestClient against the real router (no live DB or broker):
 - The shared ``SqlStore`` is supplied via a ``get_sql_store`` dependency
   override, so every handler receives a MagicMock store. The ``get_broker``
   dependency (used by the launch handler) is overridden with a MagicMock too.
-- ``seed_pipeline`` is patched at its import site in ``pipeline.router`` so
-  broker setup is skipped.
+- ``seed_pipeline`` is patched at its import site in
+  ``pipeline.service.launch`` so broker setup is skipped.
 
 Each test exercises exactly one behaviour; see the docstring for the rule
 under test.
@@ -147,7 +147,7 @@ def test_create_returns_pending_run_and_does_not_call_seed_pipeline() -> None:
         created_run=pending_run,
     )
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.service.launch.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 200, resp.text
@@ -188,7 +188,7 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
         },
     }
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline"):
+        with patch("backend.server.pipeline.service.launch.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=payload)
 
     assert resp.status_code == 200, resp.text
@@ -232,7 +232,7 @@ def test_create_accepts_legacy_actor_settings_keys() -> None:
         },
     }
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline"):
+        with patch("backend.server.pipeline.service.launch.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=payload)
 
     assert resp.status_code == 200, resp.text
@@ -254,7 +254,7 @@ def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
         created_run=pending_run,
     )
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline"):
+        with patch("backend.server.pipeline.service.launch.seed_pipeline"):
             resp = client.post("/pipeline-runs", json=_CREATE_PAYLOAD)
 
     assert resp.status_code == 200, resp.text
@@ -325,7 +325,7 @@ def test_launch_pending_run_calls_seed_pipeline_and_transitions_to_running() -> 
     store_mock = _make_store(run=pending_run, updated_run=running_run)
 
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.service.launch.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -346,7 +346,7 @@ def test_launch_running_run_returns_409_and_does_not_call_seed() -> None:
     store_mock = _make_store(run=running_run)
 
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.service.launch.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 409
@@ -361,7 +361,7 @@ def test_launch_failed_run_is_allowed_relaunch() -> None:
     store_mock = _make_store(run=failed_run, updated_run=running_run)
 
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.service.launch.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -376,7 +376,7 @@ def test_launch_completed_run_is_allowed_relaunch() -> None:
     store_mock = _make_store(run=completed_run, updated_run=running_run)
 
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline") as mock_seed:
+        with patch("backend.server.pipeline.service.launch.seed_pipeline") as mock_seed:
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 200, resp.text
@@ -388,7 +388,7 @@ def test_launch_returns_404_when_run_not_found() -> None:
     store_mock = _make_store(run=None)
 
     with _override_store(store_mock):
-        with patch("backend.server.pipeline.router.seed_pipeline"):
+        with patch("backend.server.pipeline.service.launch.seed_pipeline"):
             resp = client.post("/pipeline-runs/{}/launch".format(_RUN_ID))
 
     assert resp.status_code == 404
