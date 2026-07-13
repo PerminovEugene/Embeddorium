@@ -87,7 +87,8 @@ class VectorStore:
             Filter(
                 must=[
                     FieldCondition(
-                        key="pipeline_run_id", match=MatchValue(value=pipeline_id)
+                        key="pipeline_run_id",
+                        match=MatchValue(value=str(pipeline_id)),
                     )
                 ]
             )
@@ -100,10 +101,7 @@ class VectorStore:
             limit=top_k,
             query_filter=query_filter,
         )
-        return [
-            {"score": hit.score, **hit.payload}
-            for hit in results.points
-        ]
+        return [{"score": hit.score, **hit.payload} for hit in results.points]
 
     def delete_collection(self) -> None:
         self.client.delete_collection(self.collection)

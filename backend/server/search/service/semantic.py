@@ -19,7 +19,6 @@ def semantic_search(
     embedding: list,
     top_k: int,
     pipeline_id: str,
-    model_name: str | None,
     dataset_name: str,
 ) -> list[dict]:
     """Dense nearest-neighbour retrieval for one query.
@@ -48,7 +47,6 @@ def semantic_search(
                 "source_id": query.id,
                 "queryText": query.text,
                 "score": hit.get("score"),
-                "model": model_name,
                 "chunkId": chunk_id,
                 "documentId": hit.get("document_id"),
                 "chunkIndex": hit.get("chunk_index"),

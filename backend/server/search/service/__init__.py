@@ -148,7 +148,6 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
         mock_dim: int | None = None
         if provider_type == "mock":
             mock_dim = provider_snap.get("mock_dim", config.MOCK_EMBED_DIM)
-        ollama_port = request.configuration.get("ollamaPort")
 
         logging.info(
             "DB search: run=%s strategy=%s collection=%s provider=%s model=%s "
@@ -163,10 +162,14 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
             top_k,
         )
 
+        # Embed the query via the pipeline's own OLLAMA_EMBED_BASE_URL — the same
+        # endpoint the embed_chunks actor used to index the collection — rather
+        # than an endpoint supplied on the request. This upholds the search
+        # invariant: the query is embedded exactly the way the collection was.
         query_embeddings = await get_embeddings(
             provider_type,
             model_name,
-            ollama_port,
+            config.OLLAMA_EMBED_BASE_URL,
             [q.text for q in queries],
             mock_dim=mock_dim,
         )
@@ -193,12 +196,11 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
                 embedding,
                 top_k,
                 pipeline_id,
-                model_name,
                 dataset_name,
             )
         elif strategy == "keyword":
             query_results = keyword_search(
-                store_sql, query, top_k, run.id, dataset_name
+                store_sql, query, top_k, pipeline_id, dataset_name
             )
         else:  # hybrid
             query_results = hybrid_search(
@@ -207,8 +209,7 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
                 query,
                 embedding,
                 top_k,
-                run.id,
-                model_name,
+                pipeline_id,
                 dataset_name,
             )
 

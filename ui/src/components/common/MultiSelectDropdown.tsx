@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import MultiCheckboxSelect, { MultiCheckboxOption } from "./MultiCheckboxSelect";
 
 interface MultiSelectDropdownProps {
@@ -16,6 +17,10 @@ interface MultiSelectDropdownProps {
 // A dropdown wrapper around MultiCheckboxSelect: the trigger summarizes the
 // current selection and the checkbox list lives in a popover so the full list
 // isn't rendered on screen at all times. Selection stays owned by the parent.
+//
+// The panel is rendered in a portal with fixed positioning so it can extend
+// past the bottom of any `overflow-hidden` ancestor (e.g. a Card) instead of
+// being clipped.
 const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
   options,
   value,
@@ -25,15 +30,46 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
   disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
-  // Close the popover when clicking outside of it.
+  // Position the fixed panel just below the trigger, matching its width.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setPanelStyle({
+        position: "fixed",
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    // Capture-phase so we reposition on scrolls of any ancestor container.
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  // Close the popover when clicking outside of both the trigger and the panel.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        panelRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -47,8 +83,9 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
     selectedLabels.length > 0 ? selectedLabels.join(", ") : placeholder;
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -66,16 +103,22 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
         </span>
       </button>
 
-      {open && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border border-emd-border bg-white shadow-lg p-2">
-          <MultiCheckboxSelect
-            options={options}
-            value={value}
-            onChange={onChange}
-            emptyMessage={emptyMessage}
-          />
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={panelStyle}
+            className="z-50 rounded-md border border-emd-border bg-white shadow-lg p-2"
+          >
+            <MultiCheckboxSelect
+              options={options}
+              value={value}
+              onChange={onChange}
+              emptyMessage={emptyMessage}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

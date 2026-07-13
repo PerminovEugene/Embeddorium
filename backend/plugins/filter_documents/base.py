@@ -7,10 +7,11 @@ loading the ``SourceFetch``, reading the raw content, extracting the title,
 status transitions and enqueueing ``parse_source`` — stays in the actor, so a
 strategy is a near-pure predicate ``(title, text) -> bool``.
 
-The single built-in strategy (``keyword``) reproduces the actor's previous
-behavior exactly: when the gate is disabled every document passes; otherwise a
-document is relevant iff its title (or body when the title is absent) contains
-at least one configured keyword, and an empty keyword list lets everything
+The single built-in strategy (``keyword``) gates on two independent keyword
+lists: when the gate is disabled every document passes; otherwise a document
+is relevant iff no *exclude* keyword matches its title or body (exclude wins)
+and — when an *include* list is set — its title (or body when the title is
+absent) matches at least one include keyword. Empty lists let everything
 through.
 
 Subclasses set a class-level ``config`` (a :class:`FilterStrategyConfig`) and

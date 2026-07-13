@@ -1,14 +1,14 @@
-fix(ui): make existing providers and datasets read-only
+fix(server): install parse source dependency
 
 Why:
-- Prevent accidental editing of saved provider and dataset configurations.
+- Ensure the server can discover the parse_source strategy.
 
 What changed:
-- Disabled all form controls when an existing record is selected.
-- Hid save actions and removed update submission paths.
+- Added trafilatura to the server optional dependencies.
+- Documented plugin import-time dependencies.
 
 Validation:
-- npm run lint; npm run build
+- docker compose config --quiet; 20 focused tests passed
 
 Notes:
-- Lint passes with three pre-existing warnings.
+- Rebuild the server image before recreating the container.

@@ -1,12 +1,17 @@
 """The fetch_source strategy plugin interface.
 
 A fetch strategy owns the source-type-specific half of the ``fetch_source``
-actor: acquiring the raw content (HTTP fetch vs local file read) and naming
-the next pipeline stage. Everything shared between source types — target
-acquisition/locking, status transitions, writing the raw source file,
-persisting the ``SourceFetch`` row and committing the outbox event — stays in
-the actor, so a strategy is a near-pure function ``CrawlTarget ->
-FetchedSource`` plus a routing decision.
+actor: acquiring the raw content (HTTP fetch vs local file read). Everything
+shared between source types — target acquisition/locking, status transitions,
+writing the raw source file, persisting the ``SourceFetch`` row and committing
+the outbox event — stays in the actor, so a strategy is a near-pure function
+``CrawlTarget -> FetchedSource``.
+
+Both built-in strategies (web and local) route onward to the same next stage,
+``filter_documents``, so the routing decision is a shared concrete default on
+:class:`SourceFetchStrategy` rather than a per-strategy override. The filter
+stage then advances relevant documents to ``parse_source`` (both chains become
+fetch → filter → parse).
 
 Failure contract: a strategy raises :class:`UnsupportedSourceError` for
 content the pipeline should skip permanently (SKIPPED_UNSUPPORTED) and
@@ -23,6 +28,11 @@ from typing import TYPE_CHECKING, Callable, ClassVar
 from uuid import UUID
 
 from backend.plugins._fields import FieldSpec
+from backend.shared.clients.queue.pipeline_payloads import FilterDocumentsPayload
+from backend.shared.clients.queue.queue_names import (
+    FILTER_DOCUMENTS_ACTOR,
+    FILTER_DOCUMENTS_QUEUE,
+)
 from backend.shared.models import CrawlTarget, FetchSourceSettings, OutboxEvent
 
 if TYPE_CHECKING:
@@ -103,9 +113,22 @@ class SourceFetchStrategy(ABC):
         """Acquire *target*'s raw content, or raise the typed failures above."""
         raise NotImplementedError
 
-    @abstractmethod
     def next_outbox_event(
         self, *, target_id: UUID, pipeline_id: str | None
     ) -> OutboxEvent:
-        """Build the outbox event that triggers this chain's next stage."""
-        raise NotImplementedError
+        """Build the outbox event that triggers this chain's next stage.
+
+        Every source type routes onward to ``filter_documents`` (which then
+        advances relevant documents to ``parse_source``). This is a concrete
+        default because the routing is identical for web and local sources;
+        a future strategy that needs different routing can override it.
+        """
+        payload = FilterDocumentsPayload(
+            crawl_target_id=target_id, pipeline_id=pipeline_id
+        )
+        return OutboxEvent(
+            queue_name=FILTER_DOCUMENTS_QUEUE,
+            actor_name=FILTER_DOCUMENTS_ACTOR,
+            payload=payload.to_actor_kwargs(),
+            dedup_key=f"filter:{target_id}",
+        )

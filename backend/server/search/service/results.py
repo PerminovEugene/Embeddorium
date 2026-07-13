@@ -24,7 +24,6 @@ def result_from_chunk(
     query,
     chunk,
     score,
-    model: str | None,
     dataset_name: str,
 ) -> dict:
     """Normalise a hydrated ``DocumentChunk`` into a search result dict.
@@ -37,7 +36,6 @@ def result_from_chunk(
         "source_id": query.id,
         "queryText": query.text,
         "score": score,
-        "model": model,
         "chunkId": str(chunk.id) if chunk and chunk.id else None,
         "documentId": str(chunk.document_id) if chunk else None,
         "chunkIndex": chunk.chunk_index if chunk else None,

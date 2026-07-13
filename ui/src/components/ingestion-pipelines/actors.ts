@@ -149,12 +149,14 @@ const scheduleDiscoveredLinks: ActorDef = {
 // ---- Local XML file chain ----------------------------------------------
 
 // filter_documents is plugin-backed (backend/plugins/filter_documents): its
-// settings (enabled, keywords) are discovered from GET /actor-configs.
+// settings (enabled, include/exclude keywords) are discovered from GET
+// /actor-configs. It gates both chains — web (HTML) and local (XML) — between
+// fetch_source and parse_source.
 const filterDocuments: ActorDef = {
   key: "filter_documents",
   name: "filter_documents",
   description:
-    "Extracts the document title and classifies it with a keyword filter; non-matching documents are skipped.",
+    "Classifies each document with include/exclude keyword lists; non-matching (or excluded) documents are skipped.",
   settings: [],
 };
 
@@ -162,6 +164,7 @@ const filterDocuments: ActorDef = {
 const WEB_CHAIN: ActorDef[] = [
   validateSource,
   fetchSource,
+  filterDocuments,
   parseSource,
   chunkDocument,
   scheduleEmbeddings,

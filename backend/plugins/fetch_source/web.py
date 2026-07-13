@@ -1,15 +1,15 @@
-"""Web fetch strategy: HTTP(S) fetch, routing onward to ``parse_source``.
+"""Web fetch strategy: HTTP(S) fetch, routing onward to ``filter_documents``.
 
 Carries over the old fetch_source actor behavior: fetch over TLS (insecure
 only when the run disables verification or the domain is allowlisted),
 classify failures as transient (retry) vs permanent (give up), and reject
 content types the parser registry (or the run's own allowlist) does not
-support.
+support. Routing to the next stage is the shared default on
+:class:`SourceFetchStrategy` — every source type goes through
+``filter_documents`` before ``parse_source``.
 """
 
 from __future__ import annotations
-
-from uuid import UUID
 
 from backend.plugins._fields import FieldSpec
 from backend.plugins.fetch_source.base import (
@@ -22,12 +22,7 @@ from backend.plugins.fetch_source.base import (
 )
 from backend.shared.clients.http.failures import FetchFailure
 from backend.shared.clients.http.tls_policy import allow_insecure_tls
-from backend.shared.clients.queue.pipeline_payloads import ParseSourcePayload
-from backend.shared.clients.queue.queue_names import (
-    PARSE_SOURCE_ACTOR,
-    PARSE_SOURCE_QUEUE,
-)
-from backend.shared.models import CrawlTarget, OutboxEvent
+from backend.shared.models import CrawlTarget
 from backend.shared.parsers.registry import is_supported, normalize_content_type
 from backend.shared.pipeline.source_files import extension_for_content_type
 
@@ -50,7 +45,7 @@ class WebSourceFetch(SourceFetchStrategy):
         label="Web fetch",
         description=(
             "Fetches the target URL over HTTP(S) and routes the raw content "
-            "to parse_source."
+            "to filter_documents."
         ),
         # Mirrors the web knobs the fetch_source actor reads out of
         # FetchSourceSettings; keys/defaults must match that model exactly.
@@ -114,13 +109,5 @@ class WebSourceFetch(SourceFetchStrategy):
             extension=extension_for_content_type(result.content_type),
         )
 
-    def next_outbox_event(
-        self, *, target_id: UUID, pipeline_id: str | None
-    ) -> OutboxEvent:
-        payload = ParseSourcePayload(crawl_target_id=target_id, pipeline_id=pipeline_id)
-        return OutboxEvent(
-            queue_name=PARSE_SOURCE_QUEUE,
-            actor_name=PARSE_SOURCE_ACTOR,
-            payload=payload.to_actor_kwargs(),
-            dedup_key=f"parse:{target_id}",
-        )
+    # next_outbox_event is inherited from SourceFetchStrategy — routes to
+    # filter_documents, identical to the local-file strategy.

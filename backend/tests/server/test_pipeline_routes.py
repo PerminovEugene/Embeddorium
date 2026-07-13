@@ -184,7 +184,11 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
             "validate_source": {"normalizeUrls": False, "dedup": False},
             "schedule_discovered_links": {"followChildLinks": False},
             "fetch_source": {"verifyTls": False, "timeoutSeconds": 12, "fileGlob": "*.html"},
-            "filter_documents": {"enabled": False, "keywords": "vat, customs"},
+            "filter_documents": {
+                "enabled": False,
+                "keywords": "vat, customs",
+                "excludeKeywords": "draft, repealed",
+            },
         },
     }
     with _override_store(store_mock):
@@ -209,7 +213,11 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
     assert cfg["validate_source"]["dedup"] is False
     assert cfg["schedule_discovered_links"]["follow_child_links"] is False
     assert cfg["fetch_source"]["file_glob"] == "*.html"
-    assert cfg["filter_documents"] == {"enabled": False, "keywords": "vat, customs"}
+    assert cfg["filter_documents"] == {
+        "enabled": False,
+        "keywords": "vat, customs",
+        "exclude_keywords": "draft, repealed",
+    }
 
 
 def test_create_accepts_legacy_actor_settings_keys() -> None:

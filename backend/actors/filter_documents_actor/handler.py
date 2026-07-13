@@ -1,11 +1,12 @@
-"""Relevance gate between fetch_source (local-file strategy) and parse_source.
+"""Relevance gate between fetch_source and parse_source (both source types).
 
 Acquires the target (FETCHED/FILTERING → FILTERING), loads the persisted
-``SourceFetch``, extracts the document title from the XML, and classifies it
-with ``matches_keywords``. When the keyword list is empty or the gate is
-disabled every document passes through. Documents that match the keyword list
-advance to FILTERED and get the outbox event that triggers ``parse_source``;
-documents that do not match are marked SKIPPED with
+``SourceFetch``, extracts the document title from the XML (empty for non-XML
+HTML/web content, which then falls back to body matching), and classifies it
+with the keyword filter strategy (include + exclude keyword lists). When both
+lists are empty or the gate is disabled every document passes through.
+Documents deemed relevant advance to FILTERED and get the outbox event that
+triggers ``parse_source``; the rest are marked SKIPPED with
 ``skip_reason="not_relevant"`` and the chain stops there.
 """
 
@@ -80,16 +81,24 @@ def filter_documents(
         raise RuntimeError(f"source fetch missing for target {target_id}")
 
     raw = read_source_file(fetch.raw_content_path)
+    # extract_act_title is XML/Estonian-act specific and returns "" for HTML
+    # (web) content. That is fine: the keyword strategy falls back to the raw
+    # body when the title is empty, so web docs are gated on their content.
     title = extract_act_title(raw)
     logger.info("title_extracted id=%s title=%r", target_id, title)
 
-    # The filter strategy owns the relevance decision (gate toggle + keyword
-    # matching); the actor only feeds it the extracted title and raw body.
+    # The filter strategy owns the relevance decision (gate toggle + include/
+    # exclude keyword matching); the actor only feeds it the extracted title
+    # and raw body.
     cfg = load_actor_configs(store, payload.pipeline_id)
     settings = cfg.filter_documents if cfg else FilterDocumentsSettings()
     strategy = build_filter_strategy(
         DEFAULT_FILTER_STRATEGY,
-        {"enabled": settings.enabled, "keywords": settings.keywords},
+        {
+            "enabled": settings.enabled,
+            "keywords": settings.keywords,
+            "exclude_keywords": settings.exclude_keywords,
+        },
     )
 
     relevant = strategy.is_relevant(title=title, text=raw)

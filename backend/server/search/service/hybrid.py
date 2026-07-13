@@ -7,8 +7,6 @@ Runs both the dense (Qdrant) and BM25 (Postgres) halves and fuses their
 
 from __future__ import annotations
 
-import uuid
-
 from backend.server.search.service.results import as_uuid, result_from_chunk
 from backend.server.search.service.rrf import reciprocal_rank_fusion
 from backend.shared.storage.sql.sql_store import SqlStore
@@ -21,8 +19,7 @@ def hybrid_search(
     query,
     embedding: list,
     top_k: int,
-    pipeline_id: uuid.UUID,
-    model_name: str | None,
+    pipeline_id: str,
     dataset_name: str,
 ) -> list[dict]:
     """Dense + BM25 retrieval fused with Reciprocal Rank Fusion for one query.
@@ -68,7 +65,6 @@ def hybrid_search(
                     "source_id": query.id,
                     "queryText": query.text,
                     "score": fused_score,
-                    "model": model_name,
                     "chunkId": chunk_id,
                     "documentId": None,
                     "chunkIndex": None,
@@ -78,7 +74,5 @@ def hybrid_search(
                 }
             )
             continue
-        query_results.append(
-            result_from_chunk(query, chunk, fused_score, model_name, dataset_name)
-        )
+        query_results.append(result_from_chunk(query, chunk, fused_score, dataset_name))
     return query_results

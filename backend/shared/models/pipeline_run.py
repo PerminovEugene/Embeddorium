@@ -117,14 +117,27 @@ class FilterDocumentsSettings(BaseModel):
     """Settings consumed by the ``filter_documents`` actor.
 
     ``enabled`` toggles the relevance gate (when off, every document passes
-    through). ``keywords`` is an optional comma-separated list of keywords; an
-    empty string means no keyword restriction — all documents pass through.
-    When enabled with a non-empty keyword list, only documents whose title (or
-    body when the title is absent) contains at least one keyword are advanced.
+    through regardless of the keyword lists).
+
+    Two independent comma-separated keyword lists refine relevance when the
+    gate is enabled:
+
+    - ``keywords`` — the *include* list (storage key kept as ``keywords`` for
+      backward compatibility with runs stored before the exclude list existed).
+      An empty include list means no include restriction. Otherwise a document
+      must match at least one include keyword in its title (or body when the
+      title is absent) to pass the include gate.
+    - ``exclude_keywords`` — the *exclude* list. If any exclude keyword matches
+      the title *or* the body, the document is dropped. Exclude wins over
+      include.
+
+    Final decision: relevant iff the include gate passes AND no exclude keyword
+    matches.
     """
 
     enabled: bool = True
     keywords: str = ""
+    exclude_keywords: str = ""
 
 
 class PipelineActorConfigs(BaseModel):

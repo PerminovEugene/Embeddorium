@@ -15,7 +15,6 @@ from backend.plugins.fetch_source.registry import (
 )
 from backend.shared.clients.queue.queue_names import (
     FILTER_DOCUMENTS_QUEUE,
-    PARSE_SOURCE_QUEUE,
 )
 
 _BUILTIN_NAMES = {"web", "local"}
@@ -43,18 +42,14 @@ def test_build_returns_strategy_instance(name: str):
     assert strategy.config.name == name
 
 
-@pytest.mark.parametrize(
-    ("name", "queue", "dedup_prefix"),
-    [
-        ("web", PARSE_SOURCE_QUEUE, "parse"),
-        ("local", FILTER_DOCUMENTS_QUEUE, "filter"),
-    ],
-)
-def test_strategies_route_to_their_next_stage(name: str, queue: str, dedup_prefix: str):
+@pytest.mark.parametrize("name", sorted(_BUILTIN_NAMES))
+def test_strategies_route_to_filter_documents(name: str):
+    # Both source types now route onward to filter_documents (fetch → filter →
+    # parse); the routing default lives on SourceFetchStrategy.
     target_id = uuid.uuid4()
     event = build_fetch_strategy(name).next_outbox_event(
         target_id=target_id, pipeline_id=None
     )
-    assert event.queue_name == queue
-    assert event.dedup_key == f"{dedup_prefix}:{target_id}"
+    assert event.queue_name == FILTER_DOCUMENTS_QUEUE
+    assert event.dedup_key == f"filter:{target_id}"
     assert event.payload["crawl_target_id"] == str(target_id)

@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
-from backend.server.compare.embedder import get_embeddings
+from backend.server.compare.embedder import OLLAMA_HOST, get_embeddings
 from backend.server.compare.matcher import match_embeddings
 from backend.shared import config
 from backend.shared.storage.sql.sql_store import SqlStore
@@ -24,11 +24,12 @@ def _resolve_compare_provider(
     provider_id: str | None,
 ) -> tuple[str, str | None, str | None, int | None]:
     """Load the provider selected in the UI and return the args ``get_embeddings``
-    needs: ``(provider_type, model_name, ollama_port, mock_dim)``.
+    needs: ``(provider_type, model_name, base_url, mock_dim)``.
 
-    The embedding type/model/port now come from a saved provider (picked by id
-    in the compare form) instead of being sent inline by the client, so they can
-    no longer be mismatched or spoofed from the browser.
+    The embedding type/model/endpoint now come from a saved provider (picked by
+    id in the compare form) instead of being sent inline by the client, so they
+    can no longer be mismatched or spoofed from the browser. For ollama the
+    endpoint is built from the saved provider's port.
     """
     if not provider_id:
         raise HTTPException(status_code=400, detail="No provider selected")
@@ -45,7 +46,8 @@ def _resolve_compare_provider(
         # No network: random vectors of a fixed dimension, mirroring search.
         return "mock", None, None, config.MOCK_EMBED_DIM
     if provider.provider_type == "ollama":
-        return "ollama", provider.model_name, str(provider.port), None
+        base_url = f"http://{OLLAMA_HOST}:{provider.port}"
+        return "ollama", provider.model_name, base_url, None
     raise HTTPException(
         status_code=400,
         detail=f"Unsupported provider type for compare: {provider.provider_type}",
@@ -56,7 +58,7 @@ async def compare_embeddings(store: SqlStore, request) -> dict:
     request_uuid = str(uuid4())
 
     provider_id = request.configuration.get("providerId")
-    provider_type, model_name, ollama_port, mock_dim = _resolve_compare_provider(
+    provider_type, model_name, base_url, mock_dim = _resolve_compare_provider(
         store, provider_id
     )
 
@@ -69,14 +71,14 @@ async def compare_embeddings(store: SqlStore, request) -> dict:
     source_embeddings = await get_embeddings(
         provider_type,
         model_name,
-        ollama_port,
+        base_url,
         [t.text for t in source_texts],
         mock_dim=mock_dim,
     )
     candidate_embeddings = await get_embeddings(
         provider_type,
         model_name,
-        ollama_port,
+        base_url,
         [t.text for t in candidate_texts],
         mock_dim=mock_dim,
     )

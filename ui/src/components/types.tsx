@@ -17,7 +17,6 @@ export interface Input {
 
 export interface ValidationErrors {
   embeddingModelName?: string;
-  ollamaPort?: string;
   source?: string;
   candidates?: string;
 }
@@ -78,7 +77,6 @@ export interface DbMatch {
   source_id: string;
   queryText: string;
   score: number;
-  model: string;
   chunkId: string | null;
   documentId: string | null;
   chunkIndex: number | null;

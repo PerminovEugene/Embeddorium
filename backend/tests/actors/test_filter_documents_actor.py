@@ -30,7 +30,9 @@ _NON_RELEVANT_XML = "<doc><pealkiri>General Provisions</pealkiri></doc>"
 _FILTER_KEYWORDS = "income,tax"
 
 
-def _fetch(target_id, *, raw_content_path: str = "_test/raw/content.xml") -> SourceFetch:
+def _fetch(
+    target_id, *, raw_content_path: str = "_test/raw/content.xml"
+) -> SourceFetch:
     return SourceFetch(
         crawl_target_id=target_id,
         final_url=f"file:///tmp/{target_id}.xml",
@@ -41,12 +43,16 @@ def _fetch(target_id, *, raw_content_path: str = "_test/raw/content.xml") -> Sou
     )
 
 
-def _store_with_keywords(acquired, keywords: str):
+def _store_with_keywords(acquired, keywords: str, exclude_keywords: str = ""):
     """Build a mock store with a pipeline run that has filter_documents keywords set."""
     store = make_store(acquired=acquired)
     actor_configs = {
         **_BASE_ACTOR_CONFIGS,
-        "filter_documents": {"enabled": True, "keywords": keywords},
+        "filter_documents": {
+            "enabled": True,
+            "keywords": keywords,
+            "exclude_keywords": exclude_keywords,
+        },
     }
     mock_run = MagicMock()
     mock_run.actor_configs = actor_configs
@@ -69,9 +75,7 @@ def test_missing_source_fetch_marks_transient_and_raises():
     store.source_fetches.get_by_crawl_target.return_value = None
 
     with pytest.raises(RuntimeError):
-        filter_documents(
-            crawl_target_id=str(target.id), store=store
-        )
+        filter_documents(crawl_target_id=str(target.id), store=store)
 
     assert (
         store.crawl_targets.update_status.call_args.kwargs["status"]
@@ -106,7 +110,9 @@ def test_relevant_act_advances_to_filtered_and_enqueues_parse(monkeypatch):
 
 def test_non_relevant_act_is_skipped_without_outbox(monkeypatch):
     """A document that does not match the configured keywords is marked SKIPPED."""
-    monkeypatch.setattr(_filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML)
+    monkeypatch.setattr(
+        _filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML
+    )
 
     target = make_target(status=CrawlTargetStatus.FETCHED)
     pipeline_id = str(uuid.uuid4())
@@ -129,16 +135,16 @@ def test_non_relevant_act_is_skipped_without_outbox(monkeypatch):
 
 def test_no_keywords_is_passthrough(monkeypatch):
     """When no keywords are configured every document passes through."""
-    monkeypatch.setattr(_filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML)
+    monkeypatch.setattr(
+        _filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML
+    )
 
     target = make_target(status=CrawlTargetStatus.FETCHED)
     # No pipeline_id → cfg is None → FilterDocumentsSettings() with empty keywords.
     store = make_store(acquired=target)
     store.source_fetches.get_by_crawl_target.return_value = _fetch(target.id)
 
-    filter_documents(
-        crawl_target_id=str(target.id), store=store
-    )
+    filter_documents(crawl_target_id=str(target.id), store=store)
 
     # Document passed through — FILTERED via unit_of_work, not SKIPPED.
     uow = uow_of(store)
@@ -146,9 +152,55 @@ def test_no_keywords_is_passthrough(monkeypatch):
     store.crawl_targets.update_status.assert_not_called()
 
 
+def test_excluded_document_is_skipped(monkeypatch):
+    """A document matching the exclude list is dropped even if it matches include."""
+    excluded_xml = "<doc><pealkiri>Income Regulations (repealed)</pealkiri></doc>"
+    monkeypatch.setattr(_filter_handler, "read_source_file", lambda p: excluded_xml)
+
+    target = make_target(status=CrawlTargetStatus.FETCHED)
+    pipeline_id = str(uuid.uuid4())
+    store = _store_with_keywords(target, _FILTER_KEYWORDS, exclude_keywords="repealed")
+    store.source_fetches.get_by_crawl_target.return_value = _fetch(target.id)
+
+    filter_documents(
+        crawl_target_id=str(target.id),
+        pipeline_id=pipeline_id,
+        store=store,
+    )
+
+    store.crawl_targets.update_status.assert_called_once_with(
+        target_id=target.id,
+        status=CrawlTargetStatus.SKIPPED,
+        skip_reason="not_relevant",
+    )
+    store.unit_of_work.assert_not_called()
+
+
+def test_exclude_list_passes_non_matching_document(monkeypatch):
+    """With only an exclude list, a non-matching document advances to FILTERED."""
+    monkeypatch.setattr(_filter_handler, "read_source_file", lambda p: _RELEVANT_XML)
+
+    target = make_target(status=CrawlTargetStatus.FETCHED)
+    pipeline_id = str(uuid.uuid4())
+    store = _store_with_keywords(target, keywords="", exclude_keywords="repealed")
+    store.source_fetches.get_by_crawl_target.return_value = _fetch(target.id)
+
+    filter_documents(
+        crawl_target_id=str(target.id),
+        pipeline_id=pipeline_id,
+        store=store,
+    )
+
+    uow = uow_of(store)
+    uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.FILTERED)
+    store.crawl_targets.update_status.assert_not_called()
+
+
 def test_disabled_gate_passes_all_documents(monkeypatch):
     """When the gate is disabled every document passes regardless of keywords."""
-    monkeypatch.setattr(_filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML)
+    monkeypatch.setattr(
+        _filter_handler, "read_source_file", lambda p: _NON_RELEVANT_XML
+    )
 
     target = make_target(status=CrawlTargetStatus.FETCHED)
     pipeline_id = str(uuid.uuid4())

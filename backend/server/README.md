@@ -102,7 +102,6 @@ OLLAMA_HOST=localhost uvicorn main:app --reload --port 8000
 ```jsonc
 {
   "configuration": {
-    "ollamaPort": "11434",
     "runId": "3f2c…" // the pipeline run; supplies the collection + embed model
   },
   "source": { "inputs": [{ "id": "q1", "text": "your query" }] }

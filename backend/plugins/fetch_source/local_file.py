@@ -11,7 +11,6 @@ on retry.
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import UUID
 
 from backend.plugins._fields import FieldSpec
 from backend.plugins.fetch_source.base import (
@@ -21,12 +20,7 @@ from backend.plugins.fetch_source.base import (
     SourceFetchError,
     SourceFetchStrategy,
 )
-from backend.shared.clients.queue.pipeline_payloads import FilterDocumentsPayload
-from backend.shared.clients.queue.queue_names import (
-    FILTER_DOCUMENTS_ACTOR,
-    FILTER_DOCUMENTS_QUEUE,
-)
-from backend.shared.models import CrawlTarget, OutboxEvent
+from backend.shared.models import CrawlTarget
 
 
 class LocalFileSourceFetch(SourceFetchStrategy):
@@ -69,15 +63,5 @@ class LocalFileSourceFetch(SourceFetchStrategy):
             extension="xml",
         )
 
-    def next_outbox_event(
-        self, *, target_id: UUID, pipeline_id: str | None
-    ) -> OutboxEvent:
-        payload = FilterDocumentsPayload(
-            crawl_target_id=target_id, pipeline_id=pipeline_id
-        )
-        return OutboxEvent(
-            queue_name=FILTER_DOCUMENTS_QUEUE,
-            actor_name=FILTER_DOCUMENTS_ACTOR,
-            payload=payload.to_actor_kwargs(),
-            dedup_key=f"filter:{target_id}",
-        )
+    # next_outbox_event is inherited from SourceFetchStrategy — routes to
+    # filter_documents, identical to the web strategy.

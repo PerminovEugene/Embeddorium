@@ -4,9 +4,13 @@
 pipeline based on a caller-supplied keyword list. When no keywords are provided
 the filter is a pass-through — every document is considered relevant.
 
-The title is authoritative: any keyword match there is sufficient. If the title
-is empty (or matches nothing), the raw text is consulted as a fallback so that
-untitled documents are not silently dropped.
+For the *include* gate (:func:`matches_keywords`) the title is authoritative:
+any keyword match there is sufficient. If the title is empty (or matches
+nothing), the raw text is consulted as a fallback so that untitled documents
+are not silently dropped.
+
+For the *exclude* gate (:func:`matches_any`) the title and body are consulted
+together on every call, so an unwanted keyword anywhere drops the document.
 """
 
 from __future__ import annotations
@@ -68,3 +72,30 @@ def matches_keywords(
         return _any_match(text, patterns)
 
     return False
+
+
+def matches_any(
+    title: Optional[str],
+    text: Optional[str] = None,
+    *,
+    keywords: Optional[Iterable[str]] = None,
+) -> bool:
+    """Return ``True`` if any keyword matches *either* the title or the text.
+
+    Unlike :func:`matches_keywords` (title-authoritative, body only as a
+    fallback for untitled docs), this consults the title and the body together
+    on every call. It exists for the *exclude* gate, where a keyword appearing
+    anywhere — title or body — must drop the document.
+
+    An empty/absent ``keywords`` iterable returns ``False``: with nothing to
+    exclude, no document is excluded.
+    """
+    if not keywords:
+        return False
+
+    patterns = _compile_patterns(keywords)
+    if not patterns:
+        return False
+
+    combined = "\n".join(part for part in (title, text) if part)
+    return _any_match(combined, patterns)

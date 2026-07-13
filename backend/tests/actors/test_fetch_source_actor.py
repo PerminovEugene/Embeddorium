@@ -1,9 +1,9 @@
 """Tests for the merged fetch_source actor.
 
-The web strategy fetches over HTTP and routes to parse_source; the local
-strategy reads a file from disk and routes to filter_documents. Strategy
-selection falls back to the target's normalized URL (``file://`` prefix)
-because these messages carry no pipeline_id.
+Both strategies route onward to filter_documents (fetch → filter → parse): the
+web strategy fetches over HTTP, the local strategy reads a file from disk.
+Strategy selection falls back to the target's normalized URL (``file://``
+prefix) because these messages carry no pipeline_id.
 """
 
 import uuid
@@ -90,7 +90,7 @@ def test_lock_not_acquired_skips():
 # --- web strategy ---
 
 
-def test_happy_path_saves_fetch_and_enqueues_parse():
+def test_happy_path_saves_fetch_and_enqueues_filter():
     target = make_target()
     store = make_store(acquired=target)
     fetcher = _fetcher()
@@ -104,9 +104,11 @@ def test_happy_path_saves_fetch_and_enqueues_parse():
     assert fetch.content_hash  # hashed
     uow.set_status.assert_called_once_with(target.id, CrawlTargetStatus.FETCHED)
 
-    parse_events = outbox_for_queue(uow, PARSE_SOURCE_QUEUE)
-    assert len(parse_events) == 1
-    assert parse_events[0].dedup_key == f"parse:{target.id}"
+    # Web now routes through filter_documents, not straight to parse_source.
+    filter_events = outbox_for_queue(uow, FILTER_DOCUMENTS_QUEUE)
+    assert len(filter_events) == 1
+    assert filter_events[0].dedup_key == f"filter:{target.id}"
+    assert outbox_for_queue(uow, PARSE_SOURCE_QUEUE) == []
 
 
 def test_unsupported_content_type_is_skipped_permanently():

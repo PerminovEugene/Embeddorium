@@ -192,7 +192,6 @@ def test_semantic_strategy_uses_dense_only(monkeypatch):
     assert result["status"] == "success"
     [hit] = result["results"]
     assert hit["score"] == 0.9
-    assert hit["model"] == "m1"
     assert hit["chunkId"] == str(_CHUNK_ID)
     assert hit["chunkText"] == "chunk body"
     fake_store.search.assert_called_once()
@@ -226,14 +225,14 @@ def test_keyword_strategy_uses_bm25_only(monkeypatch):
 
     assert result["status"] == "success"
     [hit] = result["results"]
-    assert hit["model"] is None
     assert hit["score"] == -1.5
     assert hit["chunkId"] == str(_CHUNK_ID)
     assert hit["chunkText"] == "chunk body"
     fake_embeddings.assert_not_called()
     store.chunks.search_bm25.assert_called_once()
-    # Scoped to the selected run.
-    assert store.chunks.search_bm25.call_args.kwargs["pipeline_id"] == _RUN_ID
+    # Scoped to the selected run (as the string pipeline_id, matching the dense
+    # path so both halves are filtered on the same value).
+    assert store.chunks.search_bm25.call_args.kwargs["pipeline_id"] == str(_RUN_ID)
     assert _persisted_method(store) == "keyword"
 
 
@@ -256,9 +255,13 @@ def test_hybrid_strategy_fuses_both_signals(monkeypatch):
     # Same chunk from both halves -> fused score is the sum of both rank-1
     # contributions (1 / (60 + 1) twice).
     assert hit["score"] == pytest.approx(2 / 61)
-    assert hit["model"] == "m1"
     assert hit["chunkId"] == str(_CHUNK_ID)
     fake_store.search.assert_called_once()
+    # The dense (Qdrant) half must be scoped with the *string* pipeline_id:
+    # Qdrant's MatchValue rejects a raw uuid.UUID, so passing run.id here used to
+    # raise a ValidationError at runtime.
+    assert fake_store.search.call_args.kwargs["pipeline_id"] == str(_RUN_ID)
+    assert isinstance(fake_store.search.call_args.kwargs["pipeline_id"], str)
     store.chunks.search_bm25.assert_called_once()
-    assert store.chunks.search_bm25.call_args.kwargs["pipeline_id"] == _RUN_ID
+    assert store.chunks.search_bm25.call_args.kwargs["pipeline_id"] == str(_RUN_ID)
     assert _persisted_method(store) == "hybrid"

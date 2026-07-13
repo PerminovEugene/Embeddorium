@@ -27,7 +27,7 @@ def test_configs_sorted_by_name():
 
 def test_configs_expose_populated_fields():
     cfg = get_filter_strategy_class(DEFAULT_FILTER_STRATEGY).config
-    assert [f.key for f in cfg.fields] == ["enabled", "keywords"]
+    assert [f.key for f in cfg.fields] == ["enabled", "keywords", "exclude_keywords"]
 
 
 def test_unknown_name_raises_value_error():

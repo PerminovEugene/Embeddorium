@@ -45,7 +45,6 @@ const SubmitButton = () => {
 
     const data = {
       configuration: {
-        ollamaPort: state.ollamaPort,
         // The run supplies the collection + embedding model server-side.
         runId: state.selectedRun?.id,
         // How many results to return per query.

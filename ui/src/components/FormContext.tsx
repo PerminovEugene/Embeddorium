@@ -21,7 +21,6 @@ export interface FormState {
   models: Model[];
 
   similarities: Similarity[];
-  ollamaPort: string;
 
   // DB-search mode: how many results (nearest chunks) to return per query.
   topK: string;
@@ -86,7 +85,6 @@ interface FormContextType {
   updateModel: (id: string, value: string) => void;
 
   checkSimilarity: (similarity: Similarity) => void;
-  changeOllamaPort: (value: string) => void;
   changeTopK: (value: string) => void;
   setSearchMethod: (method: SearchMethod) => void;
   setSaveResults: (save: boolean) => void;
@@ -145,7 +143,6 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     candidateInputs: [createInput()],
     models: [createModel()],
     similarities: [Similarity.COSINE],
-    ollamaPort: "11434",
     topK: "10",
     searchMethod: "semantic",
     saveResults: true,
@@ -289,13 +286,6 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
   };
 
-  const changeOllamaPort = (port: string) => {
-    setState((prev) => ({
-      ...prev,
-      ollamaPort: port,
-    }));
-  };
-
   const changeTopK = (topK: string) => {
     setState((prev) => ({
       ...prev,
@@ -432,10 +422,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     if (isDb) {
       // The embedding model comes from the selected run, and candidates /
       // similarity metrics are irrelevant: Qdrant ranks the nearest vectors
-      // with the distance fixed at collection-creation time. The port is still
-      // needed to reach Ollama for embedding the query.
-      if (state.ollamaPort.trim() === "")
-        errors.push("Ollama port should not be empty");
+      // with the distance fixed at collection-creation time. The query is
+      // embedded server-side via the pipeline's own Ollama endpoint, so no
+      // port is collected here.
       if (!state.selectedRun)
         errors.push("Please select a pipeline run to search");
       const topK = Number(state.topK);
@@ -484,7 +473,6 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         updateModel,
 
         checkSimilarity,
-        changeOllamaPort,
         changeTopK,
         setSearchMethod,
         setSaveResults,
