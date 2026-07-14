@@ -47,3 +47,4 @@ sources
 tmp
 .DS_Store
 .claude/commit-context.md
+.codex/commit-context.md
