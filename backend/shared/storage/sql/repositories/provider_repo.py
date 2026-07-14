@@ -22,11 +22,7 @@ class ProviderRepository:
                 name=provider.name,
                 provider_type=provider.provider_type,
                 model_type=provider.model_type,
-                port=getattr(provider, "port", None),
-                model_name=getattr(provider, "model_name", None),
-                base_url=getattr(provider, "base_url", None),
-                api_key=getattr(provider, "api_key", None),
-                organization=getattr(provider, "organization", None),
+                config=dict(provider.config or {}),
             )
             session.add(orm)
             session.commit()
@@ -57,11 +53,7 @@ class ProviderRepository:
             orm.name = provider.name
             orm.provider_type = provider.provider_type
             orm.model_type = provider.model_type
-            orm.port = getattr(provider, "port", None)
-            orm.model_name = getattr(provider, "model_name", None)
-            orm.base_url = getattr(provider, "base_url", None)
-            orm.api_key = getattr(provider, "api_key", None)
-            orm.organization = getattr(provider, "organization", None)
+            orm.config = dict(provider.config or {})
             session.commit()
             session.refresh(orm)
             return _to_provider(orm)

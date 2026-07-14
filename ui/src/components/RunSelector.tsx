@@ -29,6 +29,7 @@ interface PipelineRunRaw {
         provider_type?: string;
         model_name?: string;
         model?: string;
+        config?: { model_name?: string };
       };
     };
   };
@@ -46,7 +47,8 @@ const toRun = (raw: PipelineRunRaw): PipelineRun => {
     sourceType: raw.dataset?.source_type ?? "",
     collection: vector.collection ?? "",
     embedProvider: provider.name ?? provider.provider_type ?? "",
-    embedModel: provider.model_name ?? provider.model ?? "",
+    embedModel:
+      provider.config?.model_name ?? provider.model_name ?? provider.model ?? "",
     similarity: vector.similarity ?? "",
     chunkStrategy: chunk.strategy ?? "",
     chunkSize: chunk.chunk_size ?? 0,

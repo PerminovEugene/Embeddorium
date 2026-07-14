@@ -21,7 +21,8 @@ from backend.server.search.service import (
     reciprocal_rank_fusion,
     search_db,
 )
-from backend.shared.models import SearchInput
+from backend.shared.clients import http_rerank_client
+from backend.shared.models import Provider, SearchInput
 
 # --------------------------------------------------------------------------- #
 # reciprocal_rank_fusion (pure)                                               #
@@ -265,3 +266,161 @@ def test_hybrid_strategy_fuses_both_signals(monkeypatch):
     store.chunks.search_bm25.assert_called_once()
     assert store.chunks.search_bm25.call_args.kwargs["pipeline_id"] == str(_RUN_ID)
     assert _persisted_method(store) == "hybrid"
+
+
+# --------------------------------------------------------------------------- #
+# hybrid + cross-encoder reranking                                            #
+# --------------------------------------------------------------------------- #
+
+_RERANKER_ID = uuid.uuid4()
+
+
+class _FakeReranker:
+    """Stand-in for HttpRerankClient — no network, scores by text length."""
+
+    def __init__(self, model, base_url, api_key=None, path=None):
+        self.model = model
+        self.base_url = base_url
+        self.path = path
+
+    def rerank(self, query, texts):
+        # Deterministic, text-derived scores so the test can assert reordering.
+        return [float(len(text)) for text in texts]
+
+
+def _persisted_config(store: MagicMock) -> dict:
+    return store.searches.create.call_args.args[0].search_config
+
+
+def _rerank_request(**overrides) -> SearchRequest:
+    cfg: dict = {
+        "runId": str(_RUN_ID),
+        "topK": 5,
+        "searchMethod": "hybrid",
+        "useReranking": True,
+        "rerankerProviderId": str(_RERANKER_ID),
+        "rerankerTopK": 1,
+    }
+    cfg.update(overrides)
+    return SearchRequest(
+        configuration=cfg,
+        source={"inputs": [{"id": "q1", "text": "hello"}]},
+    )
+
+
+def _cross_encoder_provider() -> Provider:
+    return Provider(
+        id=_RERANKER_ID,
+        name="reranker",
+        provider_type="cross_encoder",
+        model_type="cross-encoder",
+        config={},
+    )
+
+
+def test_hybrid_reranking_applies_and_records_marker(monkeypatch):
+    store = _make_store()
+    store.providers.get.return_value = _cross_encoder_provider()
+    dense_hits = [
+        {
+            "score": 0.9,
+            "chunk_id": str(_CHUNK_ID),
+            "document_id": str(_DOC_ID),
+            "chunk_index": 3,
+        }
+    ]
+    _patch_common(monkeypatch, dense_hits=dense_hits)
+    monkeypatch.setattr(http_rerank_client, "HttpRerankClient", _FakeReranker)
+
+    result = asyncio.run(search_db(store, MagicMock(), _rerank_request()))
+
+    assert result["status"] == "success"
+    [hit] = result["results"]
+    # Score overwritten with the cross-encoder score (len("chunk body") == 10).
+    assert hit["score"] == float(len("chunk body"))
+    config = _persisted_config(store)
+    assert config["search_method"] == "hybrid"
+    assert config["reranked"] is True
+    assert config["reranker_provider_id"] == str(_RERANKER_ID)
+    assert config["reranker_top_k"] == 1
+
+
+def test_hybrid_reranking_degrades_on_client_failure(monkeypatch):
+    store = _make_store()
+    store.providers.get.return_value = _cross_encoder_provider()
+    dense_hits = [
+        {
+            "score": 0.9,
+            "chunk_id": str(_CHUNK_ID),
+            "document_id": str(_DOC_ID),
+            "chunk_index": 3,
+        }
+    ]
+    _patch_common(monkeypatch, dense_hits=dense_hits)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("model download failed")
+
+    monkeypatch.setattr(http_rerank_client, "HttpRerankClient", _boom)
+
+    result = asyncio.run(search_db(store, MagicMock(), _rerank_request()))
+
+    # Reranking failure degrades to the original fused results, not an error.
+    assert result["status"] == "success"
+    [hit] = result["results"]
+    assert hit["score"] == pytest.approx(2 / 61)  # original RRF score preserved
+
+
+def test_hybrid_reranking_requires_provider_id(monkeypatch):
+    store = _make_store()
+    _patch_common(monkeypatch, dense_hits=[])
+
+    result = asyncio.run(
+        search_db(store, MagicMock(), _rerank_request(rerankerProviderId=""))
+    )
+
+    assert result["status"] == "error"
+    assert "rerankerProviderId" in result["detail"]
+    store.searches.create.assert_not_called()
+
+
+def test_hybrid_reranking_requires_valid_top_k(monkeypatch):
+    store = _make_store()
+    store.providers.get.return_value = _cross_encoder_provider()
+    _patch_common(monkeypatch, dense_hits=[])
+
+    result = asyncio.run(search_db(store, MagicMock(), _rerank_request(rerankerTopK=0)))
+
+    assert result["status"] == "error"
+    assert "rerankerTopK" in result["detail"]
+
+
+def test_hybrid_reranking_rejects_non_cross_encoder_provider(monkeypatch):
+    store = _make_store()
+    store.providers.get.return_value = Provider(
+        id=_RERANKER_ID,
+        name="embedder",
+        provider_type="mock",
+        model_type="embedding",
+        config={},
+    )
+    _patch_common(monkeypatch, dense_hits=[])
+
+    result = asyncio.run(search_db(store, MagicMock(), _rerank_request()))
+
+    assert result["status"] == "error"
+    assert "cross-encoder" in result["detail"].lower()
+
+
+def test_reranking_ignored_for_non_hybrid_strategy(monkeypatch):
+    store = _make_store()
+    _patch_common(monkeypatch, dense_hits=[])
+
+    # useReranking on a semantic search is a no-op: no provider lookup, no marker.
+    result = asyncio.run(
+        search_db(store, MagicMock(), _rerank_request(searchMethod="semantic"))
+    )
+
+    assert result["status"] == "success"
+    store.providers.get.assert_not_called()
+    assert "reranked" not in _persisted_config(store)

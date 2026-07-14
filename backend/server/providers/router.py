@@ -12,13 +12,19 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from backend.plugins.provider_types.registry import list_provider_type_configs
 from backend.server.dependencies import get_sql_store
+from backend.server.providers.config_schemas import (
+    ProviderTypeConfigOut,
+    provider_type_config_to_out,
+)
 from backend.server.providers.schemas import (
     ProviderIn,
     ProviderOut,
     provider_in_to_domain,
     provider_to_out,
 )
+from backend.shared.models import Provider
 from backend.shared.storage.sql.sql_store import SqlStore
 
 router = APIRouter(prefix="/providers", tags=["providers"])
@@ -37,18 +43,35 @@ async def list_providers(store: SqlStore = Depends(get_sql_store)) -> list[Provi
     return [provider_to_out(p) for p in store.providers.list_recent()]
 
 
+@router.get(
+    "/configs",
+    response_model=list[ProviderTypeConfigOut],
+    response_model_by_alias=True,
+)
+async def list_provider_configs() -> list[ProviderTypeConfigOut]:
+    """List every auto-discovered provider adapter and its form metadata."""
+    return [
+        provider_type_config_to_out(config) for config in list_provider_type_configs()
+    ]
+
+
+def _provider_from_payload(payload: ProviderIn) -> Provider:
+    try:
+        return provider_in_to_domain(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("", response_model=ProviderOut, response_model_by_alias=True)
 async def create_provider(
     payload: ProviderIn, store: SqlStore = Depends(get_sql_store)
 ) -> ProviderOut:
     """Create a provider and return it with its generated id."""
-    created = store.providers.create(provider_in_to_domain(payload))
+    created = store.providers.create(_provider_from_payload(payload))
     return provider_to_out(created)
 
 
-@router.get(
-    "/{provider_id}", response_model=ProviderOut, response_model_by_alias=True
-)
+@router.get("/{provider_id}", response_model=ProviderOut, response_model_by_alias=True)
 async def get_provider(
     provider_id: str, store: SqlStore = Depends(get_sql_store)
 ) -> ProviderOut:
@@ -60,15 +83,13 @@ async def get_provider(
     return provider_to_out(provider)
 
 
-@router.put(
-    "/{provider_id}", response_model=ProviderOut, response_model_by_alias=True
-)
+@router.put("/{provider_id}", response_model=ProviderOut, response_model_by_alias=True)
 async def update_provider(
     provider_id: str, payload: ProviderIn, store: SqlStore = Depends(get_sql_store)
 ) -> ProviderOut:
     """Replace a provider's fields, or 404 if it doesn't exist."""
     parsed = _parse_id(provider_id)
-    updated = store.providers.update(parsed, provider_in_to_domain(payload))
+    updated = store.providers.update(parsed, _provider_from_payload(payload))
     if updated is None:
         raise HTTPException(status_code=404, detail="Provider not found")
     return provider_to_out(updated)

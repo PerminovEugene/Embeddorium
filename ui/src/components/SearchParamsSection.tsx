@@ -4,6 +4,7 @@ import { inputStyle } from "../styles/styles";
 import { SearchMethod } from "./types";
 import TopKInput from "./TopKInput";
 import Checkbox from "./common/Checkbox";
+import RerankerControls from "./RerankerControls";
 
 const methods: { id: SearchMethod; label: string }[] = [
   { id: "semantic", label: "Semantic (vector)" },
@@ -18,6 +19,7 @@ const SearchParamsSection: React.FC = () => {
   const { state, setSearchMethod, setSaveResults } = useFormContext();
 
   return (
+    <div className="flex flex-col gap-6">
     <div className="flex flex-row flex-wrap items-start gap-8">
       <div className="flex flex-col" style={{ minWidth: 220 }}>
         <label
@@ -58,6 +60,11 @@ const SearchParamsSection: React.FC = () => {
           Saved searches appear on the comparison page
         </span>
       </div>
+    </div>
+
+    {/* Reranking is a post-fusion refinement of hybrid search only, so its
+        controls only appear when Hybrid is selected. */}
+    {state.searchMethod === "hybrid" && <RerankerControls />}
     </div>
   );
 };

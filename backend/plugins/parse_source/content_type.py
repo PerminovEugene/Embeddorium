@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from backend.plugins._fields import FieldSpec
 from backend.plugins.parse_source.base import ParseStrategy, ParseStrategyConfig
-from backend.shared.parsers.registry import get_parser, get_parser_by_name
+from backend.plugins.parse_source.formats.registry import get_parser, get_parser_by_name
 
 
 class ContentTypeParse(ParseStrategy):

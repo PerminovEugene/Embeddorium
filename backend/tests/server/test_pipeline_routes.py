@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 from backend.server.dependencies import get_broker, get_sql_store
 from backend.server.pipeline.router import router
-from backend.shared.models import MockProvider, PipelineRun, WebDataset
+from backend.shared.models import PipelineRun, Provider, WebDataset
 
 # ---------------------------------------------------------------------------
 # Test app + client
@@ -69,12 +69,13 @@ def _make_dataset() -> WebDataset:
     )
 
 
-def _make_provider() -> MockProvider:
-    return MockProvider(
+def _make_provider() -> Provider:
+    return Provider(
         id=_PROVIDER_ID,
         name="mock-embed",
         model_type="embedding",
         provider_type="mock",
+        config={"mock_dim": 8},
     )
 
 
@@ -183,7 +184,11 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
             "schedule_embeddings": {"batchSize": 16},
             "validate_source": {"normalizeUrls": False, "dedup": False},
             "schedule_discovered_links": {"followChildLinks": False},
-            "fetch_source": {"verifyTls": False, "timeoutSeconds": 12, "fileGlob": "*.html"},
+            "fetch_source": {
+                "verifyTls": False,
+                "timeoutSeconds": 12,
+                "fileGlob": "*.html",
+            },
             "filter_documents": {
                 "enabled": False,
                 "keywords": "vat, customs",
@@ -209,10 +214,10 @@ def test_create_persists_full_actor_settings_snapshot() -> None:
     assert cfg["schedule_embeddings"]["batch_size"] == 16
     assert cfg["fetch_source"]["verify_tls"] is False
     assert cfg["fetch_source"]["timeout_seconds"] == 12
+    assert "file_glob" not in cfg["fetch_source"]
     assert cfg["validate_source"]["normalize_urls"] is False
     assert cfg["validate_source"]["dedup"] is False
     assert cfg["schedule_discovered_links"]["follow_child_links"] is False
-    assert cfg["fetch_source"]["file_glob"] == "*.html"
     assert cfg["filter_documents"] == {
         "enabled": False,
         "keywords": "vat, customs",
@@ -248,8 +253,9 @@ def test_create_accepts_legacy_actor_settings_keys() -> None:
     assert cfg["validate_source"]["normalize_urls"] is False
     # Legacy fetch_file_source.dedup feeds the merged validate_source gate...
     assert cfg["validate_source"]["dedup"] is False
-    # ...and its glob becomes the merged fetch_source file_glob.
-    assert cfg["fetch_source"]["file_glob"] == "*.html"
+    # Legacy glob configuration is intentionally discarded; local folder
+    # ingestion always selects XML files before the fetch actor runs.
+    assert "file_glob" not in cfg["fetch_source"]
 
 
 def test_create_omitted_actor_blocks_fall_back_to_defaults() -> None:
@@ -307,11 +313,12 @@ def test_create_404_when_provider_missing() -> None:
 
 def test_create_400_when_provider_not_embedding() -> None:
     """Returns 400 when the provider's model_type is not 'embedding'."""
-    text_provider = MockProvider(
+    text_provider = Provider(
         id=_PROVIDER_ID,
         name="text-model",
         model_type="text",
         provider_type="mock",
+        config={"mock_dim": 8},
     )
     store_mock = _make_store(dataset=_make_dataset(), provider=text_provider)
     with _override_store(store_mock):

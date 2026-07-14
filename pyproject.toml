@@ -34,6 +34,9 @@ web = [
 embed = [
   "qdrant-client>=1",
   "langchain-ollama>=0.3",
+  # FastEmbed: local ONNX embeddings via onnxruntime. Lightweight — no torch.
+  "fastembed>=0.8",
+  "httpx>=0.27",
 ]
 
 # Real local embedding model (run by hand, not in docker-compose): the heavy ML
@@ -60,6 +63,9 @@ server = [
   "langchain-text-splitters>=0.3",
   "trafilatura>=2",
   "numpy>=1",
+  # FastEmbed: local ONNX embeddings via onnxruntime. Lightweight — no torch.
+  "fastembed>=0.8",
+  "httpx>=0.27",
 ]
 
 mcp = [

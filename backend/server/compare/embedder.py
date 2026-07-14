@@ -14,6 +14,8 @@ request from the pipeline run's recorded embed config, mirroring
   collection was indexed with.
 - ``mock``: generate random vectors of the run's ``mock_dim`` — no network,
   for fast local/testing runs against a collection built the same way.
+- ``fastembed``: run a local ONNX model in-process via FastEmbed — no network,
+  ignores ``base_url``.
 """
 
 import asyncio
@@ -33,6 +35,7 @@ async def get_embeddings(
     texts: List[str],
     *,
     mock_dim: Optional[int] = None,
+    api_key: str | None = None,
 ) -> List[List[float]]:
     """Embed ``texts`` with the selected provider.
 
@@ -55,6 +58,38 @@ async def get_embeddings(
         # isn't comparable across queries.
         embeddings = await asyncio.to_thread(
             client.encode, texts, normalize_embeddings=True
+        )
+        return embeddings.tolist()
+
+    if provider == "fastembed":
+        # Fully local ONNX model — no network, ``base_url`` is ignored. Deferred
+        # import so the fastembed/onnxruntime stack is only pulled on this path.
+        from backend.shared.clients.fastembed_embed_client import (
+            FastembedEmbedClient,
+        )
+
+        client = FastembedEmbedClient(model)
+        # Run the blocking encode off the event loop. Normalize to match the
+        # ingestion side so "dot" collections return true cosine scores.
+        embeddings = await asyncio.to_thread(
+            client.encode, texts, normalize_embeddings=True
+        )
+        return embeddings.tolist()
+
+    if provider == "openai":
+        from backend.shared.clients.openai_embed_client import OpenAIEmbedClient
+
+        if not base_url:
+            raise ValueError("openai provider requires a base_url")
+        client = OpenAIEmbedClient(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+        )
+        embeddings = await asyncio.to_thread(
+            client.encode,
+            texts,
+            normalize_embeddings=True,
         )
         return embeddings.tolist()
 

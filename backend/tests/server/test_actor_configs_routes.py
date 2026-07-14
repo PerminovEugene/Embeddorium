@@ -56,6 +56,7 @@ def test_fetch_source_declares_web_and_local_strategies_with_fields():
     fetch = _by_actor()["fetch_source"]
     strategies = {s["name"]: s for s in fetch["strategies"]}
     assert {"web", "local"} <= set(strategies)
+    assert strategies["local"]["fields"] == []
 
     web_field_keys = {f["key"] for f in strategies["web"]["fields"]}
     assert {"verify_tls", "timeout_seconds", "allowed_content_types"} <= web_field_keys

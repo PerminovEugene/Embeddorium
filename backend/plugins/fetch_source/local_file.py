@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.plugins._fields import FieldSpec
 from backend.plugins.fetch_source.base import (
     FetchContext,
     FetchedSource,
@@ -31,19 +30,6 @@ class LocalFileSourceFetch(SourceFetchStrategy):
             "Reads the target's local XML file from disk and routes the raw "
             "content to filter_documents."
         ),
-        # file_glob is this strategy's knob (FetchSourceSettings.file_glob).
-        # It is applied at seed time when a folder seed enumerates its files,
-        # not inside the actor, but it is declared here so the UI renders it on
-        # the local strategy's settings form.
-        fields=[
-            FieldSpec(
-                key="file_glob",
-                label="File glob",
-                type="text",
-                default="*.xml",
-                placeholder="*.xml",
-            ),
-        ],
     )
 
     def fetch(self, *, target: CrawlTarget, ctx: FetchContext) -> FetchedSource:

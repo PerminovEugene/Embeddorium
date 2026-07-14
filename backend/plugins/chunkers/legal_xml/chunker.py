@@ -1,6 +1,6 @@
 """Legal-structure-aware chunker for Estonian acts.
 
-Consumes the typed tree from :mod:`backend.shared.parsers.legal_xml` and emits
+Consumes the typed tree from :mod:`backend.plugins.chunkers.legal_xml.reader` and emits
 chunks whose default unit is a single ``§`` section (not an arbitrary XML block
 and not raw flattened text). Key properties:
 
@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
-from backend.shared.parsers.legal_xml import (
+from backend.plugins.chunkers.legal_xml.reader import (
     LegalDocument,
     Section,
     StructuralPath,
@@ -118,7 +118,9 @@ def _legal_path(title: str, path: StructuralPath, section: Optional[Section]) ->
     if path.division_number or path.division_title:
         bits.append(f"Division {path.division_number}".strip() or "Division")
     if section is not None:
-        bits.append((section.display.strip() or f"§ {section.section_number}").rstrip("."))
+        bits.append(
+            (section.display.strip() or f"§ {section.section_number}").rstrip(".")
+        )
     return " > ".join(bits)
 
 
@@ -183,10 +185,7 @@ class LegalChunker:
                 chunks.extend(self._split_section_chunks(doc, section))
                 continue
 
-            if (
-                self.cfg.merge_very_short_sections
-                and tokens < self.cfg.min_tokens
-            ):
+            if self.cfg.merge_very_short_sections and tokens < self.cfg.min_tokens:
                 if pending and (
                     pending[-1].path.parent_key() != section.path.parent_key()
                 ):
@@ -207,7 +206,9 @@ class LegalChunker:
         body = _section_body(section)
         if not self.cfg.include_heading_context:
             return body
-        header = "\n".join(_context_lines(doc.title, section.path) + [_section_line(section)])
+        header = "\n".join(
+            _context_lines(doc.title, section.path) + [_section_line(section)]
+        )
         return f"{header}\n\n{body}" if body else header
 
     def _single_section_chunk(self, doc: LegalDocument, section: Section) -> LegalChunk:
@@ -278,9 +279,7 @@ class LegalChunker:
             "sectionNumber": numbers,
             "sectionTitle": "; ".join(s.title for s in sections if s.title),
             "subsectionRange": "",
-            "legalPath": _legal_path(doc.title, path, None)
-            + " > §§ "
-            + numbers,
+            "legalPath": _legal_path(doc.title, path, None) + " > §§ " + numbers,
             "documentId": doc.document_id,
             "merged": True,
         }
@@ -301,7 +300,9 @@ class LegalChunker:
             return [self._single_section_chunk(doc, section)]
 
         header_tokens = self.cfg.count(
-            "\n".join(_context_lines(doc.title, section.path) + [_section_line(section)])
+            "\n".join(
+                _context_lines(doc.title, section.path) + [_section_line(section)]
+            )
         )
         chunks: List[LegalChunk] = []
         current: list = []
@@ -318,7 +319,9 @@ class LegalChunker:
             )
             body = _section_body(section, subsections=current)
             chunks.append(
-                self._make_split_chunk(doc, section, body, sub_range, f"Subsections: {sub_range}")
+                self._make_split_chunk(
+                    doc, section, body, sub_range, f"Subsections: {sub_range}"
+                )
             )
             current = []
             current_tokens = 0
@@ -333,7 +336,10 @@ class LegalChunker:
                     self._split_subsection_by_clauses(doc, section, sub, header_tokens)
                 )
                 continue
-            if current and header_tokens + current_tokens + sub_tokens > self.cfg.target_tokens:
+            if (
+                current
+                and header_tokens + current_tokens + sub_tokens > self.cfg.target_tokens
+            ):
                 flush_group()
             current.append(sub)
             current_tokens += sub_tokens
@@ -362,7 +368,9 @@ class LegalChunker:
     def _split_subsection_by_clauses(
         self, doc: LegalDocument, section: Section, sub, header_tokens: int
     ) -> List[LegalChunk]:
-        lead_in = sub.text  # e.g. "Within the meaning of this Act:" — repeated for context
+        lead_in = (
+            sub.text
+        )  # e.g. "Within the meaning of this Act:" — repeated for context
         lead_tokens = self.cfg.count(lead_in)
         chunks: List[LegalChunk] = []
         current: list = []
@@ -384,7 +392,10 @@ class LegalChunker:
             body = "\n".join(body_lines)
             chunks.append(
                 self._make_split_chunk(
-                    doc, section, body, sub_range,
+                    doc,
+                    section,
+                    body,
+                    sub_range,
                     f"Subsection {sub.label}, clauses {clause_range}",
                 )
             )

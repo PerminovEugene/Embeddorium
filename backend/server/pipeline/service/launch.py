@@ -1,8 +1,7 @@
 """Launch / relaunch a pipeline run (``POST /pipeline-runs/{id}/launch``).
 
 Orchestrates the run-status side of launching: it guards the current status,
-resolves the seed-time file glob from the run's stored config, publishes the
-seed messages via ``seed_pipeline`` (the low-level publisher in
+publishes seed messages via ``seed_pipeline`` (the low-level publisher in
 ``pipeline/launch.py``), then advances the run to ``"running"``.
 """
 
@@ -42,24 +41,11 @@ def launch_pipeline_run(
             detail="Pipeline run is already running",
         )
 
-    # The local-file glob is a seed-time concern (it decides which files a
-    # folder path expands to), so resolve it here from the stored config.
-    # Read the raw dict rather than the typed model so runs recorded
-    # before the fetch actors were merged (fetch_file_source.glob) still
-    # relaunch with their original glob.
-    raw_cfgs = run.actor_configs or {}
-    file_glob = (
-        (raw_cfgs.get("fetch_source") or {}).get("file_glob")
-        or (raw_cfgs.get("fetch_file_source") or {}).get("glob")
-        or "*.xml"
-    )
-
     # Publish seed messages on the shared broker — pipeline_id flows into
     # every actor message.
     seed_pipeline(
         pipeline_id=run.id,
         dataset_snapshot=run.dataset,
-        file_glob=file_glob,
         broker=broker,
     )
 

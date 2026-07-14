@@ -1,203 +1,198 @@
-import React, { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import React, { useEffect, useMemo, useState } from "react";
+import Checkbox from "../common/Checkbox";
 import Field from "../common/Field";
-import TextInput from "../common/TextInput";
 import Select, { SelectOption } from "../common/Select";
-import { Provider, ProviderFormValues, ProviderType } from "./types";
+import TextInput from "../common/TextInput";
+import {
+  ModelType,
+  Provider,
+  ProviderConfigField,
+  ProviderConfigValue,
+  ProviderFormValues,
+  ProviderTypeConfig,
+} from "./types";
 
 interface ProviderFormProps {
-  // The provider to view, or null to create a new one.
   provider: Provider | null;
+  providerConfigs: ProviderTypeConfig[];
   onSubmit: (values: ProviderFormValues) => void;
-  // Delete the selected provider. Only rendered when viewing an existing one.
   onDelete?: () => void;
-  // Disables the submit/delete actions while a request is in flight.
   submitting?: boolean;
 }
 
-const PROVIDER_TYPE_OPTIONS: SelectOption[] = [
-  { value: "ollama", label: "Local Ollama" },
-  { value: "remote", label: "Remote" },
-  { value: "mock", label: "Mock" },
-];
-
-const MODEL_TYPE_OPTIONS: SelectOption[] = [
-  { value: "embedding", label: "Embedding" },
-  { value: "text", label: "Text" },
-  { value: "long-text", label: "Long-text transformer" },
-  { value: "reranker", label: "Reranker" },
-];
-
-const EMPTY_VALUES: ProviderFormValues = {
-  name: "",
-  providerType: "ollama",
-  modelType: "embedding",
-  port: 11434,
-  modelName: "",
-  baseUrl: "https://api.openai.com/v1",
-  apiKey: "",
-  organization: "",
+const MODEL_TYPE_LABELS: Record<ModelType, string> = {
+  embedding: "Embedding",
+  text: "Text",
+  "long-text": "Long text",
+  reranker: "Reranker",
+  "cross-encoder": "Cross encoder",
 };
 
-const toFormValues = (provider: Provider | null): ProviderFormValues => {
-  if (!provider) return EMPTY_VALUES;
-  const base = {
-    ...EMPTY_VALUES,
-    name: provider.name,
-    providerType: provider.providerType,
-    modelType: provider.modelType,
-  };
-  if (provider.providerType === "ollama") {
-    return { ...base, port: provider.port, modelName: provider.modelName };
-  }
-  if (provider.providerType === "remote") {
+const defaultsFor = (config: ProviderTypeConfig): ProviderFormValues => ({
+  name: "",
+  providerType: config.name,
+  modelType: config.supportedModelTypes[0] ?? "embedding",
+  config: Object.fromEntries(config.fields.map((field) => [field.key, field.default])),
+});
+
+const valuesFor = (
+  provider: Provider | null,
+  configs: ProviderTypeConfig[],
+): ProviderFormValues => {
+  if (provider) {
+    const providerConfig = configs.find((config) => config.name === provider.providerType);
     return {
-      ...base,
-      baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey,
-      organization: provider.organization,
-      modelName: provider.modelName,
+      name: provider.name,
+      providerType: provider.providerType,
+      modelType: provider.modelType,
+      config: {
+        ...Object.fromEntries(
+          (providerConfig?.fields ?? []).map((field) => [field.key, field.default]),
+        ),
+        ...provider.config,
+      },
     };
   }
-  return base;
+  return configs[0]
+    ? defaultsFor(configs[0])
+    : { name: "", providerType: "", modelType: "embedding", config: {} };
 };
 
 const ProviderForm: React.FC<ProviderFormProps> = ({
   provider,
+  providerConfigs,
   onSubmit,
   onDelete,
   submitting = false,
 }) => {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors },
-  } = useForm<ProviderFormValues>({ defaultValues: toFormValues(provider) });
+  const [values, setValues] = useState<ProviderFormValues>(() =>
+    valuesFor(provider, providerConfigs),
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Re-prefill the form whenever the selected provider changes (including the
-  // switch to "create new", where provider is null).
   useEffect(() => {
-    reset(toFormValues(provider));
-  }, [provider, reset]);
+    setValues(valuesFor(provider, providerConfigs));
+    setErrors({});
+  }, [provider, providerConfigs]);
 
-  const providerType = watch("providerType") as ProviderType;
+  const selectedConfig = useMemo(
+    () => providerConfigs.find((config) => config.name === values.providerType),
+    [providerConfigs, values.providerType],
+  );
   const isReadOnly = provider !== null;
 
+  const setConfigValue = (key: string, value: ProviderConfigValue) => {
+    setValues((current) => ({
+      ...current,
+      config: { ...current.config, [key]: value },
+    }));
+    setErrors((current) => ({ ...current, [key]: "" }));
+  };
+
+  const selectProviderType = (providerType: string) => {
+    const config = providerConfigs.find((item) => item.name === providerType);
+    if (!config) return;
+    setValues((current) => ({
+      ...defaultsFor(config),
+      name: current.name,
+    }));
+    setErrors({});
+  };
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedConfig) return;
+
+    const nextErrors: Record<string, string> = {};
+    if (!values.name.trim()) nextErrors.name = "Name is required";
+    for (const field of selectedConfig.fields) {
+      const value = values.config[field.key];
+      if (field.required && (value === null || value === "")) {
+        nextErrors[field.key] = `${field.label} is required`;
+      }
+      if (field.type === "number" && typeof value === "number") {
+        if (field.min != null && value < field.min) {
+          nextErrors[field.key] = `${field.label} must be at least ${field.min}`;
+        }
+        if (field.max != null && value > field.max) {
+          nextErrors[field.key] = `${field.label} must be at most ${field.max}`;
+        }
+      }
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    onSubmit({ ...values, name: values.name.trim() });
+  };
+
+  if (providerConfigs.length === 0) {
+    return <p className="text-emd-placeholder text-sm">Loading provider types…</p>;
+  }
+
+  const providerTypeOptions: SelectOption[] = providerConfigs.map((config) => ({
+    value: config.name,
+    label: `${config.label} · ${config.type}`,
+  }));
+  const modelTypeOptions: SelectOption[] = (selectedConfig?.supportedModelTypes ?? []).map(
+    (modelType) => ({ value: modelType, label: MODEL_TYPE_LABELS[modelType] }),
+  );
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form onSubmit={submit} className="flex flex-col gap-4">
       <fieldset disabled={isReadOnly} className="flex flex-col gap-4">
-        <Field label="Name" htmlFor="name" error={errors.name?.message}>
+        <Field label="Name" htmlFor="name" error={errors.name}>
           <TextInput
             id="name"
             placeholder="Provider name"
-            {...register("name", { required: "Name is required" })}
+            value={values.name}
+            onChange={(event) => {
+              setValues((current) => ({ ...current, name: event.target.value }));
+              setErrors((current) => ({ ...current, name: "" }));
+            }}
           />
         </Field>
 
         <Field label="Provider type" htmlFor="providerType">
           <Select
             id="providerType"
-            options={PROVIDER_TYPE_OPTIONS}
-            {...register("providerType")}
+            options={providerTypeOptions}
+            value={values.providerType}
+            onChange={(event) => selectProviderType(event.target.value)}
           />
         </Field>
+
+        {selectedConfig && (
+          <p className="text-xs text-emd-placeholder">{selectedConfig.description}</p>
+        )}
 
         <Field label="Model type" htmlFor="modelType">
           <Select
             id="modelType"
-            options={MODEL_TYPE_OPTIONS}
-            {...register("modelType")}
+            options={modelTypeOptions}
+            value={values.modelType}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                modelType: event.target.value as ModelType,
+              }))
+            }
           />
         </Field>
 
-        {providerType === "ollama" && (
+        {selectedConfig && selectedConfig.fields.length > 0 ? (
           <div className="flex flex-col gap-4 pl-6 border-l-2 border-emd-border">
-            <Field label="Port" htmlFor="port" error={errors.port?.message}>
-              <TextInput
-                id="port"
-                type="number"
-                min={1}
-                placeholder="11434"
-                {...register("port", {
-                  valueAsNumber: true,
-                  min: { value: 1, message: "Port must be at least 1" },
-                  max: { value: 65535, message: "Port must be at most 65535" },
-                })}
+            {selectedConfig.fields.map((field) => (
+              <ConfigControl
+                key={field.key}
+                field={field}
+                value={values.config[field.key] ?? field.default}
+                error={errors[field.key]}
+                onChange={(value) => setConfigValue(field.key, value)}
               />
-            </Field>
-
-            <Field
-              label="Model name"
-              htmlFor="modelName"
-              error={errors.modelName?.message}
-            >
-              <TextInput
-                id="modelName"
-                placeholder="nomic-embed-text"
-                {...register("modelName", {
-                  required: "Model name is required",
-                })}
-              />
-            </Field>
+            ))}
           </div>
-        )}
-
-        {providerType === "remote" && (
-          <div className="flex flex-col gap-4 pl-6 border-l-2 border-emd-border">
-            <Field
-              label="Base URL"
-              htmlFor="baseUrl"
-              error={errors.baseUrl?.message}
-            >
-              <TextInput
-                id="baseUrl"
-                placeholder="https://api.openai.com/v1"
-                {...register("baseUrl", { required: "Base URL is required" })}
-              />
-            </Field>
-
-            <Field
-              label="API key"
-              htmlFor="apiKey"
-              error={errors.apiKey?.message}
-            >
-              <TextInput
-                id="apiKey"
-                type="password"
-                placeholder="sk-…"
-                {...register("apiKey", { required: "API key is required" })}
-              />
-            </Field>
-
-            <Field label="Organization (optional)" htmlFor="organization">
-              <TextInput
-                id="organization"
-                placeholder="org-…"
-                {...register("organization")}
-              />
-            </Field>
-
-            <Field
-              label="Model name"
-              htmlFor="modelName"
-              error={errors.modelName?.message}
-            >
-              <TextInput
-                id="modelName"
-                placeholder="text-embedding-3-small"
-                {...register("modelName", {
-                  required: "Model name is required",
-                })}
-              />
-            </Field>
-          </div>
-        )}
-
-        {providerType === "mock" && (
+        ) : (
           <p className="text-emd-placeholder text-sm">
-            The mock provider needs no configuration.
+            This provider needs no additional configuration.
           </p>
         )}
       </fieldset>
@@ -212,7 +207,6 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             Create provider
           </button>
         )}
-
         {provider && onDelete && (
           <button
             type="button"
@@ -225,6 +219,64 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         )}
       </div>
     </form>
+  );
+};
+
+interface ConfigControlProps {
+  field: ProviderConfigField;
+  value: ProviderConfigValue;
+  error?: string;
+  onChange: (value: ProviderConfigValue) => void;
+}
+
+const ConfigControl: React.FC<ConfigControlProps> = ({
+  field,
+  value,
+  error,
+  onChange,
+}) => {
+  const id = `provider-config-${field.key}`;
+  if (field.type === "checkbox") {
+    return (
+      <Checkbox
+        label={field.label}
+        checked={Boolean(value)}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    );
+  }
+  if (field.type === "select") {
+    return (
+      <Field label={field.label} htmlFor={id} error={error}>
+        <Select
+          id={id}
+          options={field.options ?? []}
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </Field>
+    );
+  }
+  return (
+    <Field label={field.label} htmlFor={id} error={error}>
+      <TextInput
+        id={id}
+        type={field.type === "number" ? "number" : field.key === "api_key" ? "password" : "text"}
+        min={field.min ?? undefined}
+        max={field.max ?? undefined}
+        placeholder={field.placeholder ?? undefined}
+        value={value == null ? "" : String(value)}
+        onChange={(event) =>
+          onChange(
+            field.type === "number"
+              ? event.target.value === ""
+                ? null
+                : event.target.valueAsNumber
+              : event.target.value,
+          )
+        }
+      />
+    </Field>
   );
 };
 

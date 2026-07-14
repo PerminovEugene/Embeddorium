@@ -46,18 +46,23 @@ import uuid
 
 from qdrant_client import QdrantClient
 
+from backend.plugins.provider_types.registry import resolve_embed_target
 from backend.server.compare.embedder import get_embeddings
 from backend.server.pipeline.runs import get_pipeline_run
 from backend.server.search.service.hybrid import hybrid_search
 from backend.server.search.service.keyword import keyword_search
 from backend.server.search.service.params import (
     DEFAULT_TOP_K,
+    parse_reranker_top_k,
     parse_strategy,
     parse_top_k,
 )
+from backend.server.search.service.reranker import (
+    rerank_results,
+    resolve_reranker_target,
+)
 from backend.server.search.service.rrf import RRF_K, reciprocal_rank_fusion
 from backend.server.search.service.semantic import semantic_search
-from backend.shared import config
 from backend.shared.models import Search, SearchInput
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
@@ -69,9 +74,12 @@ __all__ = [
     "get_pipeline_run",
     "hybrid_search",
     "keyword_search",
+    "parse_reranker_top_k",
     "parse_strategy",
     "parse_top_k",
     "reciprocal_rank_fusion",
+    "rerank_results",
+    "resolve_reranker_target",
     "search_db",
     "semantic_search",
 ]
@@ -99,6 +107,33 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
             ),
             "results": [],
         }
+
+    # Optional cross-encoder reranking, hybrid-only. When enabled, the fused RRF
+    # pool is re-scored and cut to ``rerankerTopK``. The provider selection is
+    # hard-validated here (unknown id / wrong capability -> error body); the
+    # model load/predict itself degrades gracefully at call time.
+    reranker_target = None
+    reranker_provider_id: str | None = None
+    reranker_top_k = 0
+    if strategy == "hybrid" and request.configuration.get("useReranking"):
+        reranker_provider_id = request.configuration.get("rerankerProviderId")
+        if not reranker_provider_id:
+            return {
+                "status": "error",
+                "detail": "rerankerProviderId is required when useReranking is true",
+                "results": [],
+            }
+        reranker_top_k = parse_reranker_top_k(request.configuration.get("rerankerTopK"))
+        if reranker_top_k is None:
+            return {
+                "status": "error",
+                "detail": "rerankerTopK must be a positive integer",
+                "results": [],
+            }
+        try:
+            reranker_target = resolve_reranker_target(store_sql, reranker_provider_id)
+        except ValueError as exc:
+            return {"status": "error", "detail": str(exc), "results": []}
 
     run = get_pipeline_run(store_sql, run_id)
     if run is None:
@@ -139,15 +174,12 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
         provider_snap = actor_cfg.get("embed_chunks", {}).get("provider", {})
 
         collection = vector_store_cfg.get("collection", "")
-        provider_type = provider_snap.get("provider_type", "")
-        model_name = provider_snap.get("model_name") or provider_snap.get("model")
-        # The embed_chunks actor built the collection with the same fallback:
-        # when the mock provider snapshot carries no explicit dimension it uses
-        # config.MOCK_EMBED_DIM. Mirror that here so the query is embedded at the
-        # dimension the collection was indexed with, rather than erroring out.
-        mock_dim: int | None = None
-        if provider_type == "mock":
-            mock_dim = provider_snap.get("mock_dim", config.MOCK_EMBED_DIM)
+        configured_type = provider_snap.get("provider_type", "")
+        provider_values = provider_snap.get("config") or provider_snap
+        target = resolve_embed_target(configured_type, provider_values)
+        provider_type = target.provider
+        model_name = target.model
+        mock_dim = target.mock_dim
 
         logging.info(
             "DB search: run=%s strategy=%s collection=%s provider=%s model=%s "
@@ -162,16 +194,13 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
             top_k,
         )
 
-        # Embed the query via the pipeline's own OLLAMA_EMBED_BASE_URL — the same
-        # endpoint the embed_chunks actor used to index the collection — rather
-        # than an endpoint supplied on the request. This upholds the search
-        # invariant: the query is embedded exactly the way the collection was.
         query_embeddings = await get_embeddings(
             provider_type,
             model_name,
-            config.OLLAMA_EMBED_BASE_URL,
+            target.base_url,
             [q.text for q in queries],
             mock_dim=mock_dim,
+            api_key=target.api_key,
         )
         store = VectorStore(collection=collection, client=qdrant)
     else:
@@ -212,9 +241,25 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
                 pipeline_id,
                 dataset_name,
             )
+            if reranker_target is not None:
+                # Rerank the full fused pool, then keep the best ``rerankerTopK``.
+                query_results = await rerank_results(
+                    reranker_target, query, query_results, reranker_top_k
+                )
 
         results.extend(query_results)
-        _persist_search(store_sql, query, run.id, query_results, top_k, strategy)
+        _persist_search(
+            store_sql,
+            query,
+            run.id,
+            query_results,
+            top_k,
+            strategy,
+            reranker_provider_id=(
+                reranker_provider_id if reranker_target is not None else None
+            ),
+            reranker_top_k=reranker_top_k if reranker_target is not None else None,
+        )
 
     return {"status": "success", "results": results}
 
@@ -226,23 +271,34 @@ def _persist_search(
     query_results: list[dict],
     top_k: int,
     search_method: str,
+    *,
+    reranker_provider_id: str | None = None,
+    reranker_top_k: int | None = None,
 ) -> None:
     """Save one query launch (input text + results) to Postgres.
 
     ``search_method`` records the strategy actually used
     (``semantic``/``keyword``/``hybrid``) so the history endpoints report how a
-    search was run.
+    search was run. When cross-encoder reranking was applied (hybrid only),
+    ``reranked``/``reranker_provider_id``/``reranker_top_k`` are recorded in the
+    same ``search_config`` blob so history reflects it — ``search_method`` stays
+    ``"hybrid"`` since reranking is a post-fusion refinement of that strategy.
 
     Best-effort: a persistence failure must never break search for the user,
     so any error is logged and swallowed.
     """
     try:
         search_input = store_sql.search_inputs.create(SearchInput(text=query.text))
+        search_config: dict = {"top_n": top_k, "search_method": search_method}
+        if reranker_provider_id is not None:
+            search_config["reranked"] = True
+            search_config["reranker_provider_id"] = reranker_provider_id
+            search_config["reranker_top_k"] = reranker_top_k
         store_sql.searches.create(
             Search(
                 pipeline_id=pipeline_id,
                 user_input_id=search_input.id,
-                search_config={"top_n": top_k, "search_method": search_method},
+                search_config=search_config,
                 results=query_results,
             )
         )

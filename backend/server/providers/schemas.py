@@ -1,27 +1,25 @@
 """camelCase API schemas for the ``/providers`` endpoints.
 
-Mirrors the UI's discriminated ``Provider`` union (``ui/src/components/
-providers/types.ts``) field-for-field, so request/response bodies need no
-reshaping on the frontend. These are pure API-layer models: route handlers
-translate to/from the snake_case domain models in ``backend.shared.models``.
+A provider is a single flat record now — ``{providerType, name, modelType,
+config}`` — instead of a discriminated union of one schema per type. ``config``
+is the type-specific settings blob; its keys are the exact snake_case field
+keys the provider-type adapter declares (``model_name``, ``url``, ``mock_dim``,
+...) and are sent back verbatim, so the blob is *not* camelCased. On create/
+update the blob is resolved against the selected adapter's field defaults, so a
+partial config still persists a complete one.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from backend.shared.models import (
-    ModelType,
-    MockProvider,
-    OllamaProvider,
-    Provider,
-    RemoteProvider,
-)
+from backend.plugins.provider_types.registry import validate_provider
+from backend.shared.models import ModelType, Provider
 
 
 class _CamelModel(BaseModel):
@@ -30,127 +28,55 @@ class _CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
-class OllamaProviderIn(_CamelModel):
-    """Request body for creating/updating an Ollama provider."""
+class ProviderIn(_CamelModel):
+    """Request body for creating/updating a provider."""
 
     name: str
+    provider_type: str
     model_type: ModelType
-    provider_type: Literal["ollama"] = "ollama"
-    port: int
-    model_name: str
+    # Type-specific settings. Keys are the adapter's snake_case field keys and
+    # are stored verbatim (never camelCased).
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
-class RemoteProviderIn(_CamelModel):
-    """Request body for creating/updating a remote (OpenAI-compatible) provider."""
-
-    name: str
-    model_type: ModelType
-    provider_type: Literal["remote"] = "remote"
-    base_url: str
-    api_key: str
-    organization: str
-    model_name: str
-
-
-class MockProviderIn(_CamelModel):
-    """Request body for creating/updating a mock provider."""
-
-    name: str
-    model_type: ModelType
-    provider_type: Literal["mock"] = "mock"
-
-
-ProviderIn = Annotated[
-    Union[OllamaProviderIn, RemoteProviderIn, MockProviderIn],
-    Field(discriminator="provider_type"),
-]
-
-
-class OllamaProviderOut(_CamelModel):
-    """Response body for an Ollama provider."""
+class ProviderOut(_CamelModel):
+    """Response body for a provider."""
 
     id: uuid.UUID
     name: str
+    provider_type: str
     model_type: ModelType
-    provider_type: Literal["ollama"] = "ollama"
-    port: int
-    model_name: str
-    created_at: Optional[datetime] = None
-
-
-class RemoteProviderOut(_CamelModel):
-    """Response body for a remote (OpenAI-compatible) provider."""
-
-    id: uuid.UUID
-    name: str
-    model_type: ModelType
-    provider_type: Literal["remote"] = "remote"
-    base_url: str
-    api_key: str
-    organization: str
-    model_name: str
-    created_at: Optional[datetime] = None
-
-
-class MockProviderOut(_CamelModel):
-    """Response body for a mock provider."""
-
-    id: uuid.UUID
-    name: str
-    model_type: ModelType
-    provider_type: Literal["mock"] = "mock"
-    created_at: Optional[datetime] = None
-
-
-ProviderOut = Union[OllamaProviderOut, RemoteProviderOut, MockProviderOut]
+    config: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
 
 
 def provider_in_to_domain(payload: ProviderIn) -> Provider:
-    """Map a validated camelCase request body to its snake_case domain model."""
-    if payload.provider_type == "ollama":
-        return OllamaProvider(
-            name=payload.name,
-            model_type=payload.model_type,
-            port=payload.port,
-            model_name=payload.model_name,
-        )
-    if payload.provider_type == "remote":
-        return RemoteProvider(
-            name=payload.name,
-            model_type=payload.model_type,
-            base_url=payload.base_url,
-            api_key=payload.api_key,
-            organization=payload.organization,
-            model_name=payload.model_name,
-        )
-    return MockProvider(name=payload.name, model_type=payload.model_type)
+    """Map a validated request body to a domain ``Provider``.
+
+    Resolves ``config`` against the selected provider-type adapter's field
+    defaults. Raises ``ValueError`` for an unknown ``provider_type`` (the router
+    turns that into a 400).
+    """
+    config = validate_provider(
+        payload.provider_type,
+        payload.model_type,
+        payload.config,
+    )
+    return Provider(
+        name=payload.name,
+        provider_type=payload.provider_type,
+        model_type=payload.model_type,
+        config=config,
+    )
 
 
 def provider_to_out(provider: Provider) -> ProviderOut:
-    """Map a snake_case domain model to its camelCase response schema."""
-    if isinstance(provider, OllamaProvider):
-        return OllamaProviderOut(
-            id=provider.id,
-            name=provider.name,
-            model_type=provider.model_type,
-            port=provider.port,
-            model_name=provider.model_name,
-            created_at=provider.created_at,
-        )
-    if isinstance(provider, RemoteProvider):
-        return RemoteProviderOut(
-            id=provider.id,
-            name=provider.name,
-            model_type=provider.model_type,
-            base_url=provider.base_url,
-            api_key=provider.api_key,
-            organization=provider.organization,
-            model_name=provider.model_name,
-            created_at=provider.created_at,
-        )
-    return MockProviderOut(
+    """Map a domain ``Provider`` to its camelCase response schema."""
+    return ProviderOut(
         id=provider.id,
         name=provider.name,
+        provider_type=provider.provider_type,
         model_type=provider.model_type,
+        config=dict(provider.config or {}),
         created_at=provider.created_at,
     )

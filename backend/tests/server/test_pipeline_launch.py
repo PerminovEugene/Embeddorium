@@ -68,7 +68,9 @@ def test_xml_file_path_is_enqueued_directly(tmp_path: Path) -> None:
 
     broker = _make_broker()
     dataset = {"name": "group1", "paths": [str(xml_file)]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 1
     broker.enqueue.assert_called_once()
@@ -84,7 +86,9 @@ def test_two_xml_file_paths_enqueue_two_messages(tmp_path: Path) -> None:
 
     broker = _make_broker()
     dataset = {"name": "g", "paths": [str(f1), str(f2)]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 2
     assert broker.enqueue.call_count == 2
@@ -98,7 +102,9 @@ def test_xml_file_path_not_yet_on_disk_is_still_enqueued() -> None:
     """
     broker = _make_broker()
     dataset = {"name": "g", "paths": ["nonexistent_act.xml"]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 1
     broker.enqueue.assert_called_once()
@@ -117,7 +123,9 @@ def test_directory_path_globs_xml_children(tmp_path: Path) -> None:
 
     broker = _make_broker()
     dataset = {"name": "dir-group", "paths": [str(tmp_path)]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 2
     enqueued = sorted(_enqueued_file_paths(broker))
@@ -133,16 +141,16 @@ def test_directory_path_globs_xml_recursively(tmp_path: Path) -> None:
 
     broker = _make_broker()
     dataset = {"name": "g", "paths": [str(tmp_path)]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 2
     enqueued = sorted(_enqueued_file_paths(broker))
     assert enqueued == sorted([str(tmp_path / "a.xml"), str(nested / "b.xml")])
 
 
-def test_relative_path_is_anchored_to_source_root(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_relative_path_is_anchored_to_source_root(tmp_path: Path, monkeypatch) -> None:
     """A source-root-relative path resolves to a real file under the root."""
     (tmp_path / "xml.2026.en").mkdir()
     (tmp_path / "xml.2026.en" / "act.xml").touch()
@@ -150,19 +158,21 @@ def test_relative_path_is_anchored_to_source_root(
 
     broker = _make_broker()
     dataset = {"name": "g", "paths": ["xml.2026.en/act.xml"]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 1
-    assert _enqueued_file_paths(broker) == [
-        str(tmp_path / "xml.2026.en" / "act.xml")
-    ]
+    assert _enqueued_file_paths(broker) == [str(tmp_path / "xml.2026.en" / "act.xml")]
 
 
 def test_empty_directory_enqueues_nothing(tmp_path: Path) -> None:
     """A directory with no .xml files yields zero messages."""
     broker = _make_broker()
     dataset = {"name": "g", "paths": [str(tmp_path)]}
-    count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+    count = _seed_local(
+        dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+    )
 
     assert count == 0
     broker.enqueue.assert_not_called()
@@ -180,7 +190,9 @@ def test_non_xml_non_directory_path_logs_warning_and_skips(tmp_path: Path) -> No
     broker = _make_broker()
     dataset = {"name": "g", "paths": [bogus]}
     with patch("backend.server.pipeline.launch.logger") as mock_logger:
-        count = _seed_local(dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker)
+        count = _seed_local(
+            dataset=dataset, pipeline_id_str=str(uuid.uuid4()), broker=broker
+        )
 
     assert count == 0
     broker.enqueue.assert_not_called()

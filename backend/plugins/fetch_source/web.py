@@ -23,7 +23,7 @@ from backend.plugins.fetch_source.base import (
 from backend.shared.clients.http.failures import FetchFailure
 from backend.shared.clients.http.tls_policy import allow_insecure_tls
 from backend.shared.models import CrawlTarget
-from backend.shared.parsers.registry import is_supported, normalize_content_type
+from backend.shared.content_type import is_supported, normalize_content_type
 from backend.shared.pipeline.source_files import extension_for_content_type
 
 

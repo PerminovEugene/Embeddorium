@@ -5,8 +5,7 @@ embedding provider, resolves the form's per-actor camelCase settings into a
 typed ``PipelineActorConfigs`` snapshot, and persists the run as
 ``status="pending"`` (launch is a separate step). The settings-resolution
 helpers here (``_parse_provider_id``, ``_build_settings``,
-``_validate_source_block``, ``_fetch_source_block``) are unique to creation and
-so live alongside it.
+``_validate_source_block``) are unique to creation and so live alongside it.
 """
 
 from __future__ import annotations
@@ -98,19 +97,6 @@ def _validate_source_block(settings: dict[str, dict[str, Any]]) -> dict[str, Any
     return block
 
 
-def _fetch_source_block(settings: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Resolve the ``fetch_source`` form block, accepting legacy keys.
-
-    Older UI builds send the local-file glob as ``fetch_file_source.glob``;
-    map it onto the merged actor's ``file_glob`` unless the new key is set.
-    """
-    block = settings.get("fetch_source") or {}
-    legacy_glob = (settings.get("fetch_file_source") or {}).get("glob")
-    if legacy_glob and "fileGlob" not in block and "file_glob" not in block:
-        block = {**block, "file_glob": legacy_glob}
-    return block
-
-
 def create_pipeline_run(store: SqlStore, payload: PipelineRunIn) -> PipelineRunOut:
     """Create a pipeline run row with ``status="pending"``; do not launch yet.
 
@@ -199,7 +185,7 @@ def create_pipeline_run(store: SqlStore, payload: PipelineRunIn) -> PipelineRunO
             ValidateSourceSettings, _validate_source_block(settings)
         ),
         fetch_source=_build_settings(
-            FetchSourceSettings, _fetch_source_block(settings)
+            FetchSourceSettings, settings.get("fetch_source", {})
         ),
         schedule_discovered_links=_build_settings(
             ScheduleDiscoveredLinksSettings,

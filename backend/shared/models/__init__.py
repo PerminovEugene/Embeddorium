@@ -19,11 +19,8 @@ from backend.shared.models.pipeline_run import (
     VectorStoreSettings,
 )
 from backend.shared.models.provider import (
-    MockProvider,
     ModelType,
-    OllamaProvider,
     Provider,
-    RemoteProvider,
 )
 from backend.shared.models.search import Search
 from backend.shared.models.search_input import SearchInput
@@ -57,9 +54,6 @@ __all__ = [
     "ScheduleDiscoveredLinksSettings",
     "FilterDocumentsSettings",
     "Provider",
-    "OllamaProvider",
-    "RemoteProvider",
-    "MockProvider",
     "ModelType",
     "Search",
     "SearchInput",

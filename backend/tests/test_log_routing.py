@@ -349,3 +349,53 @@ def test_pipeline_id_context_resets_after_exiting_log_to(
     assert "outside run context" not in run_file.read_text()
     assert "outside run context" in fallback_file.read_text()
     assert "inside run context" not in fallback_file.read_text()
+
+
+# --- run folder naming (register_pipeline_name / run_folder_name) ---
+
+
+@pytest.fixture(autouse=True)
+def _clear_pipeline_names() -> None:
+    """Keep the module-global folder-name registry from leaking across tests."""
+    log_routing._pipeline_folder_names.clear()
+    yield
+    log_routing._pipeline_folder_names.clear()
+
+
+def test_run_folder_name_defaults_to_bare_pipeline_id() -> None:
+    """Without a registered name the folder is just the pipeline_id."""
+    assert log_routing.run_folder_name("run-abc") == "run-abc"
+
+
+def test_register_pipeline_name_appends_slugified_name() -> None:
+    log_routing.register_pipeline_name("run-abc", "My Legal Corpus!")
+    assert log_routing.run_folder_name("run-abc") == "run-abc__my_legal_corpus"
+
+
+def test_register_pipeline_name_blank_name_has_no_suffix() -> None:
+    """A None / empty / punctuation-only name registers the bare pipeline_id."""
+    for blank in (None, "", "  ", "!!!"):
+        log_routing.register_pipeline_name("run-x", blank)
+        assert log_routing.run_folder_name("run-x") == "run-x"
+
+
+def test_register_pipeline_name_caps_slug_length() -> None:
+    log_routing.register_pipeline_name("run-abc", "a" * 200)
+    suffix = log_routing.run_folder_name("run-abc").split("__", 1)[1]
+    assert len(suffix) == log_routing._MAX_NAME_SLUG_LENGTH
+
+
+def test_log_routes_under_named_run_folder(
+    handler_with_runs: ContextRoutingFileHandler, tmp_path: Path
+) -> None:
+    """Once a name is registered, records land under <pid>__<name>/logs/."""
+    log_routing.register_pipeline_name("run-named", "Poland Umowa")
+
+    with log_to("site_a-aaaaaaaa", pipeline_id="run-named"):
+        _emit(handler_with_runs, "named-folder message")
+
+    named_root = tmp_path / "runs" / "run-named__poland_umowa" / "logs"
+    contents = (named_root / "site_a-aaaaaaaa" / "site_a-aaaaaaaa.log").read_text()
+    assert "named-folder message" in contents
+    # The bare-UUID folder must not be created alongside it.
+    assert not (tmp_path / "runs" / "run-named").exists()

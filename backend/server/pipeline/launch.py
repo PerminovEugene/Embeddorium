@@ -36,6 +36,8 @@ from backend.shared.clients.queue.validate_source_payload import ValidateSourceP
 
 logger = logging.getLogger(__name__)
 
+_LOCAL_FILE_GLOB = "*.xml"
+
 
 def ensure_scheme(url: str) -> str:
     """Prepend ``https://`` when no scheme is present."""
@@ -48,7 +50,6 @@ def seed_pipeline(
     *,
     pipeline_id: uuid.UUID,
     dataset_snapshot: dict,
-    file_glob: str = "*.xml",
     broker=None,
 ) -> int:
     """Publish seed messages for the pipeline run identified by *pipeline_id*.
@@ -62,10 +63,6 @@ def seed_pipeline(
     dataset_snapshot:
         ``model_dump(mode="json")`` of the dataset; must contain
         ``source_type`` ("web" or "local") plus the type-specific fields.
-    file_glob:
-        Glob used to enumerate files under a local dataset's folder paths
-        (from the run's ``fetch_source.file_glob`` config). Ignored for web
-        datasets.
     broker:
         Dramatiq broker to enqueue on.  When ``None`` a fresh ``QueueClient``
         broker is created (production path); inject a mock in tests.
@@ -88,7 +85,6 @@ def seed_pipeline(
         count = _seed_local(
             dataset=dataset_snapshot,
             pipeline_id_str=pipeline_id_str,
-            file_glob=file_glob,
             broker=broker,
         )
     else:
@@ -129,9 +125,7 @@ def _seed_web(*, dataset: dict, pipeline_id_str: str, broker) -> int:
     return 1
 
 
-def _seed_local(
-    *, dataset: dict, pipeline_id_str: str, file_glob: str = "*.xml", broker
-) -> int:
+def _seed_local(*, dataset: dict, pipeline_id_str: str, broker) -> int:
     """Enumerate matching files and enqueue one validate-source message each.
 
     Each entry in ``dataset["paths"]`` is one of:
@@ -143,8 +137,8 @@ def _seed_local(
     - An absolute path (admin/API use-case), passed through unchanged.
 
     A file entry is enqueued directly; a directory entry is enumerated
-    recursively (``file_glob`` applied via ``rglob``) so nested subfolders are
-    included. The old browser file-picker recorded only bare filenames
+    recursively for XML files so nested subfolders are included. The old
+    browser file-picker recorded only bare filenames
     (``f.name``), which the actor could not resolve to a real file — that is why
     the path looked broken.
     """
@@ -154,9 +148,9 @@ def _seed_local(
     for root_path in paths:
         p = resolve_for_seed(root_path)
 
-        # Directory — enumerate descendants matching the configured glob.
+        # Directory — enumerate XML descendants using the fixed local format.
         if p.is_dir():
-            matched_files: List[Path] = sorted(p.rglob(file_glob))
+            matched_files: List[Path] = sorted(p.rglob(_LOCAL_FILE_GLOB))
         # Individual file — the common file-picker selection. Classified by
         # suffix so a not-yet-on-disk file path is still enqueued (the
         # validate_source local strategy rejects missing files with a skip).

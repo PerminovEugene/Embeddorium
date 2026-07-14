@@ -3,7 +3,7 @@
 An embed strategy owns the provider-specific half of the ``embed_chunks``
 actor: turning a run's stored embedding-provider snapshot
 (:attr:`~backend.shared.models.pipeline_run.EmbedChunksSettings.provider`) into
-the concrete ``(provider, model, mock_dim)`` triple the worker needs to load a
+the concrete provider/model/connection settings the worker needs to load a
 model. Everything else — the model cache, the encode loop, vector upsert,
 marking chunks embedded, finalizing the target and the run-progress counters —
 stays in the actor/launcher, since it is provider-agnostic plumbing.
@@ -61,6 +61,8 @@ class ResolvedProvider:
     provider: str
     model: str
     mock_dim: int | None = None
+    base_url: str | None = None
+    api_key: str | None = None
 
 
 class EmbedStrategy(ABC):

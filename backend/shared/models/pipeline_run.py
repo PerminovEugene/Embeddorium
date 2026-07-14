@@ -89,14 +89,13 @@ class FetchSourceSettings(BaseModel):
     parser-registry-supported types. Empty means "no extra restriction" — the
     parser registry alone decides what is supported.
 
-    Local-file strategy: ``file_glob`` selects which files a folder seed
-    enumerates (applied at seed time, not in the actor).
+    Local files have no actor-level fetch settings; folder seeds always
+    enumerate XML files before the fetch actor runs.
     """
 
     verify_tls: bool = True
     timeout_seconds: int = 30
     allowed_content_types: str = ""
-    file_glob: str = "*.xml"
 
 
 class ScheduleDiscoveredLinksSettings(BaseModel):

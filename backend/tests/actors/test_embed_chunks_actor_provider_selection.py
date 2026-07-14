@@ -38,7 +38,9 @@ def test_ollama_provider_builds_ollama_embed_client_with_configured_model_url() 
     with (
         patch.object(handler_module.config, "EMBED_PROVIDER", "ollama"),
         patch.object(handler_module.config, "OLLAMA_EMBED_MODEL", "qwen3-embedding"),
-        patch.object(handler_module.config, "OLLAMA_EMBED_BASE_URL", "http://ollama:11434"),
+        patch.object(
+            handler_module.config, "OLLAMA_EMBED_BASE_URL", "http://ollama:11434"
+        ),
         patch("backend.shared.clients.ollama_embed_client.OllamaEmbedClient", mock_cls),
     ):
         model, size = get_model_and_size()
@@ -48,6 +50,39 @@ def test_ollama_provider_builds_ollama_embed_client_with_configured_model_url() 
     )
     assert model is mock_client
     assert size == 1024
+
+
+def test_fastembed_provider_builds_fastembed_client_with_default_model() -> None:
+    mock_client = MagicMock()
+    mock_client.get_embedding_dimension.return_value = 384
+    mock_cls = MagicMock(return_value=mock_client)
+
+    with patch(
+        "backend.shared.clients.fastembed_embed_client.FastembedEmbedClient",
+        mock_cls,
+    ):
+        model, size = get_model_and_size(provider="fastembed")
+
+    mock_cls.assert_called_once_with(handler_module.FASTEMBED_MODEL_NAME)
+    assert model is mock_client
+    assert size == 384
+
+
+def test_fastembed_provider_uses_explicit_model() -> None:
+    mock_client = MagicMock()
+    mock_client.get_embedding_dimension.return_value = 768
+    mock_cls = MagicMock(return_value=mock_client)
+
+    with patch(
+        "backend.shared.clients.fastembed_embed_client.FastembedEmbedClient",
+        mock_cls,
+    ):
+        model, size = get_model_and_size(
+            provider="fastembed", model="BAAI/bge-base-en-v1.5"
+        )
+
+    mock_cls.assert_called_once_with("BAAI/bge-base-en-v1.5")
+    assert size == 768
 
 
 def test_model_and_size_are_cached_as_module_singletons() -> None:

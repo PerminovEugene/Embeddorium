@@ -123,8 +123,8 @@ const validateSource: ActorDef = {
 };
 
 // fetch_source is plugin-backed (backend/plugins/fetch_source): its settings
-// (web: verify_tls/timeout_seconds/allowed_content_types, local: file_glob)
-// are discovered from GET /actor-configs; the strategy is resolved from the
+// (web: verify_tls/timeout_seconds/allowed_content_types; local has none) are
+// discovered from GET /actor-configs; the strategy is resolved from the
 // selected datasets' source types.
 const fetchSource: ActorDef = {
   key: "fetch_source",

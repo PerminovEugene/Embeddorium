@@ -36,7 +36,7 @@ from backend.shared.models import (
     FilterDocumentsSettings,
     OutboxEvent,
 )
-from backend.shared.parsers.xml_parser import extract_act_title
+from backend.shared.xml_utils import extract_act_title
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.source_files import read_source_file
 from backend.shared.storage.sql.sql_store import SqlStore

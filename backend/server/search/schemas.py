@@ -26,6 +26,14 @@ class SearchRequest(BaseModel):
     # default and legacy behaviour; "embedding" is accepted as an alias),
     # "keyword" (BM25 sparse), or "hybrid" (dense + BM25 fused via Reciprocal
     # Rank Fusion). Absent falls back to "semantic".
+    #
+    # Optional cross-encoder reranking (hybrid only):
+    #   useReranking (bool) — when true, the fused RRF pool is re-scored by a
+    #     cross-encoder and cut to rerankerTopK. Ignored for non-hybrid methods.
+    #   rerankerProviderId (uuid str) — a configured provider whose modelType is
+    #     "cross-encoder"; required when useReranking is true.
+    #   rerankerTopK (positive int) — how many reranked results to keep;
+    #     required when useReranking is true (no server-side default).
     configuration: dict
     source: TextGroup
 

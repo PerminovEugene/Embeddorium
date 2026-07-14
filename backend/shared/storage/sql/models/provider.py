@@ -2,27 +2,27 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any
 
 from sqlalchemy import (
     DateTime,
-    Integer,
     Text,
     text as sql_text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.shared.storage.sql.models.base import Base
 
 
 class ProviderORM(Base):
-    """A provider row, discriminated by ``provider_type``.
+    """A provider row.
 
-    Variant-specific columns (ollama vs. remote vs. mock) are flat and
-    nullable rather than a JSONB blob, so every field stays queryable like
-    the rest of this schema; only the columns relevant to a row's
-    ``provider_type`` are set.
+    ``provider_type`` names the provider-type adapter that knows how to talk to
+    it; ``model_type`` is the capability the model serves. Every type-specific
+    setting (port, url, api_key, model_name, ...) lives in the ``config`` JSONB
+    blob, validated against the selected adapter's declared fields — so a new
+    provider type never needs a schema change.
     """
 
     __tablename__ = "providers"
@@ -36,16 +36,11 @@ class ProviderORM(Base):
     provider_type: Mapped[str] = mapped_column(Text, nullable=False)
     model_type: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # ollama
-    port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-    # ollama + remote
-    model_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # remote
-    base_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    api_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    organization: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sql_text("'{}'::jsonb"),
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

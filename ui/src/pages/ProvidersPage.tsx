@@ -2,15 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createProvider,
   deleteProvider,
+  fetchProviderConfigs,
   fetchProviders,
 } from "../api/providers";
 import ProviderList from "../components/providers/ProviderList";
 import ProviderForm from "../components/providers/ProviderForm";
-import { Provider, ProviderFormValues } from "../components/providers/types";
+import {
+  Provider,
+  ProviderFormValues,
+  ProviderTypeConfig,
+} from "../components/providers/types";
 import Card from "../components/common/Card";
 
 const ProvidersPage = () => {
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerConfigs, setProviderConfigs] = useState<ProviderTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,9 +25,12 @@ const ProvidersPage = () => {
 
   useEffect(() => {
     let active = true;
-    fetchProviders()
-      .then((data) => {
-        if (active) setProviders(data);
+    Promise.all([fetchProviders(), fetchProviderConfigs()])
+      .then(([providerData, configData]) => {
+        if (active) {
+          setProviders(providerData);
+          setProviderConfigs(configData);
+        }
       })
       .catch((err) => {
         console.error("Failed to load providers:", err);
@@ -101,6 +110,7 @@ const ProvidersPage = () => {
           <Card padding="tight">
             <ProviderList
               providers={providers}
+              providerConfigs={providerConfigs}
               selectedId={selectedId}
               onSelect={(p) => setSelectedId(p.id)}
               loading={loading}
@@ -112,6 +122,7 @@ const ProvidersPage = () => {
         <Card title={selectedProvider ? "Provider details" : "New provider"}>
           <ProviderForm
             provider={selectedProvider}
+            providerConfigs={providerConfigs}
             onSubmit={handleSubmit}
             onDelete={handleDelete}
             submitting={submitting}

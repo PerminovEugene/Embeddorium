@@ -36,6 +36,26 @@ def parse_top_k(value) -> int | None:
     return top_k if top_k >= 1 else None
 
 
+def parse_reranker_top_k(value) -> int | None:
+    """Coerce the request's ``rerankerTopK`` to a positive int.
+
+    Unlike :func:`parse_top_k` there is no default: reranking is opt-in, so when
+    ``useReranking`` is set the count must be given explicitly. Missing/empty or
+    a non-positive-integer value yields ``None`` so the caller can reject the
+    request.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        top_k = int(value)
+    except (TypeError, ValueError):
+        return None
+    # int() truncates floats; only accept whole numbers (JSON may send 5.0).
+    if top_k != float(value):
+        return None
+    return top_k if top_k >= 1 else None
+
+
 def parse_strategy(value) -> str | None:
     """Normalise the request's ``searchMethod`` to a known strategy name.
 

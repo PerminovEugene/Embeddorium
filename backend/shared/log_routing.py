@@ -8,10 +8,12 @@ activate it for the duration of one message via :func:`log_to`, and the
 record out to the right file based on the current ``contextvars`` value.
 
 When a ``pipeline_id`` is provided to :func:`log_to`, records land under
-``<PIPELINE_RUNS_DIR>/<pipeline_id>/logs/<log_dir>/<leaf>.log`` instead of
-the global ``LOG_ROOT``. Without a ``pipeline_id`` the fallback is the same
-``LOG_ROOT`` directory as before, so nothing breaks for call sites that do
-not thread a run identifier.
+``<PIPELINE_RUNS_DIR>/<run-folder>/logs/<log_dir>/<leaf>.log`` instead of the
+global ``LOG_ROOT``, where ``<run-folder>`` is ``<pipeline_id>`` optionally
+suffixed with the run's slugified name (``<pipeline_id>__<name>``) once
+:func:`register_pipeline_name` has recorded it. Without a ``pipeline_id`` the
+fallback is the same ``LOG_ROOT`` directory as before, so nothing breaks for
+call sites that do not thread a run identifier.
 
 This makes per-URL routing transparent to actor code: handlers keep logging
 via the normal ``logging`` module, and whichever file the *currently active*
@@ -38,6 +40,9 @@ from backend.shared import config
 _MAX_SLUG_LENGTH = 60
 _HASH_SUFFIX_LENGTH = 8
 _MAX_DEPTH = 12
+# Cap the human-readable name suffix appended to a run folder so folder names
+# stay filesystem-safe even for long run names.
+_MAX_NAME_SLUG_LENGTH = 40
 
 LOG_ROOT: Path = Path(config.LOG_DIR)
 PIPELINE_RUNS_DIR: Path = Path(config.PIPELINE_RUNS_DIR)
@@ -48,6 +53,52 @@ _current_log_dir: ContextVar[Optional[str]] = ContextVar(
 _current_pipeline_id: ContextVar[Optional[str]] = ContextVar(
     "current_pipeline_id", default=None
 )
+
+# Maps a ``pipeline_id`` to the on-disk folder name for its run
+# (``<pipeline_id>`` or ``<pipeline_id>__<name-slug>``). Populated per worker
+# process by the queue logging middleware once the run's name is resolved, and
+# read by every consumer that builds a run-scoped path (log routing here, plus
+# source-file writes). A missing entry falls back to the bare ``pipeline_id``,
+# so nothing breaks before the name is registered (or when it can't be).
+_pipeline_folder_names: dict[str, str] = {}
+_folder_names_lock = threading.Lock()
+
+
+def _slugify_name(name: str) -> str:
+    """Turn a free-form run name into a short, filesystem-safe slug.
+
+    Returns ``""`` when *name* carries no usable characters, signalling that no
+    suffix should be appended to the folder.
+    """
+    slug = "".join(c if c.isalnum() else "_" for c in name.lower())
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    slug = slug.strip("_")
+    return slug[:_MAX_NAME_SLUG_LENGTH]
+
+
+def register_pipeline_name(pipeline_id: str, name: Optional[str]) -> None:
+    """Record the on-disk folder name for *pipeline_id* from its run *name*.
+
+    Idempotent and deterministic: the same ``(pipeline_id, name)`` always maps
+    to the same folder, so concurrent worker processes agree on where a run's
+    logs and sources live. A blank or slug-empty *name* registers the bare
+    ``pipeline_id`` (no suffix).
+    """
+    slug = _slugify_name(name) if name else ""
+    folder = f"{pipeline_id}__{slug}" if slug else pipeline_id
+    with _folder_names_lock:
+        _pipeline_folder_names[pipeline_id] = folder
+
+
+def run_folder_name(pipeline_id: str) -> str:
+    """Return the on-disk folder name for *pipeline_id*'s run.
+
+    ``<pipeline_id>__<name-slug>`` once the name has been registered, else the
+    bare ``<pipeline_id>`` as a safe fallback.
+    """
+    with _folder_names_lock:
+        return _pipeline_folder_names.get(pipeline_id, pipeline_id)
 
 
 def _slugify(url: str) -> str:
@@ -118,7 +169,9 @@ class ContextRoutingFileHandler(logging.Handler):
     """Routes log records to the right per-URL file.
 
     When a ``pipeline_id`` is active the target path is:
-    ``<PIPELINE_RUNS_DIR>/<pipeline_id>/logs/<log_dir>/<leaf>.log``
+    ``<PIPELINE_RUNS_DIR>/<run-folder>/logs/<log_dir>/<leaf>.log``
+    (``<run-folder>`` = ``<pipeline_id>`` or ``<pipeline_id>__<name>``; see
+    :func:`run_folder_name`)
 
     Without a ``pipeline_id`` it falls back to:
     ``<log_root>/<log_dir>/<leaf>.log``
@@ -157,7 +210,7 @@ class ContextRoutingFileHandler(logging.Handler):
 
     def _file_path_for(self, log_dir: str, pipeline_id: Optional[str]) -> Path:
         if pipeline_id is not None:
-            base = PIPELINE_RUNS_DIR / pipeline_id / "logs"
+            base = PIPELINE_RUNS_DIR / run_folder_name(pipeline_id) / "logs"
         else:
             base = self._log_root
         leaf = Path(log_dir).name

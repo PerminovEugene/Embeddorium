@@ -7,13 +7,10 @@ from backend.shared.models import (
     Document,
     DocumentChunk,
     LocalDataset,
-    MockProvider,
-    OllamaProvider,
     OutboxEvent,
     OutboxStatus,
     PipelineRun,
     Provider,
-    RemoteProvider,
     Search,
     SearchInput,
     SourceFetch,
@@ -167,31 +164,11 @@ def _to_search(orm: SearchORM) -> Search:
 
 
 def _to_provider(orm: ProviderORM) -> Provider:
-    if orm.provider_type == "ollama":
-        return OllamaProvider(
-            id=orm.id,
-            name=orm.name,
-            model_type=orm.model_type,
-            port=orm.port,
-            model_name=orm.model_name,
-            created_at=orm.created_at,
-        )
-    if orm.provider_type == "remote":
-        return RemoteProvider(
-            id=orm.id,
-            name=orm.name,
-            model_type=orm.model_type,
-            base_url=orm.base_url,
-            api_key=orm.api_key,
-            organization=orm.organization,
-            model_name=orm.model_name,
-            created_at=orm.created_at,
-        )
-    if orm.provider_type == "mock":
-        return MockProvider(
-            id=orm.id,
-            name=orm.name,
-            model_type=orm.model_type,
-            created_at=orm.created_at,
-        )
-    raise ValueError(f"Unknown provider_type: {orm.provider_type!r}")
+    return Provider(
+        id=orm.id,
+        name=orm.name,
+        provider_type=orm.provider_type,
+        model_type=orm.model_type,
+        config=dict(orm.config or {}),
+        created_at=orm.created_at,
+    )

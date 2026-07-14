@@ -30,7 +30,10 @@ from backend.shared.storage.vector.collection_naming import (
     UNSCOPED_DATASET_NAME,
     build_collection_name,
 )
-from backend.shared.storage.vector.vector_store import VectorStore, similarity_to_distance
+from backend.shared.storage.vector.vector_store import (
+    VectorStore,
+    similarity_to_distance,
+)
 
 configure_logging()
 
@@ -55,7 +58,7 @@ _embed_config: dict[str, tuple] = {}
 
 
 def _load_embed_config(pipeline_id: Optional[str]):
-    """Return (provider, model, mock_dim, collection, distance) for the run.
+    """Return provider, model, connection, collection, and distance for the run.
 
     Reads the run's ``actor_configs.embed_chunks.provider`` snapshot and
     ``actor_configs.vector_store`` first, caching the result by ``pipeline_id``
@@ -88,12 +91,22 @@ def _load_embed_config(pipeline_id: Optional[str]):
                 embed_provider = resolved.provider
                 model = resolved.model
                 mock_dim = resolved.mock_dim
+                base_url = resolved.base_url
+                api_key = resolved.api_key
 
                 collection = actor_cfg.vector_store.collection
                 similarity = actor_cfg.vector_store.similarity
                 distance = similarity_to_distance(similarity)
 
-                result = (embed_provider, model, mock_dim, collection, distance)
+                result = (
+                    embed_provider,
+                    model,
+                    mock_dim,
+                    base_url,
+                    api_key,
+                    collection,
+                    distance,
+                )
                 _embed_config[pipeline_id] = result
                 return result
             except Exception:
@@ -119,7 +132,7 @@ def _load_embed_config(pipeline_id: Optional[str]):
     else:
         model = "Qwen/Qwen3-Embedding-8B"
         mock_dim = None
-    return embed_provider, model, mock_dim, collection, distance
+    return embed_provider, model, mock_dim, None, None, collection, distance
 
 
 @dramatiq.actor(
@@ -136,14 +149,22 @@ def embed_chunks(
     # Collection, embedding provider/model and similarity all come from this
     # run's recorded pipeline_run config, not global config, so the query side
     # (DB search) and the index side agree on exactly one configuration.
-    embed_provider, model_name, mock_dim, collection, distance = _load_embed_config(
-        pipeline_id
-    )
+    (
+        embed_provider,
+        model_name,
+        mock_dim,
+        base_url,
+        api_key,
+        collection,
+        distance,
+    ) = _load_embed_config(pipeline_id)
 
     model, model_size = get_model_and_size(
         provider=embed_provider,
         model=model_name,
         mock_dim=mock_dim,
+        base_url=base_url,
+        api_key=api_key,
     )
 
     target = sql_store.crawl_targets.get_by_document_id(uuid.UUID(document_id))

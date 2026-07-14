@@ -39,7 +39,14 @@ interface PipelineRunOut {
       settings?: Record<string, SettingValue>;
     };
     vector_store?: { collection?: string; similarity?: string };
-    embed_chunks?: { provider?: { id?: string; model_name?: string; model?: string } };
+    embed_chunks?: {
+      provider?: {
+        id?: string;
+        model_name?: string;
+        model?: string;
+        config?: { model_name?: string };
+      };
+    };
     // Plugin-backed actors: their settings are stored verbatim under the
     // strategy's snake_case field keys and read back into the form under the
     // same keys (the form renders those keys directly from GET /actor-configs).
@@ -48,7 +55,6 @@ interface PipelineRunOut {
       verify_tls?: boolean;
       timeout_seconds?: number;
       allowed_content_types?: string;
-      file_glob?: string;
     };
     parse_source?: { parser?: string };
     filter_documents?: { enabled?: boolean; keywords?: string };
@@ -140,7 +146,8 @@ function toPipeline(run: PipelineRunOut): IngestionPipeline {
     actorSettings,
     status: run.status,
     collection: vector.collection ?? "",
-    embedModel: provider.model_name ?? provider.model ?? "",
+    embedModel:
+      provider.config?.model_name ?? provider.model_name ?? provider.model ?? "",
     createdAt: run.createdAt,
   };
 }

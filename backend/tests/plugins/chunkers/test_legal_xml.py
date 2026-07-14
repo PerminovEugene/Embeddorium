@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from backend.shared.parsers.legal_xml import LegalXmlReader
+from backend.plugins.chunkers.legal_xml.reader import LegalXmlReader
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent.parent / "parsers" / "fixtures"
 PORTS = (FIXTURES / "ports_act_sample.xml").read_text(encoding="utf-8")
 LAND_TAX = (FIXTURES / "sample_act.xml").read_text(encoding="utf-8")
 

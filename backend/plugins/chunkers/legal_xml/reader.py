@@ -23,7 +23,7 @@ The parser walks the tree recursively, snapshotting the structural path at each
 so publication/RT references never bleed into the searchable legal text.
 
 This module produces a typed tree only. Turning the tree into chunks is the job
-of :mod:`backend.shared.parsers.legal_chunker`.
+of :mod:`backend.plugins.chunkers.legal_xml.chunker`.
 """
 
 from __future__ import annotations
@@ -321,9 +321,7 @@ def _subtree_content_text(elem: ElementTree.Element) -> str:
 
 def _build_subsection(elem: ElementTree.Element, index: int) -> Subsection:
     clauses = [
-        _build_clause(child)
-        for child in elem
-        if _strip_ns(child.tag) == TAG_CLAUSE
+        _build_clause(child) for child in elem if _strip_ns(child.tag) == TAG_CLAUSE
     ]
     return Subsection(
         number=_direct_child_text(elem, "loigeNr"),
@@ -363,7 +361,9 @@ def _legal_path_str(path: StructuralPath, title: str) -> str:
 class LegalXmlReader:
     """Parses Estonian act XML into a :class:`LegalDocument` tree."""
 
-    def parse(self, content: str, source_url: str = "", language: str = "en") -> Optional[LegalDocument]:
+    def parse(
+        self, content: str, source_url: str = "", language: str = "en"
+    ) -> Optional[LegalDocument]:
         try:
             root = ElementTree.fromstring(content)
         except ElementTree.ParseError:
@@ -453,7 +453,8 @@ class LegalXmlReader:
         new_path = path
         if tag == TAG_PART:
             new_path = path.with_part(
-                _direct_child_text(elem, "osaNr"), _direct_child_text(elem, "osaPealkiri")
+                _direct_child_text(elem, "osaNr"),
+                _direct_child_text(elem, "osaPealkiri"),
             )
             in_body = True
         elif tag == TAG_CHAPTER:

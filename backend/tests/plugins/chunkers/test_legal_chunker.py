@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
-from backend.shared.parsers.legal_chunker import (
+from backend.plugins.chunkers.legal_xml.chunker import (
     CHUNK_ACT_TITLE,
     CHUNK_AMENDMENT_HISTORY,
     CHUNK_LEGAL_BODY,
@@ -14,9 +12,9 @@ from backend.shared.parsers.legal_chunker import (
     build_report,
     format_for_inspection,
 )
-from backend.shared.parsers.legal_xml import LegalXmlReader
+from backend.plugins.chunkers.legal_xml.reader import LegalXmlReader
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent.parent / "parsers" / "fixtures"
 PORTS = (FIXTURES / "ports_act_sample.xml").read_text(encoding="utf-8")
 
 
@@ -34,6 +32,7 @@ def _body(chunks):
 
 # -- requirement #2: no title-only chunks in legal_body ----------------------
 
+
 def test_no_title_only_legal_body_chunks():
     chunks = _chunk()
     for c in _body(chunks):
@@ -43,6 +42,7 @@ def test_no_title_only_legal_body_chunks():
 
 
 # -- requirement #8: separate chunk types ------------------------------------
+
 
 def test_separate_chunk_types_emitted():
     types = {c.chunk_type for c in _chunk()}
@@ -61,15 +61,19 @@ def test_act_title_is_its_own_chunk_not_searchable_body():
 
 # -- requirement: one normal § -> one chunk ----------------------------------
 
+
 def test_one_normal_section_becomes_one_chunk():
     # Default limits are generous: § 4 fits in a single chunk.
     body = _body(_chunk(LegalChunkConfig()))
     s4 = [c for c in body if c.metadata.get("sectionNumber") == "4"]
     assert len(s4) == 1
-    assert "subsectionRange" not in s4[0].metadata or not s4[0].metadata["subsectionRange"]
+    assert (
+        "subsectionRange" not in s4[0].metadata or not s4[0].metadata["subsectionRange"]
+    )
 
 
 # -- requirement #4: long § split by subsection ranges -----------------------
+
 
 def test_long_section_split_by_subsection_ranges():
     cfg = LegalChunkConfig(target_tokens=70, max_tokens=200, min_tokens=20)
@@ -92,6 +96,7 @@ def test_split_chunks_do_not_exceed_max_tokens():
 
 # -- requirement #5: heading context preserved in every chunk ----------------
 
+
 def test_every_legal_body_chunk_repeats_heading_context():
     for c in _body(_chunk()):
         assert c.text.startswith("Act: Ports Act")
@@ -105,6 +110,7 @@ def test_chapter_title_present_in_chunk_for_chapter_two_sections():
 
 
 # -- requirement #6/#8: amendment/publication metadata not in legal_body -----
+
 
 def test_legal_body_does_not_contain_publication_metadata():
     for c in _body(_chunk()):
@@ -124,10 +130,17 @@ def test_amendment_history_chunk_does_contain_references():
 
 # -- requirement #7: chunk metadata fields -----------------------------------
 
+
 def test_chunk_metadata_has_required_fields():
     body = _body(_chunk())
     s4 = next(c for c in body if c.metadata.get("sectionNumber") == "4")
-    for key in ("actTitle", "chapterTitle", "sectionNumber", "sectionTitle", "legalPath"):
+    for key in (
+        "actTitle",
+        "chapterTitle",
+        "sectionNumber",
+        "sectionTitle",
+        "legalPath",
+    ):
         assert key in s4.metadata
     assert s4.metadata["actTitle"] == "Ports Act"
     assert s4.metadata["chunkIndex"] == body.index(s4) if s4 in body else True
@@ -141,13 +154,11 @@ def test_chunk_index_is_sequential_and_unique():
 
 # -- requirement #6: chunks do not cross chapters ----------------------------
 
+
 def test_no_chunk_spans_multiple_chapters():
     for c in _body(_chunk()):
         # General provisions vs Water traffic safety must never co-occur.
-        assert not (
-            "General provisions" in c.text
-            and "Water traffic safety" in c.text
-        )
+        assert not ("General provisions" in c.text and "Water traffic safety" in c.text)
         assert "," not in str(c.metadata.get("chapterNumber", ""))
 
 
@@ -164,6 +175,7 @@ def test_merge_only_joins_same_chapter_short_sections():
 
 # -- requirement #6: a normal § chunk contains only its own section ----------
 
+
 def test_normal_section_chunk_contains_single_section():
     body = _body(_chunk())
     s4 = next(c for c in body if c.metadata.get("sectionNumber") == "4")
@@ -172,6 +184,7 @@ def test_normal_section_chunk_contains_single_section():
 
 
 # -- requirement #11/#12: report + inspection helpers ------------------------
+
 
 def test_build_report_flags_no_problems_on_default_config():
     chunks = _chunk()

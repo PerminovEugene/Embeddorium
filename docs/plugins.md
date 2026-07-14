@@ -325,6 +325,34 @@ a good template):
 4. **Expose it** — add the actor + its `list_*_configs` to the `_ACTOR_LISTERS`
    table in `backend/server/actor_configs/router.py` so the UI can see it.
 
+## Provider-type adapters
+
+Model providers use the same discovery and field metadata, but live under
+`backend/plugins/provider_types/` because they are shared by pipeline actors,
+compare, and search rather than belonging to one actor. A persisted provider is
+a generic `{provider_type, model_type, config}` record. Type-specific values
+such as `model_name`, `url`, `port`, `api_key`, or `mock_dim` live in the JSONB
+`config` field.
+
+Each adapter declares:
+
+- `name`: stable value stored in `Provider.provider_type`;
+- `type`: `builtin` for in-process runtimes or `remote` for HTTP APIs;
+- `supported_model_types`: capabilities such as `embedding`, `text`, or
+  `cross-encoder`;
+- `fields`: the settings schema rendered by the provider form;
+- `resolve()`: connection/client settings used by embedding consumers.
+
+`GET /providers/configs` exposes all discovered adapters. The UI builds its
+provider-type selector, model-type selector, defaults, and type-specific fields
+from this response, so adding an adapter requires no frontend edit.
+
+To add one, create a module such as
+`backend/plugins/provider_types/acme.py`, subclass `ProviderTypeAdapter`, set a
+`ProviderTypeConfig`, and implement `resolve()`. Restart the server and workers;
+discovery makes it available automatically. Keep SDK imports inside the shared
+client implementation rather than at adapter module import time.
+
 ## Pros and cons
 
 **Pros**

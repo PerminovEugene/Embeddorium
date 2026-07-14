@@ -38,8 +38,7 @@ from backend.shared.models import (
     OutboxEvent,
     ParseSourceSettings,
 )
-from backend.shared.parsers.registry import PARSER_VERSION
-from backend.shared.parsers.text_splitter import CHUNKER_VERSION
+from backend.plugins.chunkers.chunking_config import CHUNKER_VERSION, PARSER_VERSION
 from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
 from backend.shared.pipeline.source_files import read_source_file, write_source_file

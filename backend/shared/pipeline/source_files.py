@@ -2,8 +2,12 @@
 per-pipeline-run directory instead.
 
 Each pipeline run already owns a directory at
-``{PIPELINE_RUNS_DIR}/{pipeline_id}/`` — logs go under ``logs/``, source
-artifacts under ``sources/``.  Storing text in files rather than DB columns:
+``{PIPELINE_RUNS_DIR}/{run-folder}/`` — logs go under ``logs/``, source
+artifacts under ``sources/``.  ``{run-folder}`` is ``{pipeline_id}`` optionally
+suffixed with the run's slugified name (``{pipeline_id}__{name}``; see
+:func:`backend.shared.log_routing.run_folder_name`), so a run's whole tree is
+identifiable by name rather than a bare UUID.  Storing text in files rather
+than DB columns:
 
 - Avoids bloating the DB with multi-megabyte blobs (raw XML can be several MB
   per document; parsed text is smaller but still non-trivial).
@@ -22,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.shared.config import PIPELINE_RUNS_DIR as _PIPELINE_RUNS_DIR_STR
+from backend.shared.log_routing import run_folder_name
 
 # Module-level variable so tests can monkeypatch it:
 #   monkeypatch.setattr(backend.shared.pipeline.source_files, "PIPELINE_RUNS_DIR", tmp_path)
@@ -44,7 +49,13 @@ def write_source_file(
 
     The on-disk layout is::
 
-        {PIPELINE_RUNS_DIR}/{pipeline_id}/sources/{source_id}/{kind}/content.{ext}
+        {PIPELINE_RUNS_DIR}/{run-folder}/sources/{source_id}/{kind}/content.{ext}
+
+    where ``{run-folder}`` is the run's named folder (``{pipeline_id}`` or
+    ``{pipeline_id}__{name}``; see
+    :func:`backend.shared.log_routing.run_folder_name`).  The returned relative
+    path is captured at write time and stored verbatim, so it keeps resolving
+    even if the folder-name mapping is unavailable later (e.g. on delete).
 
     Args:
         pipeline_id: The pipeline run ID, or ``None`` for legacy no-run crawls
@@ -60,7 +71,7 @@ def write_source_file(
         Relative path string suitable for storage in the DB, e.g.
         ``"{pipeline_id}/sources/{source_id}/raw/content.xml"``.
     """
-    bucket = pipeline_id if pipeline_id else _NO_RUN
+    bucket = run_folder_name(pipeline_id) if pipeline_id else _NO_RUN
     rel_path = f"{bucket}/sources/{source_id}/{kind}/content.{extension}"
     abs_path = PIPELINE_RUNS_DIR / rel_path
     abs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,16 +120,22 @@ def extension_for_content_type(content_type: Optional[str]) -> str:
 def run_dir(pipeline_id: str) -> Path:
     """Return the absolute path to a run's root directory.
 
-    Both ``logs/`` and ``sources/`` subdirectories live here.
+    Both ``logs/`` and ``sources/`` subdirectories live here. Uses the run's
+    named folder when known (``{pipeline_id}__{name}``), else the bare
+    ``{pipeline_id}``.
     """
-    return PIPELINE_RUNS_DIR / pipeline_id
+    return PIPELINE_RUNS_DIR / run_folder_name(pipeline_id)
 
 
 def delete_run_files(pipeline_id: str) -> None:
     """Delete all on-disk artefacts for a pipeline run (logs + sources).
 
-    Uses ``ignore_errors=True`` so the call is safe when the directory does not
-    exist (e.g. the run was created but never launched, or files were already
-    cleaned up).
+    The run folder may be named ``{pipeline_id}__{name}``, and the caller (the
+    API server) does not resolve run names, so every ``{pipeline_id}*`` sibling
+    is removed — this also sweeps up any bare-UUID folder left by a process that
+    never registered the name. ``ignore_errors=True`` keeps the call safe when a
+    directory does not exist (run created but never launched, or already
+    cleaned).
     """
-    shutil.rmtree(run_dir(pipeline_id), ignore_errors=True)
+    for path in PIPELINE_RUNS_DIR.glob(f"{pipeline_id}*"):
+        shutil.rmtree(path, ignore_errors=True)

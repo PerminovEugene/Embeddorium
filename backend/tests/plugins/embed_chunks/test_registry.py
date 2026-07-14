@@ -60,6 +60,32 @@ def test_mock_snapshot_resolves_to_mock_provider_with_dim():
     assert resolved.mock_dim == 8
 
 
+def test_fastembed_snapshot_resolves_to_fastembed_provider():
+    strategy = build_embed_strategy(
+        DEFAULT_EMBED_STRATEGY,
+        {
+            "provider": {
+                "provider_type": "fastembed",
+                "model_name": "BAAI/bge-small-en-v1.5",
+            }
+        },
+    )
+    resolved = strategy.resolve()
+    assert resolved.provider == "fastembed"
+    assert resolved.model == "BAAI/bge-small-en-v1.5"
+    assert resolved.mock_dim is None
+
+
+def test_fastembed_snapshot_without_model_uses_default():
+    strategy = build_embed_strategy(
+        DEFAULT_EMBED_STRATEGY,
+        {"provider": {"provider_type": "fastembed"}},
+    )
+    resolved = strategy.resolve()
+    assert resolved.provider == "fastembed"
+    assert resolved.model == "BAAI/bge-small-en-v1.5"
+
+
 def test_remote_or_unknown_snapshot_resolves_to_huggingface():
     strategy = build_embed_strategy(
         DEFAULT_EMBED_STRATEGY,

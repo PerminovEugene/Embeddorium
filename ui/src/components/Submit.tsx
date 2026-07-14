@@ -43,6 +43,18 @@ const SubmitButton = () => {
 
     const processedSourceInputs = buildProcessedSourceInputs();
 
+    // Cross-encoder reranking is hybrid-only and opt-in; only send its fields
+    // when both apply so non-hybrid searches keep a clean configuration and the
+    // backend never sees stray reranker params.
+    const rerankerConfig =
+      state.searchMethod === "hybrid" && state.useReranking
+        ? {
+            useReranking: true,
+            rerankerProviderId: state.rerankerProviderId,
+            rerankerTopK: Number(state.rerankerTopK),
+          }
+        : {};
+
     const data = {
       configuration: {
         // The run supplies the collection + embedding model server-side.
@@ -54,6 +66,8 @@ const SubmitButton = () => {
         searchMethod: state.searchMethod,
         // Whether to persist this launch to the search history.
         saveResults: state.saveResults,
+        // Optional cross-encoder reranking (hybrid only).
+        ...rerankerConfig,
       },
       source: { inputs: processedSourceInputs },
     };

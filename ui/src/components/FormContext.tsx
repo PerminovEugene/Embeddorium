@@ -32,6 +32,14 @@ export interface FormState {
   // history (and thus appear on the comparison page).
   saveResults: boolean;
 
+  // DB-search mode, hybrid only: optional cross-encoder reranking of the fused
+  // RRF pool. When enabled, the query needs a cross-encoder provider and a
+  // rerankerTopK cut-off; the backend ignores these unless searchMethod is
+  // "hybrid".
+  useReranking: boolean;
+  rerankerProviderId: string | null;
+  rerankerTopK: string;
+
   // Source mode: "manual" compares user inputs against user candidates;
   // "db" searches the collection of the selected pipeline run for each source
   // input (the run also supplies the embedding model used for the query).
@@ -88,6 +96,9 @@ interface FormContextType {
   changeTopK: (value: string) => void;
   setSearchMethod: (method: SearchMethod) => void;
   setSaveResults: (save: boolean) => void;
+  setUseReranking: (use: boolean) => void;
+  setRerankerProviderId: (id: string | null) => void;
+  setRerankerTopK: (value: string) => void;
 
   setSourceType: (sourceType: SourceType) => void;
   setSelectedRun: (run: PipelineRun | null) => void;
@@ -146,6 +157,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     topK: "10",
     searchMethod: "semantic",
     saveResults: true,
+    useReranking: false,
+    rerankerProviderId: null,
+    rerankerTopK: "10",
     sourceType: "manual",
     selectedRun: null,
     selectedProvider: null,
@@ -161,7 +175,14 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         const parsed = JSON.parse(stored) as Partial<FormState>;
         // Merge over defaults so state persisted before newer fields existed
         // (e.g. dbMatches/sourceType) is still hydrated with valid values.
-        const merged = { ...defaults, ...parsed };
+        const merged = {
+          ...defaults,
+          ...parsed,
+          // Results belong only to the current page session. Explicitly clear
+          // arrays written by older UI versions instead of restoring them.
+          matches: [],
+          dbMatches: [],
+        };
         // Drop persisted similarity metrics that are no longer supported (e.g.
         // the removed normalized variants). Leaving them in would crash the
         // range selector (no metricConfig entry) and render empty table
@@ -198,9 +219,13 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
   const [state, setState] = useState<FormState>(getInitialState());
   const [loading, setLoading] = useState(false);
 
-  // 🔥 Save to localStorage on submit
+  // Preserve form inputs and preferences between visits, but never persist
+  // result data from compare or database-search requests.
   const saveFormToStorage = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...state, matches: [], dbMatches: [] })
+    );
   };
 
   const getKey = (
@@ -304,6 +329,27 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
     setState((prev) => ({
       ...prev,
       saveResults,
+    }));
+  };
+
+  const setUseReranking = (useReranking: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      useReranking,
+    }));
+  };
+
+  const setRerankerProviderId = (rerankerProviderId: string | null) => {
+    setState((prev) => ({
+      ...prev,
+      rerankerProviderId,
+    }));
+  };
+
+  const setRerankerTopK = (rerankerTopK: string) => {
+    setState((prev) => ({
+      ...prev,
+      rerankerTopK,
     }));
   };
 
@@ -430,6 +476,20 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
       const topK = Number(state.topK);
       if (state.topK.trim() === "" || !Number.isInteger(topK) || topK < 1)
         errors.push("Top K should be a positive whole number");
+      // Reranking is hybrid-only and opt-in; when enabled it needs a
+      // cross-encoder provider and an explicit positive cut-off (the backend
+      // has no default for rerankerTopK).
+      if (state.searchMethod === "hybrid" && state.useReranking) {
+        if (!state.rerankerProviderId)
+          errors.push("Please select a reranker provider");
+        const rerankerTopK = Number(state.rerankerTopK);
+        if (
+          state.rerankerTopK.trim() === "" ||
+          !Number.isInteger(rerankerTopK) ||
+          rerankerTopK < 1
+        )
+          errors.push("Reranker Top K should be a positive whole number");
+      }
     } else {
       // The provider supplies the embedding model (and its port), replacing the
       // old manual model-name + Ollama-port inputs.
@@ -476,6 +536,9 @@ export const FormProvider: React.FC<{ children: React.ReactNode }> = ({
         changeTopK,
         setSearchMethod,
         setSaveResults,
+        setUseReranking,
+        setRerankerProviderId,
+        setRerankerTopK,
 
         setSourceType,
         setSelectedRun,

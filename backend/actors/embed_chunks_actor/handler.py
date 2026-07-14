@@ -1,10 +1,11 @@
 """Stage 7 (terminal): embed a batch of chunks and upsert vectors into Qdrant.
 
 Pure logic — no broker/dramatiq concerns. The embedding model is loaded lazily
-on first use and cached as a module singleton. The ``mock`` and ``ollama``
-providers return/fetch vectors without importing torch/sentence-transformers,
-so this module stays import-light in containers that run those providers —
-only the ``huggingface`` (real local model) path pulls the heavy ML stack.
+on first use and cached as a module singleton. The ``mock``, ``ollama``, and
+``fastembed`` and ``openai`` providers return/fetch/compute vectors without importing
+torch/sentence-transformers, so this module stays import-light in containers
+that run those providers — only the ``huggingface`` (real local model) path
+pulls the heavy ML stack.
 
 Once a batch's vectors are upserted, in one transaction this: (1) flips those
 chunks' ``status`` to ``embedded``, (2) atomically finalizes the owning crawl
@@ -36,21 +37,26 @@ from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
 
 MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
+# FastEmbed's small, fast default model when a run omits an explicit model name.
+FASTEMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 BATCH_SIZE = 4
 
-# Providers that never need torch (no local model load).
-_NO_TORCH_PROVIDERS = frozenset({"mock", "ollama"})
+# Providers that never need torch (no local model load). FastEmbed runs a local
+# ONNX model via onnxruntime — no torch either.
+_NO_TORCH_PROVIDERS = frozenset({"mock", "ollama", "fastembed", "openai"})
 
 # Loaded embedding models, keyed by (provider, model) — a single worker can now
 # serve several runs/providers, so the cache is keyed instead of a lone
 # singleton. Populated lazily on first use, never at import time.
-_models: dict[tuple[str, str], tuple] = {}
+_models: dict[tuple[str, str, str | None, str | None], tuple] = {}
 
 
 def get_model_and_size(
     provider: str | None = None,
     model: str | None = None,
     mock_dim: int | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ):
     """Return ``(model, size)`` for *provider*/*model*, loading + caching once.
 
@@ -63,10 +69,12 @@ def get_model_and_size(
         model = model or config.OLLAMA_EMBED_MODEL
     elif provider == "mock":
         model = model or "mock"
+    elif provider == "fastembed":
+        model = model or FASTEMBED_MODEL_NAME
     else:
         model = model or MODEL_NAME
 
-    key = (provider, model)
+    key = (provider, model, base_url, api_key)
     if key not in _models:
         if provider == "mock":
             # No model load, no torch/sentence-transformers work — just random
@@ -80,7 +88,27 @@ def get_model_and_size(
 
             client = OllamaEmbedClient(
                 model=model,
-                base_url=config.OLLAMA_EMBED_BASE_URL,
+                base_url=base_url or config.OLLAMA_EMBED_BASE_URL,
+            )
+            _models[key] = (client, client.get_embedding_dimension())
+        elif provider == "fastembed":
+            # Deferred import: avoids pulling fastembed/onnxruntime when the
+            # provider is something else. FastEmbed runs a local ONNX model.
+            from backend.shared.clients.fastembed_embed_client import (
+                FastembedEmbedClient,
+            )
+
+            client = FastembedEmbedClient(model)
+            _models[key] = (client, client.get_embedding_dimension())
+        elif provider == "openai":
+            from backend.shared.clients.openai_embed_client import OpenAIEmbedClient
+
+            if not base_url:
+                raise ValueError("openai provider requires a base_url")
+            client = OpenAIEmbedClient(
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
             )
             _models[key] = (client, client.get_embedding_dimension())
         else:

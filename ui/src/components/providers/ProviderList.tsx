@@ -1,24 +1,19 @@
 import React from "react";
 import ScrollableList from "../common/ScrollableList";
-import { Provider } from "./types";
+import { Provider, ProviderTypeConfig } from "./types";
 
 interface ProviderListProps {
   providers: Provider[];
+  providerConfigs: ProviderTypeConfig[];
   selectedId: string | null;
   onSelect: (provider: Provider) => void;
   loading?: boolean;
 }
 
-// Human-readable label for the provider type chip.
-const PROVIDER_TYPE_LABELS: Record<Provider["providerType"], string> = {
-  ollama: "Local Ollama",
-  remote: "Remote",
-  mock: "Mock",
-};
-
 // Provider-specific binding of the generic ScrollableList.
 const ProviderList: React.FC<ProviderListProps> = ({
   providers,
+  providerConfigs,
   selectedId,
   onSelect,
   loading,
@@ -39,7 +34,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
         <div className="flex flex-col">
           <span className="font-medium">{p.name}</span>
           <span className="text-xs opacity-70 uppercase tracking-wide">
-            {PROVIDER_TYPE_LABELS[p.providerType]} · {p.modelType}
+            {providerConfigs.find((config) => config.name === p.providerType)?.label ??
+              p.providerType} · {p.modelType}
           </span>
         </div>
       )}

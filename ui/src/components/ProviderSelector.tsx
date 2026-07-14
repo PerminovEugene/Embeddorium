@@ -7,9 +7,8 @@ import { Provider } from "./providers/types";
 // One-line label for the dropdown: name plus the model it serves so the user
 // can tell providers backed by different models apart at a glance.
 const providerLabel = (p: Provider): string => {
-  if (p.providerType === "ollama") return `${p.name} · ollama (${p.modelName})`;
-  if (p.providerType === "remote") return `${p.name} · remote (${p.modelName})`;
-  return `${p.name} · mock`;
+  const model = p.config.model_name;
+  return `${p.name} · ${p.providerType}${model ? ` (${model})` : ""}`;
 };
 
 // Replaces the manual Ollama-port + model-name inputs in compare mode: the user

@@ -23,6 +23,7 @@ def _serialize(run: PipelineRun) -> dict:
     chunk_cfg = actor_cfg.get("chunk_document", {})
     # Provider snapshot lives in actor_configs.embed_chunks.provider.
     provider = actor_cfg.get("embed_chunks", {}).get("provider", {})
+    provider_config = provider.get("config", {})
     dataset = run.dataset
 
     return {
@@ -32,7 +33,11 @@ def _serialize(run: PipelineRun) -> dict:
         "datasetSourceType": dataset.get("source_type", ""),
         "collection": vector_store_cfg.get("collection", ""),
         "embedProvider": provider.get("provider_type", ""),
-        "embedModel": provider.get("model_name") or provider.get("model", ""),
+        "embedModel": (
+            provider_config.get("model_name")
+            or provider.get("model_name")
+            or provider.get("model", "")
+        ),
         "similarity": vector_store_cfg.get("similarity", ""),
         "chunkSize": chunk_cfg.get("chunk_size"),
         "chunkOverlap": chunk_cfg.get("chunk_overlap"),

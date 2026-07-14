@@ -11,11 +11,7 @@ function: ``ChunkInput -> list[Chunk]``.
 Link extraction in particular is *not* a chunker concern: the actor runs
 :class:`~backend.shared.parsers.link_extractor.LinkExtractor` over each
 returned chunk's text after the fact. That is why :class:`Chunk` here has no
-``links`` field, unlike the older
-:class:`backend.shared.parsers.text_splitter.Chunk` it superficially
-resembles — the two are intentionally kept separate (see that module's
-docstring) rather than unified, so the legacy ``TextSplitter``/
-``LegalXmlChunker`` stack and its existing tests are untouched.
+``links`` field — chunkers never populate links themselves.
 """
 
 from __future__ import annotations

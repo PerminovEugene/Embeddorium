@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import List
 
 from backend.plugins.chunkers.base import ChunkerField
-from backend.shared.parsers.chunking_config import CHUNK_OVERLAP, CHUNK_SIZE
+from backend.plugins.chunkers.chunking_config import CHUNK_OVERLAP, CHUNK_SIZE
 
 
 def size_overlap_fields(

@@ -2,8 +2,8 @@
 
 Usage::
 
-    python -m backend.shared.parsers.legal_inspect path/to/act.xml
-    python -m backend.shared.parsers.legal_inspect path/to/act.xml --preview 500
+    python -m backend.plugins.chunkers.legal_xml.inspect path/to/act.xml
+    python -m backend.plugins.chunkers.legal_xml.inspect path/to/act.xml --preview 500
 
 Prints, for one XML file: a validation report (counts, token stats, warnings)
 followed by every chunk's index, type, token count, legal path and a text
@@ -15,13 +15,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from backend.shared.parsers.legal_chunker import (
+from backend.plugins.chunkers.legal_xml.chunker import (
     LegalChunkConfig,
     LegalChunker,
     build_report,
     format_for_inspection,
 )
-from backend.shared.parsers.legal_xml import LegalXmlReader
+from backend.plugins.chunkers.legal_xml.reader import LegalXmlReader
 
 
 def inspect_file(path: str, *, preview: int = 300) -> int:
@@ -72,7 +72,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Inspect legal XML chunking")
     parser.add_argument("path", help="Path to a Juurakt legal-act XML file")
     parser.add_argument(
-        "--preview", type=int, default=300, help="Characters of text to preview per chunk"
+        "--preview",
+        type=int,
+        default=300,
+        help="Characters of text to preview per chunk",
     )
     args = parser.parse_args(argv)
     return inspect_file(args.path, preview=args.preview)
