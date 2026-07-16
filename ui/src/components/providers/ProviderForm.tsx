@@ -28,12 +28,22 @@ const MODEL_TYPE_LABELS: Record<ModelType, string> = {
   "cross-encoder": "Cross encoder",
 };
 
-const defaultsFor = (config: ProviderTypeConfig): ProviderFormValues => ({
-  name: "",
-  providerType: config.name,
-  modelType: config.supportedModelTypes[0] ?? "embedding",
-  config: Object.fromEntries(config.fields.map((field) => [field.key, field.default])),
-});
+const fieldsFor = (config: ProviderTypeConfig, modelType: ModelType) => [
+  ...config.fields,
+  ...(config.modelTypes.find((item) => item.modelType === modelType)?.fields ?? []),
+];
+
+const defaultsFor = (config: ProviderTypeConfig): ProviderFormValues => {
+  const modelType = config.supportedModelTypes[0] ?? "embedding";
+  return {
+    name: "",
+    providerType: config.name,
+    modelType,
+    config: Object.fromEntries(
+      fieldsFor(config, modelType).map((field) => [field.key, field.default]),
+    ),
+  };
+};
 
 const valuesFor = (
   provider: Provider | null,
@@ -47,7 +57,12 @@ const valuesFor = (
       modelType: provider.modelType,
       config: {
         ...Object.fromEntries(
-          (providerConfig?.fields ?? []).map((field) => [field.key, field.default]),
+          providerConfig
+            ? fieldsFor(providerConfig, provider.modelType).map((field) => [
+                field.key,
+                field.default,
+              ])
+            : [],
         ),
         ...provider.config,
       },
@@ -80,6 +95,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     [providerConfigs, values.providerType],
   );
   const isReadOnly = provider !== null;
+  const selectedFields = useMemo(
+    () => (selectedConfig ? fieldsFor(selectedConfig, values.modelType) : []),
+    [selectedConfig, values.modelType],
+  );
 
   const setConfigValue = (key: string, value: ProviderConfigValue) => {
     setValues((current) => ({
@@ -105,7 +124,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     const nextErrors: Record<string, string> = {};
     if (!values.name.trim()) nextErrors.name = "Name is required";
-    for (const field of selectedConfig.fields) {
+    for (const field of selectedFields) {
       const value = values.config[field.key];
       if (field.required && (value === null || value === "")) {
         nextErrors[field.key] = `${field.label} is required`;
@@ -169,18 +188,31 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             id="modelType"
             options={modelTypeOptions}
             value={values.modelType}
-            onChange={(event) =>
+            onChange={(event) => {
+              const modelType = event.target.value as ModelType;
               setValues((current) => ({
                 ...current,
-                modelType: event.target.value as ModelType,
-              }))
-            }
+                modelType,
+                config: {
+                  ...current.config,
+                  ...Object.fromEntries(
+                    (selectedConfig ? fieldsFor(selectedConfig, modelType) : []).map(
+                      (field) => [
+                        field.key,
+                        current.config[field.key] ?? field.default,
+                      ],
+                    ),
+                  ),
+                },
+              }));
+              setErrors({});
+            }}
           />
         </Field>
 
-        {selectedConfig && selectedConfig.fields.length > 0 ? (
+        {selectedConfig && selectedFields.length > 0 ? (
           <div className="flex flex-col gap-4 pl-6 border-l-2 border-emd-border">
-            {selectedConfig.fields.map((field) => (
+            {selectedFields.map((field) => (
               <ConfigControl
                 key={field.key}
                 field={field}

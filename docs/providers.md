@@ -15,16 +15,16 @@ Provider { provider_type, model_type, config }
 ```
 
 - **`provider_type`** — the runtime/API you talk to (`mock`, `ollama`,
-  `openai`). It owns the *connection*: the `url` / `port` / `api_key` shared by
+  `openai`). It owns the _connection_: the `url` / `port` / `api_key` shared by
   every model that backend serves. Each provider type is an adapter under
   `backend/plugins/provider_types/<name>/`.
-- **`model_type`** — the *capability* the model serves (`embedding`,
+- **`model_type`** — the _capability_ the model serves (`embedding`,
   `cross-encoder`). It owns the capability-specific settings (`model_name`,
   `mock_dim`, `rerank_path`).
 - **`config`** — one JSONB blob validated against the **union** of the provider
   type's connection fields and the selected model type's fields.
 
-This two-level shape means a cross-encoder reranker is a *model type* offered
+This two-level shape means a cross-encoder reranker is a _model type_ offered
 under a provider (e.g. `ollama`), not a provider type of its own, and adding a
 new backend is a new adapter folder — no change to the `Provider` model. See
 `backend/plugins/provider_types/base.py` for the adapter interfaces.
@@ -49,11 +49,11 @@ container stays light — no `torch` / `onnxruntime` / `sentence-transformers`.
 
 ## Provider types
 
-| Provider type | Where it runs | Connection fields | Capabilities (model types) |
-| ------------- | ------------- | ----------------- | -------------------------- |
-| `mock` | in-process (`builtin`) | none | `embedding` |
-| `ollama` | remote HTTP (`remote`) | `url`, `port` (no key) | `embedding`, `cross-encoder` |
-| `openai` | remote HTTP (`remote`) | `url`, `port`, `api_key` | `embedding` |
+| Provider type | Where it runs          | Connection fields        | Capabilities (model types)   |
+| ------------- | ---------------------- | ------------------------ | ---------------------------- |
+| `mock`        | in-process (`builtin`) | none                     | `embedding`                  |
+| `ollama`      | remote HTTP (`remote`) | `url`, `port` (no key)   | `embedding`, `cross-encoder` |
+| `openai`      | remote HTTP (`remote`) | `url`, `port`, `api_key` | `embedding`                  |
 
 Field defaults come from the adapter (and, for a few, env vars) and are filled in
 when you leave a form field blank.
@@ -94,7 +94,7 @@ ollama pull qwen3-embedding
 - **`embedding` field:** `model_name` (default `OLLAMA_EMBED_MODEL`, e.g.
   `qwen3-embedding`).
 - **`cross-encoder` fields** (reranker for hybrid search): `model_name` (default
-  `BAAI/bge-reranker-v2-m3`) and `rerank_path` — the rerank endpoint path, which
+  `qllama/bge-reranker-v2-m3:latest`) and `rerank_path` — the rerank endpoint path, which
   differs by server (vLLM `v1/rerank`, Infinity `rerank`; default from
   `RERANKER_PATH`). The reranker is a networked service (vLLM / Infinity / TEI /
   Cohere-style), pointed at by the provider's `url`/`port`.

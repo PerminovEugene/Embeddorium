@@ -30,7 +30,7 @@ from backend.plugins.provider_types.base import (
 
 # A common reranker model tag; the default when a config omits a model name. The
 # user serves their own on the rerank host, so this is only a hint/placeholder.
-_CROSS_ENCODER_DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
+_CROSS_ENCODER_DEFAULT_MODEL = "qllama/bge-reranker-v2-m3:latest"
 
 # Rerank endpoint path relative to the server URL. Servers disagree — vLLM serves
 # the OpenAI-compatible ``v1/rerank``, Infinity serves ``rerank`` — so it is a

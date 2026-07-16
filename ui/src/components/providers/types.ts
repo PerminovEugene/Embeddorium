@@ -37,6 +37,11 @@ export interface ProviderTypeConfig {
   type: "builtin" | "remote";
   supportedModelTypes: ModelType[];
   fields: ProviderConfigField[];
+  modelTypes: {
+    modelType: ModelType;
+    label: string;
+    fields: ProviderConfigField[];
+  }[];
 }
 
 export interface ProviderFormValues {
