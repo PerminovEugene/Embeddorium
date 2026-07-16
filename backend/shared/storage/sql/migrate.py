@@ -13,18 +13,42 @@ already-applied schema objects.
 from __future__ import annotations
 
 import logging
+import time
+
+from sqlalchemy.exc import OperationalError
 
 from backend.shared.logging_config import configure_logging
 from backend.shared.storage.sql.sql_store import SqlStore
 
 logger = logging.getLogger(__name__)
 
+_MAX_DATABASE_ATTEMPTS = 60
+_DATABASE_RETRY_DELAY_SECONDS = 1.0
+
+
+def run_when_database_ready() -> list[str]:
+    """Run migrations, retrying while PostgreSQL is still starting."""
+    for attempt in range(1, _MAX_DATABASE_ATTEMPTS + 1):
+        try:
+            with SqlStore() as store:
+                return store.run_migrations()
+        except OperationalError:
+            if attempt == _MAX_DATABASE_ATTEMPTS:
+                raise
+            logger.info(
+                "database not ready; retrying migration attempt=%d/%d",
+                attempt,
+                _MAX_DATABASE_ATTEMPTS,
+            )
+            time.sleep(_DATABASE_RETRY_DELAY_SECONDS)
+
+    raise RuntimeError("unreachable")
+
 
 def main() -> None:
     configure_logging()
-    with SqlStore() as store:
-        applied = store.run_migrations()
-        logger.info("migrations applied count=%d files=%s", len(applied), applied)
+    applied = run_when_database_ready()
+    logger.info("migrations applied count=%d files=%s", len(applied), applied)
 
 
 if __name__ == "__main__":

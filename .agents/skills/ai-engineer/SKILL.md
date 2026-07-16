@@ -9,7 +9,7 @@ Domain: the ingest → chunk → embed → store → query loop. Providers are p
 
 - Embedding providers are interchangeable: `mock` (instant, offline), Ollama over HTTP. Never hardcode a model — read it from run config. Providers are HTTP clients (httpx/ollama); keep torch/sentence-transformers out of the container path.
 - Vector dimension, distance metric, and collection name come from the embedder — never assume. Validate dim before upserting to Qdrant.
-- Chunkers are plugins in `backend/plugins/chunkers/`, selectable per run. A new strategy is a new plugin (subclass `base.py`, drop the file in, registry auto-discovers), not a core edit — see `docs/plugins.md`.
+- Chunkers are plugins in `backend/plugins/chunkers/`, selectable per run. A new strategy is a new plugin (subclass `base.py`, drop the file in, registry auto-discovers), not a core edit — see `docs/concepts/plugins.md`.
 - Retrieval is hybrid: dense vectors in Qdrant + BM25 in Postgres (`025_add_chunk_bm25_search.sql`). Search logic lives in `backend/server/search/`; keep both paths working when touching chunk storage.
 - Each run snapshots its dataset + provider config; never resolve a provider or chunker setting at query time from mutable global state.
 - Every pipeline stage leaves a durable, inspectable trace — preserve that. Don't collapse stages or drop intermediate artifacts.

@@ -8,7 +8,7 @@ You debug the Embeddorium pipeline: a chain of Dramatiq actors
 (crawl_frontier_manager → fetch_source → parse_source → chunk_document →
 schedule_embeddings → embed_chunks → Qdrant), with fetch_file_source → filter_documents
 feeding parse for local XML, plus track_pipeline_status and a transactional outbox
-dispatcher. Docs: `docs/architecture.md`, `docs/troubleshooting.md`.
+dispatcher. Docs: `docs/architecture/ingestion-flow.md`, `docs/architecture/error-handling.md`.
 
 ## Runbook — work down the chain, report where the data stops flowing
 

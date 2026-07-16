@@ -41,12 +41,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -82,7 +76,7 @@ services:
       - .env.docker
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
 
   # Shared entry point of both ingestion chains: validates web URLs (origin
   # gate) and local files (exists/readable) via per-source-type strategy
@@ -381,7 +375,7 @@ services:
       qdrant:
         condition: service_started
       postgres:
-        condition: service_healthy
+        condition: service_started
       migrate:
         condition: service_completed_successfully
 

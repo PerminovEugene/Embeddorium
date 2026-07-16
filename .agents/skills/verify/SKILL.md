@@ -34,7 +34,7 @@ The mock provider makes this take seconds — no model server needed.
 4. Pipeline runs → start a run with that dataset + provider.
 5. **Success:** run reaches `completed`, and the collection appears at http://localhost:6333/dashboard with sane chunk/vector counts.
 
-If the run wedges, debug per `docs/troubleshooting.md` (or the `pipeline-debugger` agent); reset state between attempts with `scripts/full-clean.sh`.
+If the run wedges, inspect `docs/architecture/error-handling.md` and `docs/architecture/runtime-topology.md` (or use the `pipeline-debugger` agent); reset state between attempts with `scripts/full-clean.sh`.
 
 ## Report
 State plainly what was run and what was observed — actual statuses and counts, not "should work". If a check was skipped, say so.
