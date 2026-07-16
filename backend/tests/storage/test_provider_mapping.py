@@ -13,16 +13,16 @@ from backend.shared.storage.sql.models.provider import ProviderORM
 def test_to_provider_maps_jsonb_config() -> None:
     orm = ProviderORM(
         id=uuid.uuid4(),
-        name="fe",
-        provider_type="fastembed",
+        name="ol",
+        provider_type="ollama",
         model_type="embedding",
-        config={"model_name": "BAAI/bge-small-en-v1.5"},
+        config={"model_name": "nomic-embed-text"},
         created_at=datetime.now(UTC),
     )
 
     provider = _to_provider(orm)
 
     assert isinstance(provider, Provider)
-    assert provider.provider_type == "fastembed"
-    assert provider.config == {"model_name": "BAAI/bge-small-en-v1.5"}
+    assert provider.provider_type == "ollama"
+    assert provider.config == {"model_name": "nomic-embed-text"}
     assert provider.id == orm.id

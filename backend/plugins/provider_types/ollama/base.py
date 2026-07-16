@@ -1,9 +1,10 @@
-"""Ollama provider-type adapter: a local (or LAN) Ollama server over HTTP.
+"""Ollama provider type: a local (or LAN) Ollama server over HTTP.
 
-Networked but usually local: the ``url``/``port`` defaults point at a
-loopback Ollama and are env-sourced (``OLLAMA_URL`` / ``OLLAMA_PORT``) so a
-container or a different host can override them without editing this file. No
-API key — Ollama is unauthenticated.
+Networked but usually local: the ``url``/``port`` defaults point at a loopback
+Ollama and are env-sourced (``OLLAMA_URL`` / ``OLLAMA_PORT``) so a container or a
+different host can override them without editing this file. No API key — Ollama
+is unauthenticated. The model to run is a capability-specific setting, so it lives
+on the model-type handlers under ``model_types/``.
 """
 
 from __future__ import annotations
@@ -13,14 +14,13 @@ from urllib.parse import urlsplit, urlunsplit
 from backend.plugins.provider_types._remote import (
     build_base_url,
     env_default,
-    model_name_field,
     port_field,
     url_field,
 )
 from backend.plugins.provider_types.base import (
     ProviderTypeAdapter,
     ProviderTypeConfig,
-    ResolvedEmbedTarget,
+    ResolvedConnection,
 )
 from backend.shared import config
 
@@ -45,20 +45,17 @@ class OllamaProviderType(ProviderTypeAdapter):
         label="Ollama",
         description=(
             "A local or LAN Ollama server reached over HTTP. Pulls and runs "
-            "the named model; no API key required."
+            "the named model; no API key required. Serves embedding models and, "
+            "when pointed at a rerank server, cross-encoder reranking."
         ),
         type="remote",
-        supported_model_types=("embedding", "text", "long-text"),
         fields=[
             url_field(default=env_default("OLLAMA_URL", _OLLAMA_URL)),
             port_field(default=int(env_default("OLLAMA_PORT", str(_OLLAMA_PORT)))),
-            model_name_field(default=config.OLLAMA_EMBED_MODEL),
         ],
     )
 
-    def resolve(self) -> ResolvedEmbedTarget:
-        return ResolvedEmbedTarget(
-            provider="ollama",
-            model=self._get("model_name") or config.OLLAMA_EMBED_MODEL,
+    def resolve_connection(self) -> ResolvedConnection:
+        return ResolvedConnection(
             base_url=build_base_url(self._get("url"), self._get("port")),
         )

@@ -71,6 +71,7 @@ def hybrid_search(
                     "group": dataset_name,
                     "chunkText": None,
                     "sourceUrl": None,
+                    "metadata": {},
                 }
             )
             continue

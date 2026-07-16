@@ -29,7 +29,7 @@ The defaults in `.env` work as-is. Two env files are in play:
 - **`.env`** — read by Docker Compose for `${...}` interpolation in
   `docker-compose.yml` (Postgres/RabbitMQ credentials and host ports). Required
   even for a pure-Docker run; that's why you copy it first.
-- **`.env.docker`** — committed; loaded *inside* the worker/API containers
+- **`.env.docker`** — committed; loaded _inside_ the worker/API containers
   (hosts are Compose service names like `postgres`, `qdrant`, `rabbitmq`).
 
 Full variable reference: [configuration.md](configuration.md).
@@ -56,15 +56,15 @@ docker compose ps
 
 ## 3. Service URLs
 
-| Service | URL | Notes |
-| ------- | --- | ----- |
-| UI | http://localhost:5173 | Main app |
-| API + docs | http://localhost:8000/docs | Interactive OpenAPI docs |
-| Qdrant dashboard | http://localhost:6333/dashboard | Vector collections |
-| RabbitMQ management | http://localhost:15672 | Queues; login `laws_user` / `laws_pass` |
+| Service             | URL                             | Notes                                   |
+| ------------------- | ------------------------------- | --------------------------------------- |
+| UI                  | http://localhost:5173           | Main app                                |
+| API + docs          | http://localhost:8000/docs      | Interactive OpenAPI docs                |
+| Qdrant dashboard    | http://localhost:6333/dashboard | Vector collections                      |
+| RabbitMQ management | http://localhost:15672          | Queues; login `laws_user` / `laws_pass` |
 
 **Default credentials** (from `.env.example`, change for anything non-local):
-Postgres and RabbitMQ both use `laws_user` / `laws_pass`. The UI and API have no
+Postgres and RabbitMQ both use `embeddorium_user` / `embeddorium_pass`. The UI and API have no
 auth — they are meant for local use only.
 
 ## 4. First run with the mock provider
@@ -116,11 +116,11 @@ docker compose down -v
 
 ## Common startup failures
 
-| Symptom | Likely cause | Fix |
-| ------- | ------------ | --- |
-| `port is already allocated` | Another process on 5173/8000/6333/5432/5672 | Stop it, or change the host port in `docker-compose.yml` / `.env` |
-| Postgres container exits immediately | Empty `POSTGRES_*` — no `.env` | `cp .env.example .env`, then `docker compose up -d` |
-| Workers restart in a loop | They start before `migrate` / RabbitMQ is healthy | Usually self-heals (`restart: on-failure`); check `docker compose logs migrate` |
-| UI loads but shows no data / errors | API not reachable | Confirm `server` is up: `docker compose ps`, `docker compose logs server` |
+| Symptom                              | Likely cause                                      | Fix                                                                             |
+| ------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `port is already allocated`          | Another process on 5173/8000/6333/5432/5672       | Stop it, or change the host port in `docker-compose.yml` / `.env`               |
+| Postgres container exits immediately | Empty `POSTGRES_*` — no `.env`                    | `cp .env.example .env`, then `docker compose up -d`                             |
+| Workers restart in a loop            | They start before `migrate` / RabbitMQ is healthy | Usually self-heals (`restart: on-failure`); check `docker compose logs migrate` |
+| UI loads but shows no data / errors  | API not reachable                                 | Confirm `server` is up: `docker compose ps`, `docker compose logs server`       |
 
 More in [troubleshooting.md](troubleshooting.md).

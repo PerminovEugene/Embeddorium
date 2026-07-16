@@ -41,6 +41,10 @@ def _to_document(orm: DocumentORM, include_chunks: bool = False) -> Document:
         content_hash=orm.content_hash,
         text_hash=orm.text_hash,
         parser_version=orm.parser_version,
+        parser_name=orm.parser_name,
+        parser_output_format=orm.parser_output_format,
+        parser_metadata=dict(orm.parser_metadata or {}),
+        parser_intermediate=orm.parser_intermediate,
         chunker_version=orm.chunker_version,
         retrieved_at=orm.retrieved_at,
         text_path=orm.text_path,
@@ -129,9 +133,6 @@ def _to_dataset(orm: DatasetORM) -> Dataset:
             id=orm.id,
             name=orm.name,
             url=orm.url,
-            process_child_links=orm.process_child_links,
-            process_cross_domain_links=orm.process_cross_domain_links,
-            depth=orm.depth,
             created_at=orm.created_at,
         )
     if orm.source_type == "local":

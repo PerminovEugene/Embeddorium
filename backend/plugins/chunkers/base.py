@@ -21,6 +21,11 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Dict, List, Optional
 
 from backend.plugins._fields import FieldSpec
+from backend.plugins.structured_data import JsonObject, JsonValue
+
+RESERVED_METADATA_KEYS = frozenset(
+    {"chunk_id", "document_id", "dataset_id", "pipeline_run_id", "embedding_model"}
+)
 
 
 @dataclass
@@ -42,7 +47,7 @@ class Chunk:
 
     text: str
     chunk_type: str = "passage"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = field(default_factory=dict)
     start_offset: Optional[int] = None
     end_offset: Optional[int] = None
 
@@ -63,6 +68,10 @@ class ChunkInput:
     source_url: str = ""
     language: str = "en"
     content_type: Optional[str] = None
+    document_id: str = ""
+    document_metadata: JsonObject = field(default_factory=dict)
+    parser_intermediate: JsonValue = None
+    parser_output_format: str | None = None
 
 
 # A chunker field is just the shared plugin field descriptor. The alias is
@@ -89,6 +98,20 @@ class ChunkerConfig:
     description: str
     restrictions: str = ""
     fields: List[ChunkerField] = field(default_factory=list)
+    accepted_input_formats: tuple[str, ...] = ()
+
+
+def validate_parser_chunker_compatibility(
+    parser_format: str | None, chunker_config: ChunkerConfig
+) -> None:
+    accepted = chunker_config.accepted_input_formats
+    if not isinstance(accepted, (tuple, list)):
+        return
+    if accepted and parser_format not in accepted:
+        raise ValueError(
+            f"chunker {chunker_config.name!r} expects parser output format(s) "
+            f"{list(accepted)!r}, got {parser_format!r}"
+        )
 
 
 class Chunker(ABC):

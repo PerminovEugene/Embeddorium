@@ -16,7 +16,7 @@ Open the home page (http://localhost:5173) and switch the source mode to
    embedding model.
 2. If the run used the Ollama provider, set the **Ollama port** so the server
    can embed your query (the same networking rules as ingestion apply — see
-   [embeddings.md](embeddings.md)).
+   [providers.md](providers.md)).
 3. Enter one or more **query texts** and submit.
 
 Each query returns the top 10 nearest chunks with their similarity score,

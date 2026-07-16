@@ -40,8 +40,11 @@ and make a **Web** dataset:
 
 - **Name:** anything, e.g. `example-single-page`.
 - **URL:** a single page, e.g. `https://example.com`.
-- **Depth:** `0` — fetch just that page, follow no links.
-- Leave child / cross-domain link options off.
+
+A web dataset holds only a name and URL — link-following is a run setting, not a
+dataset field, and it defaults to a single page unless you turn on **process
+child links** when you launch the run (see the
+[web crawl tutorial](web_crawl.md#step-2--launch-the-run-and-set-the-crawl-scope)).
 
 Save. (Prefer local files instead of the web? See the
 [local XML import tutorial](local_xml_import.md).)
@@ -131,7 +134,7 @@ PROVIDER_ID=$(curl -s -X POST http://localhost:8000/providers \
 # 2. Create a single-page web dataset
 DATASET_ID=$(curl -s -X POST http://localhost:8000/datasets \
   -H 'Content-Type: application/json' \
-  -d '{"name":"example-single-page","sourceType":"web","url":"https://example.com","processChildLinks":false,"processCrossDomainLinks":false,"depth":0}' \
+  -d '{"name":"example-single-page","sourceType":"web","url":"https://example.com"}' \
   | python -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
 # 3. Start the run

@@ -6,9 +6,7 @@ from typing import Optional
 
 from sqlalchemy import (
     ARRAY,
-    Boolean,
     DateTime,
-    Integer,
     Text,
     text as sql_text,
 )
@@ -38,18 +36,9 @@ class DatasetORM(Base):
 
     # web
     url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    process_child_links: Mapped[Optional[bool]] = mapped_column(
-        Boolean, nullable=True
-    )
-    process_cross_domain_links: Mapped[Optional[bool]] = mapped_column(
-        Boolean, nullable=True
-    )
-    depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # local
-    paths: Mapped[Optional[list[str]]] = mapped_column(
-        ARRAY(Text), nullable=True
-    )
+    paths: Mapped[Optional[list[str]]] = mapped_column(ARRAY(Text), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

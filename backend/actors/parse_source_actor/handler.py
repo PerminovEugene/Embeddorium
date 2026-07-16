@@ -14,6 +14,7 @@ see ``backend/plugins/parse_source/base.py`` for the plugin interface and
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -43,6 +44,13 @@ from backend.shared.pipeline.actor_config import load_actor_configs
 from backend.shared.pipeline.hashing import sha256_hex
 from backend.shared.pipeline.source_files import read_source_file, write_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
+from backend.plugins.structured_data import (
+    normalize_parsed_document,
+    validate_json_size,
+)
+from backend.shared import config
+
+logger = logging.getLogger(__name__)
 
 
 def parse_source(
@@ -92,16 +100,41 @@ def parse_source(
     strategy = build_parse_strategy(DEFAULT_PARSE_STRATEGY, {"parser": settings.parser})
 
     raw = read_source_file(fetch.raw_content_path)
-    text = strategy.parse(
+    parsed_value = strategy.parse(
         raw=raw, content_type=fetch.content_type, final_url=fetch.final_url
     )
-    if text is None:
+    if parsed_value is None:
         store.crawl_targets.update_status(
             target_id=target_id,
             status=CrawlTargetStatus.SKIPPED_UNSUPPORTED,
             skip_reason=f"content_type={fetch.content_type}",
         )
         return
+    parsed = normalize_parsed_document(parsed_value)
+    text = parsed.text
+    metadata_size = validate_json_size(
+        parsed.metadata,
+        limit=config.PARSER_METADATA_MAX_BYTES,
+        kind="metadata",
+        plugin_name=parsed.parser_name or strategy.config.name,
+        source=fetch.final_url,
+    )
+    intermediate_size = validate_json_size(
+        parsed.intermediate,
+        limit=config.PARSER_INTERMEDIATE_MAX_BYTES,
+        kind="intermediate",
+        plugin_name=parsed.parser_name or strategy.config.name,
+        source=fetch.final_url,
+    )
+    logger.info(
+        "parser output validated",
+        extra={
+            "parser_name": parsed.parser_name or strategy.config.name,
+            "parser_output_format": parsed.output_format,
+            "parser_metadata_bytes": metadata_size,
+            "parser_intermediate_bytes": intermediate_size,
+        },
+    )
 
     text_path = write_source_file(
         pipeline_id=payload.pipeline_id,
@@ -122,6 +155,10 @@ def parse_source(
         content_hash=fetch.content_hash,
         text_hash=sha256_hex(text),
         parser_version=PARSER_VERSION,
+        parser_name=parsed.parser_name or strategy.config.name,
+        parser_output_format=parsed.output_format,
+        parser_metadata=dict(parsed.metadata),
+        parser_intermediate=parsed.intermediate,
         chunker_version=CHUNKER_VERSION,
         retrieved_at=fetch.fetched_at,
         text_path=text_path,

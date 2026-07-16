@@ -5,6 +5,9 @@ export interface MultiCheckboxOption {
   label: string;
   // Optional secondary line (e.g. a type chip).
   sublabel?: string;
+  // When true this single option can't be toggled (e.g. it conflicts with the
+  // current selection), regardless of the component-level `disabled`.
+  disabled?: boolean;
 }
 
 interface MultiCheckboxSelectProps {
@@ -37,33 +40,38 @@ const MultiCheckboxSelect: React.FC<MultiCheckboxSelectProps> = ({
 
   return (
     <ul className="flex flex-col gap-1 max-h-52 overflow-y-auto">
-      {options.map((opt) => (
-        <li key={opt.id}>
-          <label
-            className={`flex items-start gap-2 px-2 py-1 rounded-md text-sm text-emd-text transition-colors ${
-              disabled
-                ? "cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:bg-emd-accent/20"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={value.includes(opt.id)}
-              onChange={() => toggle(opt.id)}
-              disabled={disabled}
-              className="accent-emd-primary w-4 h-4 mt-0.5 disabled:cursor-not-allowed"
-            />
-            <span className="flex flex-col">
-              <span className="font-medium">{opt.label}</span>
-              {opt.sublabel && (
-                <span className="text-xs opacity-70 uppercase tracking-wide">
-                  {opt.sublabel}
-                </span>
-              )}
-            </span>
-          </label>
-        </li>
-      ))}
+      {options.map((opt) => {
+        // An option is locked either by the component-level `disabled` or by
+        // its own `disabled` flag.
+        const optDisabled = disabled || Boolean(opt.disabled);
+        return (
+          <li key={opt.id}>
+            <label
+              className={`flex items-start gap-2 px-2 py-1 rounded-md text-sm text-emd-text transition-colors ${
+                optDisabled
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer hover:bg-emd-accent/20"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={value.includes(opt.id)}
+                onChange={() => toggle(opt.id)}
+                disabled={optDisabled}
+                className="accent-emd-primary w-4 h-4 mt-0.5 disabled:cursor-not-allowed"
+              />
+              <span className="flex flex-col">
+                <span className="font-medium">{opt.label}</span>
+                {opt.sublabel && (
+                  <span className="text-xs opacity-70 uppercase tracking-wide">
+                    {opt.sublabel}
+                  </span>
+                )}
+              </span>
+            </label>
+          </li>
+        );
+      })}
     </ul>
   );
 };

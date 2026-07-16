@@ -22,11 +22,6 @@ class DatasetRepository:
                 name=dataset.name,
                 source_type=dataset.source_type,
                 url=getattr(dataset, "url", None),
-                process_child_links=getattr(dataset, "process_child_links", None),
-                process_cross_domain_links=getattr(
-                    dataset, "process_cross_domain_links", None
-                ),
-                depth=getattr(dataset, "depth", None),
                 paths=getattr(dataset, "paths", None),
             )
             session.add(orm)
@@ -42,9 +37,7 @@ class DatasetRepository:
     def list_recent(self, limit: int = 100) -> list[Dataset]:
         with Session(self.engine) as session:
             stmt = (
-                select(DatasetORM)
-                .order_by(DatasetORM.created_at.desc())
-                .limit(limit)
+                select(DatasetORM).order_by(DatasetORM.created_at.desc()).limit(limit)
             )
             return [_to_dataset(orm) for orm in session.scalars(stmt).all()]
 
@@ -56,11 +49,6 @@ class DatasetRepository:
             orm.name = dataset.name
             orm.source_type = dataset.source_type
             orm.url = getattr(dataset, "url", None)
-            orm.process_child_links = getattr(dataset, "process_child_links", None)
-            orm.process_cross_domain_links = getattr(
-                dataset, "process_cross_domain_links", None
-            )
-            orm.depth = getattr(dataset, "depth", None)
             orm.paths = getattr(dataset, "paths", None)
             session.commit()
             session.refresh(orm)

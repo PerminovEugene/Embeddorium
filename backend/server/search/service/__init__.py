@@ -44,6 +44,7 @@ from __future__ import annotations
 import logging
 import uuid
 
+from fastapi import HTTPException
 from qdrant_client import QdrantClient
 
 from backend.plugins.provider_types.registry import resolve_embed_target
@@ -88,29 +89,22 @@ __all__ = [
 async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
     run_id = request.configuration.get("runId")
     if not run_id:
-        return {"status": "error", "detail": "No pipeline run selected", "results": []}
+        raise HTTPException(status_code=400, detail="No pipeline run selected")
 
     top_k = parse_top_k(request.configuration.get("topK"))
     if top_k is None:
-        return {
-            "status": "error",
-            "detail": "topK must be a positive integer",
-            "results": [],
-        }
+        raise HTTPException(status_code=400, detail="topK must be a positive integer")
 
     strategy = parse_strategy(request.configuration.get("searchMethod"))
     if strategy is None:
-        return {
-            "status": "error",
-            "detail": (
-                "Unknown search strategy; expected one of semantic, keyword, hybrid"
-            ),
-            "results": [],
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown search strategy; expected one of semantic, keyword, hybrid",
+        )
 
     # Optional cross-encoder reranking, hybrid-only. When enabled, the fused RRF
     # pool is re-scored and cut to ``rerankerTopK``. The provider selection is
-    # hard-validated here (unknown id / wrong capability -> error body); the
+    # hard-validated here (unknown id / wrong capability -> HTTP 400); the
     # model load/predict itself degrades gracefully at call time.
     reranker_target = None
     reranker_provider_id: str | None = None
@@ -118,26 +112,23 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
     if strategy == "hybrid" and request.configuration.get("useReranking"):
         reranker_provider_id = request.configuration.get("rerankerProviderId")
         if not reranker_provider_id:
-            return {
-                "status": "error",
-                "detail": "rerankerProviderId is required when useReranking is true",
-                "results": [],
-            }
+            raise HTTPException(
+                status_code=400,
+                detail="rerankerProviderId is required when useReranking is true",
+            )
         reranker_top_k = parse_reranker_top_k(request.configuration.get("rerankerTopK"))
         if reranker_top_k is None:
-            return {
-                "status": "error",
-                "detail": "rerankerTopK must be a positive integer",
-                "results": [],
-            }
+            raise HTTPException(
+                status_code=400, detail="rerankerTopK must be a positive integer"
+            )
         try:
             reranker_target = resolve_reranker_target(store_sql, reranker_provider_id)
         except ValueError as exc:
-            return {"status": "error", "detail": str(exc), "results": []}
+            raise HTTPException(status_code=400, detail=str(exc))
 
     run = get_pipeline_run(store_sql, run_id)
     if run is None:
-        return {"status": "error", "detail": "Unknown pipeline run", "results": []}
+        raise HTTPException(status_code=404, detail="Unknown pipeline run")
 
     # A single Qdrant collection can hold vectors from several pipeline runs, so
     # an unfiltered query would return hits from every run that ever wrote to it.
@@ -175,11 +166,16 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
 
         collection = vector_store_cfg.get("collection", "")
         configured_type = provider_snap.get("provider_type", "")
+        configured_model_type = provider_snap.get("model_type") or "embedding"
         provider_values = provider_snap.get("config") or provider_snap
-        target = resolve_embed_target(configured_type, provider_values)
+        # resolve_embed_target is used only for the worker-key/model labels in
+        # the log line below; the client itself is built from the raw
+        # (provider_type, model_type, config) snapshot inside get_embeddings.
+        target = resolve_embed_target(
+            configured_type, configured_model_type, provider_values
+        )
         provider_type = target.provider
         model_name = target.model
-        mock_dim = target.mock_dim
 
         logging.info(
             "DB search: run=%s strategy=%s collection=%s provider=%s model=%s "
@@ -195,12 +191,10 @@ async def search_db(store_sql: SqlStore, qdrant: QdrantClient, request) -> dict:
         )
 
         query_embeddings = await get_embeddings(
-            provider_type,
-            model_name,
-            target.base_url,
+            configured_type,
+            configured_model_type,
+            provider_values,
             [q.text for q in queries],
-            mock_dim=mock_dim,
-            api_key=target.api_key,
         )
         store = VectorStore(collection=collection, client=qdrant)
     else:

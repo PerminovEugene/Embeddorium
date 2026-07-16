@@ -22,14 +22,16 @@ from backend.shared.storage.sql.sql_store import SqlStore
 def _resolve_compare_provider(
     store: SqlStore,
     provider_id: str | None,
-) -> tuple[str, str | None, str | None, int | None, str | None]:
-    """Load the provider selected in the UI and return the args ``get_embeddings``
-    needs: ``(provider_type, model_name, base_url, mock_dim, api_key)``.
+) -> tuple[str, str, dict, str | None, str]:
+    """Load the provider selected in the UI.
 
-    The embedding type/model/endpoint now come from a saved provider (picked by
-    id in the compare form) instead of being sent inline by the client, so they
-    can no longer be mismatched or spoofed from the browser. Connection
-    settings are resolved by the selected provider adapter.
+    Returns ``(provider_type, model_type, provider_config, model_name,
+    worker_key)``: the raw ``(provider_type, model_type, config)`` snapshot
+    ``get_embeddings`` builds a client from, plus the resolved model name and
+    worker-facing key used only for the result label and logging. The embedding
+    type/model/endpoint come from a saved provider (picked by id in the compare
+    form) instead of being sent inline by the client, so they can no longer be
+    mismatched or spoofed from the browser.
     """
     if not provider_id:
         raise HTTPException(status_code=400, detail="No provider selected")
@@ -42,13 +44,15 @@ def _resolve_compare_provider(
     if provider is None:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    target = resolve_embed_target(provider.provider_type, provider.config)
+    target = resolve_embed_target(
+        provider.provider_type, provider.model_type, provider.config
+    )
     return (
-        target.provider,
+        provider.provider_type,
+        provider.model_type,
+        provider.config or {},
         target.model,
-        target.base_url,
-        target.mock_dim,
-        target.api_key,
+        target.provider,
     )
 
 
@@ -56,11 +60,11 @@ async def compare_embeddings(store: SqlStore, request) -> dict:
     request_uuid = str(uuid4())
 
     provider_id = request.configuration.get("providerId")
-    provider_type, model_name, base_url, mock_dim, api_key = _resolve_compare_provider(
-        store, provider_id
+    provider_type, model_type, provider_config, model_name, worker_key = (
+        _resolve_compare_provider(store, provider_id)
     )
 
-    logging.info("Comparing with provider=%s model=%s", provider_type, model_name)
+    logging.info("Comparing with provider=%s model=%s", worker_key, model_name)
 
     source_texts = request.source.inputs
     candidate_texts = request.candidates.inputs
@@ -68,28 +72,24 @@ async def compare_embeddings(store: SqlStore, request) -> dict:
 
     source_embeddings = await get_embeddings(
         provider_type,
-        model_name,
-        base_url,
+        model_type,
+        provider_config,
         [t.text for t in source_texts],
-        mock_dim=mock_dim,
-        api_key=api_key,
     )
     candidate_embeddings = await get_embeddings(
         provider_type,
-        model_name,
-        base_url,
+        model_type,
+        provider_config,
         [t.text for t in candidate_texts],
-        mock_dim=mock_dim,
-        api_key=api_key,
     )
 
     # Manual comparison computes similarities in-process from the embeddings
     # above; there's no need to round-trip vectors through Qdrant (and doing so
     # broke on model names containing ":", e.g. Ollama's "qwen3-embedding:latest",
     # which is an illegal Qdrant collection name). The model label just names the
-    # embedding model; fall back to the provider type for the mock provider,
-    # which serves no named model.
-    store_key = model_name or provider_type
+    # embedding model; fall back to the worker key for the mock provider, which
+    # serves no named model.
+    store_key = model_name or worker_key
 
     matches = match_embeddings(
         source_embeddings,

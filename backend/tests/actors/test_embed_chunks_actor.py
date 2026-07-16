@@ -1,7 +1,5 @@
 import uuid
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from backend.shared.clients.queue.queue_names import TRACK_PIPELINE_STATUS_QUEUE
 from backend.shared.models.document_chunk import DocumentChunk
@@ -30,8 +28,7 @@ def _make_model(chunks_per_call: list[int] | None = None) -> MagicMock:
     """Return a mock model whose encode() yields one fake embedding per input text."""
     model = MagicMock()
     model.encode.side_effect = lambda texts, **kw: [
-        MagicMock(**{"tolist.return_value": [0.1, 0.2, 0.3, 0.4]})
-        for _ in texts
+        MagicMock(**{"tolist.return_value": [0.1, 0.2, 0.3, 0.4]}) for _ in texts
     ]
     return model
 
@@ -76,6 +73,7 @@ def _call(
 
 # --- collection setup ---
 
+
 def test_creates_vector_collection_with_model_size() -> None:
     chunks = _make_chunks(2)
     _, vector_store, _ = _call(chunks=chunks, model_size=4096)
@@ -83,6 +81,7 @@ def test_creates_vector_collection_with_model_size() -> None:
 
 
 # --- chunk fetching ---
+
 
 def test_fetches_chunks_by_parsed_uuids() -> None:
     doc_id = uuid.uuid4()
@@ -114,6 +113,7 @@ def test_empty_chunk_list_skips_encode_and_upsert() -> None:
 
 # --- encoding ---
 
+
 def test_encodes_chunk_texts_in_order() -> None:
     chunks = _make_chunks(3)
     _, _, model = _call(chunks=chunks)
@@ -134,6 +134,7 @@ def test_encode_called_with_correct_kwargs() -> None:
 
 
 # --- upsert payloads ---
+
 
 def test_upsert_called_once_for_single_batch() -> None:
     chunks = _make_chunks(3)
@@ -163,6 +164,16 @@ def test_upsert_payload_contains_correct_metadata() -> None:
         assert payload["chunk_index"] == chunk.chunk_index
 
 
+def test_upsert_payload_contains_namespaced_custom_metadata() -> None:
+    doc_id = uuid.uuid4()
+    chunks = _make_chunks(1, doc_id)
+    chunks[0].chunk_metadata = {"section": {"number": "3"}}
+    _, vector_store, _ = _call(chunks=chunks, document_id=doc_id)
+    payload = vector_store.upsert.call_args.kwargs["payloads"][0]
+    assert payload["metadata"]["custom"] == {"section": {"number": "3"}}
+    assert payload["metadata"]["system"]["document_id"] == str(doc_id)
+
+
 def test_upsert_uses_chunk_ids_as_point_ids() -> None:
     # Deterministic point ids make re-embedding idempotent (overwrite, not dup).
     doc_id = uuid.uuid4()
@@ -175,8 +186,10 @@ def test_upsert_uses_chunk_ids_as_point_ids() -> None:
 
 # --- batching ---
 
+
 def test_large_input_is_split_into_batches() -> None:
-    n = BATCH_SIZE + 5
+    remainder = max(1, BATCH_SIZE - 1)
+    n = BATCH_SIZE + remainder
     chunks = _make_chunks(n)
     _, vector_store, model = _call(chunks=chunks)
 
@@ -185,14 +198,15 @@ def test_large_input_is_split_into_batches() -> None:
 
 
 def test_first_batch_has_batch_size_chunks() -> None:
-    n = BATCH_SIZE + 5
+    remainder = max(1, BATCH_SIZE - 1)
+    n = BATCH_SIZE + remainder
     chunks = _make_chunks(n)
     _, _, model = _call(chunks=chunks)
 
     first_call_texts = model.encode.call_args_list[0].args[0]
     second_call_texts = model.encode.call_args_list[1].args[0]
     assert len(first_call_texts) == BATCH_SIZE
-    assert len(second_call_texts) == 5
+    assert len(second_call_texts) == remainder
 
 
 def test_batch_payloads_reference_correct_chunks() -> None:
@@ -204,11 +218,16 @@ def test_batch_payloads_reference_correct_chunks() -> None:
     first_payloads = vector_store.upsert.call_args_list[0].kwargs["payloads"]
     second_payloads = vector_store.upsert.call_args_list[1].kwargs["payloads"]
 
-    assert [p["chunk_id"] for p in first_payloads] == [str(c.id) for c in chunks[:BATCH_SIZE]]
-    assert [p["chunk_id"] for p in second_payloads] == [str(c.id) for c in chunks[BATCH_SIZE:]]
+    assert [p["chunk_id"] for p in first_payloads] == [
+        str(c.id) for c in chunks[:BATCH_SIZE]
+    ]
+    assert [p["chunk_id"] for p in second_payloads] == [
+        str(c.id) for c in chunks[BATCH_SIZE:]
+    ]
 
 
 # --- chunk status + target finalization ---
+
 
 def test_marks_embedded_chunks_and_attempts_target_finalization() -> None:
     # Chunk-status writes and target finalization are unconditional (not
@@ -230,6 +249,7 @@ def test_empty_chunk_list_skips_marking_and_finalizing() -> None:
 
 
 # --- pipeline status tracking ---
+
 
 def test_pipeline_id_emits_tracker_event_and_increments_counter() -> None:
     doc_id = uuid.uuid4()

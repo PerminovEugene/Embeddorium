@@ -42,12 +42,18 @@ def launch_pipeline_run(
         )
 
     # Publish seed messages on the shared broker — pipeline_id flows into
-    # every actor message.
-    seed_pipeline(
-        pipeline_id=run.id,
-        dataset_snapshot=run.dataset,
-        broker=broker,
-    )
+    # every actor message. ``seed_pipeline`` raises ``ValueError`` if the run's
+    # stored dataset snapshot has an unsupported ``source_type``; map it to a
+    # 400 rather than letting it fall through as an opaque 500 (see the error
+    # handling section in this package's README).
+    try:
+        seed_pipeline(
+            pipeline_id=run.id,
+            dataset_snapshot=run.dataset,
+            broker=broker,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Advance to "running"; clear finished_at so a relaunch starts clean.
     updated = store.pipeline_runs.update_status(

@@ -7,8 +7,22 @@ import { sectionStyle } from "../styles/styles";
 
 export const inputIdGroupSeparator = "____";
 
+// Read the server's error message from a failed response. The API returns
+// `{ "detail": "..." }` (FastAPI's HTTPException shape); fall back to the status
+// code when there's no JSON body.
+async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (body && typeof body.detail === "string") return body.detail;
+  } catch {
+    // no JSON body to read
+  }
+  return `Request failed (${res.status})`;
+}
+
 const SubmitButton = () => {
   const [errors, setErrors] = useState<string[]>([]);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     state,
@@ -38,8 +52,9 @@ const SubmitButton = () => {
       )
       .flat();
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!validateForm()) return;
+    setServerError(null);
 
     const processedSourceInputs = buildProcessedSourceInputs();
 
@@ -73,37 +88,40 @@ const SubmitButton = () => {
     };
 
     setLoading(true);
-    fetch(`${SERVER_URL}/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-      .then((res) => res.json())
-      .then((result) => {
-        saveFormToStorage();
-        const dbMatches: DbMatch[] = (result.results ?? []).map(
-          (hit: DbMatch) => {
-            const queryText = processedSourceInputs.find(
-              (input) => input.id === hit.source_id
-            )?.text;
-            return { ...hit, queryText: queryText ?? hit.queryText };
-          }
-        );
-        setDbMatches(dbMatches);
-      })
-      .catch((error) => {
-        console.error("Error searching collection:", error);
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`${SERVER_URL}/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(await readErrorDetail(res));
+
+      const result = await res.json();
+      saveFormToStorage();
+      const dbMatches: DbMatch[] = (result.results ?? []).map((hit: DbMatch) => {
+        const queryText = processedSourceInputs.find(
+          (input) => input.id === hit.source_id
+        )?.text;
+        return { ...hit, queryText: queryText ?? hit.queryText };
+      });
+      setDbMatches(dbMatches);
+    } catch (error) {
+      console.error("Error searching collection:", error);
+      setDbMatches([]);
+      setServerError(error instanceof Error ? error.message : "Search failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCompare = () => {
+  const handleCompare = async () => {
     if (state.sourceType === "db") {
       handleSearch();
       return;
     }
 
     if (!validateForm()) return;
+    setServerError(null);
 
     const processedSourceInputs = buildProcessedSourceInputs();
 
@@ -129,29 +147,35 @@ const SubmitButton = () => {
     };
 
     setLoading(true);
-    fetch(`${SERVER_URL}/compare`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-      .then((res) => res.json())
-      .then((result) => {
-        saveFormToStorage();
-        const enrichedMatches = result.matches.map((match: Match) => {
-          const sourceText = processedSourceInputs.find(
-            (input) => input.id === match.source_id
-          )?.text;
-          const candidateText = processedCandidateInputs.find(
-            (input) => input.id === match.candidate_id
-          )?.text;
-          return { ...match, sourceText, candidateText };
-        });
-        setMatches(enrichedMatches);
-      })
-      .catch((error) => {
-        console.error("Error sending data to server:", error);
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`${SERVER_URL}/compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(await readErrorDetail(res));
+
+      const result = await res.json();
+      saveFormToStorage();
+      const enrichedMatches = result.matches.map((match: Match) => {
+        const sourceText = processedSourceInputs.find(
+          (input) => input.id === match.source_id
+        )?.text;
+        const candidateText = processedCandidateInputs.find(
+          (input) => input.id === match.candidate_id
+        )?.text;
+        return { ...match, sourceText, candidateText };
+      });
+      setMatches(enrichedMatches);
+    } catch (error) {
+      console.error("Error sending data to server:", error);
+      setMatches([]);
+      setServerError(
+        error instanceof Error ? error.message : "Comparison failed"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -164,13 +188,14 @@ const SubmitButton = () => {
       className="flex flex-col justify-around items-center"
     >
       <div className="flex flex-row">
-        {errors.length && (
+        {(errors.length > 0 || serverError) && (
           <section style={sectionStyle} className="bg-emd-panel">
             {errors.map((error, index) => (
               <div key={error + index} className="text-red-500">
                 {error}
               </div>
             ))}
+            {serverError && <div className="text-red-500">{serverError}</div>}
           </section>
         )}
       </div>

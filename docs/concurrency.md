@@ -44,13 +44,13 @@ The values live in the `command:` line of each service in `docker-compose.yml`.
 `worker-embed-chunks` keeps a comment explaining its `--threads 1`
 (`docker-compose.yml`):
 
-> the embedding model is a lazily-initialized module singleton; a single thread
-> avoids racing on first init and concurrent `model.encode`.
+> embed clients are lazily-initialized, keyed module singletons; a single thread
+> avoids racing on first init.
 
-So the pin is deliberate for the in-process (`huggingface`) provider. The same
-constraint is repeated for the bare-metal path in
-[docs/embeddings.md](embeddings.md): `dramatiq …embed_chunks_actor --processes 1
---threads 1`.
+Every provider is now remote/API (`ollama`, `openai`) or the trivial `mock`, so
+the pin is a conservative default: with a single thread the client cache is
+populated without a first-init race, and each remote provider gets exactly one
+concurrent HTTP caller until you deliberately scale it.
 
 ### Dramatiq prefetch
 
@@ -102,9 +102,9 @@ server-side `OLLAMA_NUM_PARALLEL`, which is external to this project.
 If you want to speed up embedding, do **not** naively bump `--threads` on
 `worker-embed-chunks`:
 
-- For the `huggingface` provider, extra threads race the lazily-initialized
-  model singleton (see above) — keep it at `1 × 1`.
-- For the `ollama` provider, each added thread / process / replica is a new
+- Extra threads first race the lazily-initialized embed-client cache (see
+  above); a single thread sidesteps that first-init race.
+- For the `ollama`/`openai` providers, each added thread / process / replica is a new
   concurrent HTTP caller with no code-side ceiling and no request timeout. Scale
   Ollama-facing concurrency deliberately and cap it on the Ollama side with
   `OLLAMA_NUM_PARALLEL`, or add an explicit concurrency limit in the client

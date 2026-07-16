@@ -14,7 +14,6 @@ than a source of duplicates.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func, select, update
@@ -217,6 +216,10 @@ class UnitOfWork:
         orm.content_hash = document.content_hash
         orm.text_hash = document.text_hash
         orm.parser_version = document.parser_version
+        orm.parser_name = document.parser_name
+        orm.parser_output_format = document.parser_output_format
+        orm.parser_metadata = dict(document.parser_metadata)
+        orm.parser_intermediate = document.parser_intermediate
         orm.chunker_version = document.chunker_version
         orm.retrieved_at = document.retrieved_at
         orm.text_path = document.text_path
@@ -254,12 +257,9 @@ class UnitOfWork:
                 "end_offset": stmt.excluded.end_offset,
             },
         ).returning(DocumentChunkORM)
-        orms = (
-            self._session.scalars(
-                stmt, execution_options={"populate_existing": True}
-            )
-            .all()
-        )
+        orms = self._session.scalars(
+            stmt, execution_options={"populate_existing": True}
+        ).all()
         result = [_to_chunk(orm) for orm in orms]
         result.sort(key=lambda c: c.chunk_index)
         return result
@@ -298,12 +298,9 @@ class UnitOfWork:
             ],
             set_={"raw_url": stmt.excluded.raw_url},
         ).returning(DiscoveredLinkORM)
-        orms = (
-            self._session.scalars(
-                stmt, execution_options={"populate_existing": True}
-            )
-            .all()
-        )
+        orms = self._session.scalars(
+            stmt, execution_options={"populate_existing": True}
+        ).all()
         return [_to_discovered_link(orm) for orm in orms]
 
     def mark_links_scheduled(self, link_ids: list[uuid.UUID]) -> None:

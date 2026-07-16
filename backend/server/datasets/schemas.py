@@ -30,9 +30,6 @@ class WebDatasetIn(_CamelModel):
     name: str
     source_type: Literal["web"] = "web"
     url: str
-    process_child_links: bool
-    process_cross_domain_links: bool
-    depth: int
 
 
 class LocalDatasetIn(_CamelModel):
@@ -55,9 +52,6 @@ class WebDatasetOut(_CamelModel):
     name: str
     source_type: Literal["web"] = "web"
     url: str
-    process_child_links: bool
-    process_cross_domain_links: bool
-    depth: int
     created_at: Optional[datetime] = None
 
 
@@ -77,13 +71,7 @@ DatasetOut = Union[WebDatasetOut, LocalDatasetOut]
 def dataset_in_to_domain(payload: DatasetIn) -> Dataset:
     """Map a validated camelCase request body to its snake_case domain model."""
     if payload.source_type == "web":
-        return WebDataset(
-            name=payload.name,
-            url=payload.url,
-            process_child_links=payload.process_child_links,
-            process_cross_domain_links=payload.process_cross_domain_links,
-            depth=payload.depth,
-        )
+        return WebDataset(name=payload.name, url=payload.url)
     return LocalDataset(name=payload.name, paths=payload.paths)
 
 
@@ -94,9 +82,6 @@ def dataset_to_out(dataset: Dataset) -> DatasetOut:
             id=dataset.id,
             name=dataset.name,
             url=dataset.url,
-            process_child_links=dataset.process_child_links,
-            process_cross_domain_links=dataset.process_cross_domain_links,
-            depth=dataset.depth,
             created_at=dataset.created_at,
         )
     return LocalDatasetOut(

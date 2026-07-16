@@ -35,9 +35,9 @@ raw input ──►  strategy.<method>(...)  ──►  result  ──►  (acto
 | ------------------ | --------------------------------- | -------------------------------------- |
 | `validate_source`  | `backend/plugins/validate_source` | seed value → canonical identity + admissibility |
 | `fetch_source`     | `backend/plugins/fetch_source`    | target → raw fetched content + next-stage routing |
-| `parse_source`     | `backend/plugins/parse_source`    | `(raw, content_type)` → normalized text |
+| `parse_source`     | `backend/plugins/parse_source`    | `(raw, content_type)` → normalized text + optional structured data |
 | `filter_documents` | `backend/plugins/filter_documents`| `(title, text)` → keep/skip predicate |
-| `chunk_document`   | `backend/plugins/chunkers`        | document text → `list[Chunk]` |
+| `chunk_document`   | `backend/plugins/chunkers`        | structured `ChunkInput` → `list[Chunk]` |
 | `embed_chunks`     | `backend/plugins/embed_chunks`    | provider snapshot → concrete embed target |
 
 The remaining actors (`schedule_embeddings`, `schedule_discovered_links`,
@@ -45,6 +45,27 @@ The remaining actors (`schedule_embeddings`, `schedule_discovered_links`,
 configure, so they are intentionally **not** pluggable.
 
 ## Anatomy of a plugin package
+
+### Structured parser and chunker data
+
+Parsers may still return a plain string. A structured parser can instead
+return `ParsedDocument(text, metadata, intermediate, output_format)`. `text`
+remains the generic fallback; `intermediate` is an opaque, versioned parser
+artifact for compatible chunkers, not a universal AST. Structured output is
+persisted on `documents`, so asynchronous chunk workers receive it durably.
+
+`ChunkInput` adds document metadata, parser intermediate data, output format,
+and document ID. Generic chunkers ignore these fields. Structured chunkers may
+declare `accepted_input_formats`; incompatible parser output is rejected before
+chunking. Final metadata merges parser metadata then chunk metadata (the latter
+wins). Plugins cannot supply reserved system keys: `chunk_id`, `document_id`,
+`dataset_id`, `pipeline_run_id`, or `embedding_model`.
+
+Qdrant retains known system fields at the payload root and stores custom data
+under `metadata.custom`; search results return it as `metadata`. The limits
+`PARSER_METADATA_MAX_BYTES`, `PARSER_INTERMEDIATE_MAX_BYTES`, and
+`CHUNK_METADATA_MAX_BYTES` default to 256 KiB, 8 MiB, and 256 KiB. Data over a
+limit is rejected, never truncated. Arbitrary metadata fields are not indexed.
 
 Every package follows the same layout (`chunkers` is the historical outlier —
 same shape, slightly different names):
@@ -83,7 +104,9 @@ class ParseStrategy(ABC):
     config: ClassVar[ParseStrategyConfig]
 
     @abstractmethod
-    def parse(self, *, raw: str, content_type: str | None, final_url: str) -> str | None:
+    def parse(
+        self, *, raw: str, content_type: str | None, final_url: str
+    ) -> str | ParsedDocument | None:
         ...
 ```
 
@@ -325,33 +348,65 @@ a good template):
 4. **Expose it** — add the actor + its `list_*_configs` to the `_ACTOR_LISTERS`
    table in `backend/server/actor_configs/router.py` so the UI can see it.
 
-## Provider-type adapters
+## Provider-type / model-type adapters
 
 Model providers use the same discovery and field metadata, but live under
 `backend/plugins/provider_types/` because they are shared by pipeline actors,
-compare, and search rather than belonging to one actor. A persisted provider is
-a generic `{provider_type, model_type, config}` record. Type-specific values
-such as `model_name`, `url`, `port`, `api_key`, or `mock_dim` live in the JSONB
-`config` field.
+compare, and search rather than belonging to one actor. They are described by
+**two** layers, mirroring how a deployment is actually configured:
 
-Each adapter declares:
+- A **provider type** is the runtime/API you talk to — `mock`, `ollama`,
+  `openai`. It owns the *connection* (`url`/`port`/`api_key`) shared by every
+  model that provider serves.
+- A **model type** is the capability a model serves under a provider —
+  `embedding`, `cross-encoder` (reranker), … . It owns the
+  *capability-specific* settings (`model_name`, `mock_dim`, `rerank_path`).
 
-- `name`: stable value stored in `Provider.provider_type`;
-- `type`: `builtin` for in-process runtimes or `remote` for HTTP APIs;
-- `supported_model_types`: capabilities such as `embedding`, `text`, or
-  `cross-encoder`;
-- `fields`: the settings schema rendered by the provider form;
-- `resolve()`: connection/client settings used by embedding consumers.
+A cross-encoder reranker is therefore a **model type offered under a provider**
+(under `ollama`, whose `url`/`port` point at the rerank server), not a provider
+type of its own. A provider's supported model types are *derived* from the
+handlers it ships — no hardcoded tuple.
 
-`GET /providers/configs` exposes all discovered adapters. The UI builds its
-provider-type selector, model-type selector, defaults, and type-specific fields
-from this response, so adding an adapter requires no frontend edit.
+A persisted provider stays a flat `{provider_type, model_type, config}` record;
+the single `config` JSONB blob holds both the connection and the capability
+values, and is validated against the union of the provider's connection fields
+and the selected model type's fields.
 
-To add one, create a module such as
-`backend/plugins/provider_types/acme.py`, subclass `ProviderTypeAdapter`, set a
-`ProviderTypeConfig`, and implement `resolve()`. Restart the server and workers;
-discovery makes it available automatically. Keep SDK imports inside the shared
-client implementation rather than at adapter module import time.
+### Layout
+
+Each provider type is a folder:
+
+```txt
+backend/plugins/provider_types/<name>/
+  base.py                       # ProviderTypeAdapter: name, type, connection fields
+  model_types/
+    <capability>.py             # ModelTypeHandler: model_type, capability fields
+```
+
+- `ProviderTypeAdapter` (`base.py`) declares `name` (stored in
+  `Provider.provider_type`), `type` (`builtin` for in-process runtimes,
+  `remote` for HTTP APIs), and the connection `fields`; it implements
+  `resolve_connection() -> ResolvedConnection` (`base_url`/`api_key`).
+- `ModelTypeHandler` (`model_types/*.py`) declares `model_type` (stored in
+  `Provider.model_type`) and the capability `fields`, and receives the provider's
+  resolved connection. An embedding handler implements `resolve()` +
+  `build_embed_client()`; a reranker handler implements `resolve_rerank()`. The
+  defaults raise, so a handler serving one capability can never be driven as the
+  other (the actor, compare, and search all go through `build_embed_client()`
+  with no per-provider branching).
+
+`GET /providers/configs` exposes all discovered providers with their connection
+`fields` and a `modelTypes` list (each model type with its own `fields`). The UI
+builds its provider-type selector, model-type selector, defaults, and the merged
+settings form from this response, so adding a provider or a capability requires
+no frontend edit.
+
+To add a provider, create `backend/plugins/provider_types/acme/base.py`
+(subclass `ProviderTypeAdapter`) and one module per capability under
+`acme/model_types/`. To add a capability to an existing provider, drop one module
+in its `model_types/` folder. Restart the server and workers; discovery makes it
+available automatically. Keep SDK imports inside `build_embed_client` (or the
+shared client) rather than at module import time.
 
 ## Pros and cons
 

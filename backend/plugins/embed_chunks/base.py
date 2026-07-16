@@ -9,9 +9,9 @@ marking chunks embedded, finalizing the target and the run-progress counters —
 stays in the actor/launcher, since it is provider-agnostic plumbing.
 
 The single built-in strategy (``standard``) reproduces the launcher's previous
-provider-snapshot parsing exactly: ``ollama``/``mock`` are recognised by
-``provider_type`` (falling back to env defaults for model/dim), and any other
-snapshot is treated as a local HuggingFace model.
+provider-snapshot parsing exactly: ``ollama``/``openai``/``mock`` are recognised
+by ``provider_type`` (falling back to env defaults for model/dim); an
+unknown/legacy ``provider_type`` raises rather than silently degrading.
 
 Its one configurable field is of type ``"provider_id"``: the UI renders a
 picker over the configured embedding :class:`~backend.shared.models.provider.
@@ -53,8 +53,8 @@ class EmbedStrategyConfig:
 class ResolvedProvider:
     """The concrete embedding target derived from a provider snapshot.
 
-    ``provider`` is the worker-facing provider key (``"ollama"`` / ``"mock"`` /
-    ``"huggingface"``); ``model`` is the model name to load; ``mock_dim`` is the
+    ``provider`` is the worker-facing provider key (``"ollama"`` / ``"openai"``
+    / ``"mock"``); ``model`` is the model name to load; ``mock_dim`` is the
     vector size for the mock provider (``None`` for real providers).
     """
 

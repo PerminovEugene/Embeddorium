@@ -6,7 +6,7 @@ hands the snapshot's ``config`` to the matching
 :class:`~backend.plugins.provider_types.base.ProviderTypeAdapter`, and adapts
 that adapter's :class:`ResolvedEmbedTarget` into the ``(provider, model,
 mock_dim)`` triple the launcher/worker expects. An unknown/legacy provider type
-falls back to the local HuggingFace path (see
+raises ``ValueError`` (see
 :func:`~backend.plugins.provider_types.registry.resolve_embed_target`).
 """
 
@@ -43,11 +43,15 @@ class StandardEmbed(EmbedStrategy):
     def resolve(self) -> ResolvedProvider:
         snap = self._get("provider") or {}
         provider_type = snap.get("provider_type", "")
+        # The capability the provider serves; embed snapshots are always
+        # ``embedding``, but read it from the snapshot (defaulting) so resolution
+        # is per model type.
+        model_type = snap.get("model_type") or "embedding"
         # New snapshots nest type-specific settings under "config"; older/flat
         # snapshots keep them at the top level — accept both.
         values = snap.get("config") or snap
 
-        target = resolve_embed_target(provider_type, values)
+        target = resolve_embed_target(provider_type, model_type, values)
         return ResolvedProvider(
             provider=target.provider,
             model=target.model or "",

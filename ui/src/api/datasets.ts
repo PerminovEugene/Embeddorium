@@ -16,11 +16,6 @@ function toPayload(values: DatasetFormValues) {
         name: values.name,
         sourceType: "web" as const,
         url: values.url,
-        processChildLinks: values.processChildLinks,
-        processCrossDomainLinks: values.processChildLinks
-          ? values.processCrossDomainLinks
-          : false,
-        depth: values.processChildLinks ? values.depth : 1,
       }
     : {
         name: values.name,

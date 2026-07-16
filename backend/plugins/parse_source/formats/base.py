@@ -20,18 +20,21 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from backend.plugins.structured_data import ParsedDocument
+
 
 @dataclass(frozen=True)
 class FormatParserConfig:
     name: str
     label: str
     content_types: tuple[str, ...] = ()
+    output_format: str | None = None
 
 
 class FormatParser(ABC):
     config: ClassVar[FormatParserConfig]
 
     @abstractmethod
-    def parse(self, content: str, url: str = "") -> str:
+    def parse(self, content: str, url: str = "") -> str | ParsedDocument:
         """Return *content* parsed to normalized text."""
         raise NotImplementedError

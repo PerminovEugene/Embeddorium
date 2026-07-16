@@ -1,11 +1,13 @@
 """Stage 7 (terminal): embed a batch of chunks and upsert vectors into Qdrant.
 
-Pure logic — no broker/dramatiq concerns. The embedding model is loaded lazily
-on first use and cached as a module singleton. The ``mock``, ``ollama``, and
-``fastembed`` and ``openai`` providers return/fetch/compute vectors without importing
-torch/sentence-transformers, so this module stays import-light in containers
-that run those providers — only the ``huggingface`` (real local model) path
-pulls the heavy ML stack.
+Pure logic — no broker/dramatiq concerns. The embed *client* is provider-agnostic
+here: this module never branches on the provider. It asks the selected
+provider-type adapter to build its client (see
+:func:`~backend.plugins.provider_types.registry.build_embed_client`) and then
+drives that client through one uniform ``encode`` call. Each adapter imports its
+own backend lazily, so this module stays import-light in containers that run the
+network providers (ollama/openai) — every provider is reached over HTTP or is
+the trivial mock, so no in-process model stack is ever pulled in.
 
 Once a batch's vectors are upserted, in one transaction this: (1) flips those
 chunks' ``status`` to ``embedded``, (2) atomically finalizes the owning crawl
@@ -22,10 +24,11 @@ condition that both this actor and ``schedule_discovered_links`` feed into.
 
 from __future__ import annotations
 
+import json
 import uuid
 
-from backend.shared import config
-from backend.shared.clients.mock_embed_client import MockEmbedClient
+from backend.plugins.provider_types.registry import build_embed_client
+from backend.shared.clients.embed_client import EmbedClient
 from backend.shared.clients.queue.embed_chunks_payload import EmbedChunksPayload
 from backend.shared.clients.queue.pipeline_payloads import TrackPipelineStatusPayload
 from backend.shared.clients.queue.queue_names import (
@@ -36,89 +39,39 @@ from backend.shared.models import OutboxEvent
 from backend.shared.storage.sql.sql_store import SqlStore
 from backend.shared.storage.vector.vector_store import VectorStore
 
-MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
-# FastEmbed's small, fast default model when a run omits an explicit model name.
-FASTEMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 BATCH_SIZE = 4
 
-# Providers that never need torch (no local model load). FastEmbed runs a local
-# ONNX model via onnxruntime — no torch either.
-_NO_TORCH_PROVIDERS = frozenset({"mock", "ollama", "fastembed", "openai"})
-
-# Loaded embedding models, keyed by (provider, model) — a single worker can now
-# serve several runs/providers, so the cache is keyed instead of a lone
-# singleton. Populated lazily on first use, never at import time.
-_models: dict[tuple[str, str, str | None, str | None], tuple] = {}
+# Built embed clients, keyed by the resolved (provider_type, config) a run
+# recorded — a single worker can serve several runs/providers, so the cache is
+# keyed rather than a lone singleton. Populated lazily on first use, never at
+# import time; each client's dimension is probed once and cached alongside it.
+_clients: dict[str, tuple[EmbedClient, int]] = {}
 
 
-def get_model_and_size(
-    provider: str | None = None,
-    model: str | None = None,
-    mock_dim: int | None = None,
-    base_url: str | None = None,
-    api_key: str | None = None,
-):
-    """Return ``(model, size)`` for *provider*/*model*, loading + caching once.
+def _cache_key(provider_type: str, model_type: str, values: dict | None) -> str:
+    """A stable, hashable cache key for a ``(provider_type, model_type, config)``."""
+    return json.dumps(
+        [provider_type, model_type, values or {}], sort_keys=True, default=str
+    )
 
-    Arguments come from a run's recorded embed config; each falls back to the
-    global env default when omitted, preserving the original single-provider
-    behavior for callers that don't pass them.
+
+def get_embed_client_and_size(
+    provider_type: str,
+    model_type: str,
+    values: dict | None = None,
+) -> tuple[EmbedClient, int]:
+    """Return ``(client, dimension)`` for a run's recorded provider snapshot.
+
+    Provider-agnostic: the selected provider/model-type handler owns how its
+    client is built (:func:`build_embed_client`), so there is no per-provider
+    branching here. The client and its probed dimension are cached the first time
+    a given ``(provider_type, model_type, config)`` is seen.
     """
-    provider = provider or config.EMBED_PROVIDER
-    if provider == "ollama":
-        model = model or config.OLLAMA_EMBED_MODEL
-    elif provider == "mock":
-        model = model or "mock"
-    elif provider == "fastembed":
-        model = model or FASTEMBED_MODEL_NAME
-    else:
-        model = model or MODEL_NAME
-
-    key = (provider, model, base_url, api_key)
-    if key not in _models:
-        if provider == "mock":
-            # No model load, no torch/sentence-transformers work — just random
-            # vectors of the configured size, for fast pipeline dry runs.
-            dim = mock_dim if mock_dim is not None else config.MOCK_EMBED_DIM
-            _models[key] = (MockEmbedClient(dim), dim)
-        elif provider == "ollama":
-            # Deferred import: avoids pulling langchain_ollama/ollama when the
-            # provider is something else.
-            from backend.shared.clients.ollama_embed_client import OllamaEmbedClient
-
-            client = OllamaEmbedClient(
-                model=model,
-                base_url=base_url or config.OLLAMA_EMBED_BASE_URL,
-            )
-            _models[key] = (client, client.get_embedding_dimension())
-        elif provider == "fastembed":
-            # Deferred import: avoids pulling fastembed/onnxruntime when the
-            # provider is something else. FastEmbed runs a local ONNX model.
-            from backend.shared.clients.fastembed_embed_client import (
-                FastembedEmbedClient,
-            )
-
-            client = FastembedEmbedClient(model)
-            _models[key] = (client, client.get_embedding_dimension())
-        elif provider == "openai":
-            from backend.shared.clients.openai_embed_client import OpenAIEmbedClient
-
-            if not base_url:
-                raise ValueError("openai provider requires a base_url")
-            client = OpenAIEmbedClient(
-                model=model,
-                base_url=base_url,
-                api_key=api_key,
-            )
-            _models[key] = (client, client.get_embedding_dimension())
-        else:
-            # Deferred import: avoids loading torch/sentence-transformers when
-            # the provider is "mock" or "ollama".
-            from backend.shared.clients.hg_client import HgClient
-
-            hg_client = HgClient()
-            _models[key] = (hg_client.get_model(model), hg_client.get_model_size(model))
-    return _models[key]
+    key = _cache_key(provider_type, model_type, values)
+    if key not in _clients:
+        client = build_embed_client(provider_type, model_type, values)
+        _clients[key] = (client, client.get_embedding_dimension())
+    return _clients[key]
 
 
 def embed_chunks(
@@ -127,9 +80,8 @@ def embed_chunks(
     chunk_ids: list[str],
     store: SqlStore,
     vector_store: VectorStore,
-    model,
+    model: EmbedClient,
     model_size: int,
-    provider: str | None = None,
     distance=None,
     pipeline_id: str | None = None,
 ) -> None:
@@ -139,10 +91,6 @@ def embed_chunks(
         pipeline_id=pipeline_id,
     )
 
-    # provider/distance come from the run's recorded config; both fall back so
-    # direct callers (and tests) that omit them keep the original behavior.
-    provider = provider or config.EMBED_PROVIDER
-
     if distance is None:
         vector_store.create_collection(model_size)
     else:
@@ -150,32 +98,18 @@ def embed_chunks(
 
     chunks = store.chunks.get_many(payload.chunk_ids)
 
-    skip_torch = provider in _NO_TORCH_PROVIDERS
-
     for start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[start : start + BATCH_SIZE]
 
-        if skip_torch:
-            # No local model, no GPU/MPS bookkeeping needed.
-            embeddings = model.encode(
-                [chunk.text for chunk in batch],
-                batch_size=BATCH_SIZE,
-                show_progress_bar=False,
-                normalize_embeddings=True,
-            )
-        else:
-            import torch
-
-            with torch.no_grad():
-                embeddings = model.encode(
-                    [chunk.text for chunk in batch],
-                    batch_size=BATCH_SIZE,
-                    show_progress_bar=False,
-                    normalize_embeddings=True,
-                )
-
-            if torch.backends.mps.is_available():
-                torch.mps.empty_cache()
+        # Uniform for every provider: the client owns any backend-specific
+        # concern (e.g. HTTP batching in the ollama/openai clients), so this
+        # stays a plain encode call.
+        embeddings = model.encode(
+            [chunk.text for chunk in batch],
+            batch_size=BATCH_SIZE,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
 
         vector_store.upsert(
             ids=[str(chunk.id) for chunk in batch],
@@ -192,6 +126,16 @@ def embed_chunks(
                     # Lets DB search filter hits to a single pipeline run when
                     # several runs share one collection.
                     "pipeline_run_id": payload.pipeline_id,
+                    # Namespaced custom metadata; known system fields remain at
+                    # top level for compatibility and efficient filtering.
+                    "metadata": {
+                        "system": {
+                            "chunk_id": str(chunk.id),
+                            "document_id": str(payload.document_id),
+                            "pipeline_run_id": payload.pipeline_id,
+                        },
+                        "custom": dict(chunk.chunk_metadata),
+                    },
                 }
                 for chunk in batch
             ],

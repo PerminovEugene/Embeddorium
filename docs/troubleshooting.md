@@ -101,7 +101,7 @@ docker compose exec worker-embed-chunks curl -s http://host.docker.internal:1143
 - **Ollama in your own container:** attach it to the project's Compose network
   and use its container name (e.g. `http://ollama:11434`).
 
-Full matrix in [embeddings.md](embeddings.md#pointing-a-container-at-ollama).
+Full matrix in [providers.md](providers.md#pointing-a-container-at-ollama).
 
 ## Embedding model missing
 

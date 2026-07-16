@@ -63,9 +63,6 @@ def _make_dataset() -> WebDataset:
         name="test-dataset",
         source_type="web",
         url="https://example.com",
-        process_child_links=False,
-        process_cross_domain_links=False,
-        depth=1,
     )
 
 

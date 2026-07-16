@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 from backend.plugins._fields import FieldSpec
+from backend.plugins.structured_data import ParsedDocument
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ class ParseStrategy(ABC):
     @abstractmethod
     def parse(
         self, *, raw: str, content_type: str | None, final_url: str
-    ) -> str | None:
+    ) -> str | ParsedDocument | None:
         """Return *raw* parsed to normalized text, or ``None`` when no parser
         supports it (the actor then marks the target SKIPPED_UNSUPPORTED)."""
         raise NotImplementedError

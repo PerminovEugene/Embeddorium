@@ -8,11 +8,7 @@ import dramatiq
 
 from backend.actors.embed_chunks_actor.handler import (
     embed_chunks as _embed_chunks,
-    get_model_and_size,
-)
-from backend.plugins.embed_chunks.registry import (
-    DEFAULT_EMBED_STRATEGY,
-    build_embed_strategy,
+    get_embed_client_and_size,
 )
 from backend.shared import config
 from backend.shared.clients.queue.queue_client import QueueClient
@@ -58,13 +54,16 @@ _embed_config: dict[str, tuple] = {}
 
 
 def _load_embed_config(pipeline_id: Optional[str]):
-    """Return provider, model, connection, collection, and distance for the run.
+    """Return ``(provider_type, model_type, provider_config, collection, distance)``.
 
     Reads the run's ``actor_configs.embed_chunks.provider`` snapshot and
     ``actor_configs.vector_store`` first, caching the result by ``pipeline_id``
-    so the run row is loaded from the DB only the first time a given pipeline
-    is seen. Falls back to global env config if ``pipeline_id`` is absent, the
-    run row is missing, or the snapshot can't be parsed — preserving the
+    so the run row is loaded from the DB only the first time a given pipeline is
+    seen. The snapshot's ``(provider_type, model_type, config)`` is returned
+    as-is — the provider/model-type handler (via ``get_embed_client_and_size``)
+    owns turning it into a client. Falls back to global env config if
+    ``pipeline_id`` is absent,
+    the run row is missing, or the snapshot can't be parsed — preserving the
     original single-provider behavior for legacy data. The fallback is not
     cached.
     """
@@ -82,28 +81,21 @@ def _load_embed_config(pipeline_id: Optional[str]):
             try:
                 actor_cfg = PipelineActorConfigs.model_validate(run.actor_configs)
                 # Provider snapshot lives in embed_chunks.provider, not
-                # top-level. The embed strategy plugin owns the snapshot →
-                # (provider, model, mock_dim) mapping.
-                provider_snap = actor_cfg.embed_chunks.provider
-                resolved = build_embed_strategy(
-                    DEFAULT_EMBED_STRATEGY, {"provider": provider_snap}
-                ).resolve()
-                embed_provider = resolved.provider
-                model = resolved.model
-                mock_dim = resolved.mock_dim
-                base_url = resolved.base_url
-                api_key = resolved.api_key
+                # top-level. New snapshots nest type-specific settings under
+                # "config"; older/flat snapshots keep them at the top level —
+                # accept both, mirroring StandardEmbed.resolve().
+                provider_snap = actor_cfg.embed_chunks.provider or {}
+                provider_type = provider_snap.get("provider_type", "")
+                model_type = provider_snap.get("model_type") or "embedding"
+                provider_config = provider_snap.get("config") or provider_snap
 
                 collection = actor_cfg.vector_store.collection
-                similarity = actor_cfg.vector_store.similarity
-                distance = similarity_to_distance(similarity)
+                distance = similarity_to_distance(actor_cfg.vector_store.similarity)
 
                 result = (
-                    embed_provider,
-                    model,
-                    mock_dim,
-                    base_url,
-                    api_key,
+                    provider_type,
+                    model_type,
+                    provider_config,
                     collection,
                     distance,
                 )
@@ -119,20 +111,17 @@ def _load_embed_config(pipeline_id: Optional[str]):
     # is no dataset name to key the collection by here (that lived only in the
     # now-removed ``group`` field), so this degenerate path uses a fixed
     # placeholder collection — every current entry point records a
-    # pipeline_id, so this should not be reachable in practice.
+    # pipeline_id, so this should not be reachable in practice. The env provider
+    # type resolves through the same adapter path as a snapshot; ``mock`` needs
+    # its dimension supplied.
     collection = build_collection_name(UNSCOPED_DATASET_NAME)
     distance = similarity_to_distance(COLLECTION_SIMILARITY)
-    embed_provider = config.EMBED_PROVIDER
-    if embed_provider == "ollama":
-        model = config.OLLAMA_EMBED_MODEL
-        mock_dim = None
-    elif embed_provider == "mock":
-        model = "mock"
-        mock_dim = config.MOCK_EMBED_DIM
-    else:
-        model = "Qwen/Qwen3-Embedding-8B"
-        mock_dim = None
-    return embed_provider, model, mock_dim, None, None, collection, distance
+    provider_type = config.EMBED_PROVIDER
+    model_type = "embedding"
+    provider_config: dict = {}
+    if provider_type == "mock":
+        provider_config = {"mock_dim": config.MOCK_EMBED_DIM}
+    return provider_type, model_type, provider_config, collection, distance
 
 
 @dramatiq.actor(
@@ -149,22 +138,12 @@ def embed_chunks(
     # Collection, embedding provider/model and similarity all come from this
     # run's recorded pipeline_run config, not global config, so the query side
     # (DB search) and the index side agree on exactly one configuration.
-    (
-        embed_provider,
-        model_name,
-        mock_dim,
-        base_url,
-        api_key,
-        collection,
-        distance,
-    ) = _load_embed_config(pipeline_id)
+    provider_type, model_type, provider_config, collection, distance = (
+        _load_embed_config(pipeline_id)
+    )
 
-    model, model_size = get_model_and_size(
-        provider=embed_provider,
-        model=model_name,
-        mock_dim=mock_dim,
-        base_url=base_url,
-        api_key=api_key,
+    model, model_size = get_embed_client_and_size(
+        provider_type, model_type, provider_config
     )
 
     target = sql_store.crawl_targets.get_by_document_id(uuid.UUID(document_id))
@@ -178,7 +157,6 @@ def embed_chunks(
             vector_store=VectorStore(collection),
             model=model,
             model_size=model_size,
-            provider=embed_provider,
             distance=distance,
             pipeline_id=pipeline_id,
         )

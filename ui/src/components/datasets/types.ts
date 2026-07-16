@@ -10,13 +10,8 @@ interface DatasetBase {
 export interface WebDataset extends DatasetBase {
   sourceType: "web";
   url: string;
-  // Follow links found on the page.
-  processChildLinks: boolean;
-  // Only meaningful when processChildLinks is true.
-  processCrossDomainLinks: boolean;
-  // How many link levels deep to crawl. Only meaningful when
-  // processChildLinks is true.
-  depth: number;
+  // Crawl scope (follow child links / cross-domain / depth) is configured on
+  // the ingestion pipeline's schedule_discovered_links actor, not the dataset.
 }
 
 export interface LocalDataset extends DatasetBase {
@@ -34,9 +29,6 @@ export interface DatasetFormValues {
   sourceType: DatasetSourceType;
   // web
   url: string;
-  processChildLinks: boolean;
-  processCrossDomainLinks: boolean;
-  depth: number;
   // local
   paths: string[];
 }

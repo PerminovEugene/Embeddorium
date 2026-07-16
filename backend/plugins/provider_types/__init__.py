@@ -1,31 +1,30 @@
-"""Provider-type strategy plugins.
+"""Provider-type / model-type strategy plugins.
 
-Every kind of model provider Embeddorium can talk to — an in-process FastEmbed
-model, a mock, a local Ollama server, a remote OpenAI-compatible API — is a
-small, self-contained **provider-type adapter** under
-``backend/plugins/provider_types/<name>.py``. They are auto-discovered at
-process start exactly like the per-actor strategy plugins (see
-``docs/plugins.md``): drop a module in this directory, subclass
-:class:`~backend.plugins.provider_types.base.ProviderTypeAdapter`, set a
-class-level ``config``, and the new provider type shows up in the
-``/provider-configs`` metadata endpoint and becomes usable by the ingestion and
-compare embed paths — no registration, no editing of a dispatch table.
+Embedding and reranking are described by two auto-discovered layers:
 
-Each adapter owns two things:
+- A **provider type** — the runtime/API Embeddorium talks to (a mock, a local
+  Ollama server, a remote OpenAI-compatible API) — is a self-contained folder
+  ``backend/plugins/provider_types/<name>/`` whose ``base.py`` holds a
+  :class:`~backend.plugins.provider_types.base.ProviderTypeAdapter` subclass. It
+  owns the *connection* (``url``/``port``/``api_key``) and whether it runs
+  in-process (``type="builtin"``) or over the network (``type="remote"``).
+- A **model type** — the capability a model serves under a provider
+  (``embedding``, ``cross-encoder`` reranking, …) — is a module in that
+  provider's ``model_types/`` subpackage holding a
+  :class:`~backend.plugins.provider_types.base.ModelTypeHandler` subclass. It owns
+  the capability-specific settings (``model_name``, ``mock_dim``,
+  ``rerank_path``) and turns the provider's connection plus those settings into a
+  concrete :class:`~backend.plugins.provider_types.base.ResolvedEmbedTarget` /
+  :class:`~backend.plugins.provider_types.base.ResolvedRerankTarget` (and, for
+  embedding, an :class:`~backend.shared.clients.embed_client.EmbedClient`).
 
-- **What the UI needs to configure it** — a
-  :class:`~backend.plugins.provider_types.base.ProviderTypeConfig` declaring the
-  adapter's ``name``/``label``/``description``, whether it runs in-process
-  (``type="builtin"``) or over the network (``type="remote"``), which
-  ``model_type`` capabilities it supports, and a list of
-  :class:`~backend.plugins._fields.FieldSpec` settings.
-- **How to embed with it** — :meth:`ProviderTypeAdapter.resolve`, which turns a
-  stored provider's ``config`` into a concrete
-  :class:`~backend.plugins.provider_types.base.ResolvedEmbedTarget` (worker-key
-  + model + endpoint + mock dimension) the embed clients dispatch on. This is
-  what replaces the old hardcoded ``if provider_type == ...`` chains in the
-  embed_chunks worker and the compare service.
+A provider's supported model types are *derived* from the handlers it ships —
+adding a capability to a provider is dropping one module in its ``model_types/``
+folder, and the UI picks it up automatically from ``/provider-configs``. A
+cross-encoder reranker is thus a model type under ``ollama``, not a provider type.
 
-Keep top-level imports cheap: heavy backends (fastembed/onnxruntime/openai) are
-imported lazily inside the embed clients the target resolves to, never here.
+Discovery (see :mod:`backend.plugins.provider_types.registry`) walks the whole
+package once at process start: no registration, no editing of a dispatch table.
+Keep top-level imports cheap — heavy backends (the openai/ollama clients) are
+imported lazily inside :meth:`ModelTypeHandler.build_embed_client`, never here.
 """

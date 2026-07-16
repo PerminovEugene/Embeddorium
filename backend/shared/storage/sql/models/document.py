@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from backend.shared.storage.sql.models.chunk import DocumentChunkORM
 
@@ -15,7 +16,7 @@ from sqlalchemy import (
     Text,
     text as sql_text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
@@ -23,6 +24,7 @@ from sqlalchemy.orm import (
 )
 
 from backend.shared.storage.sql.models.base import Base
+
 
 class DocumentORM(Base):
     __tablename__ = "documents"
@@ -53,6 +55,12 @@ class DocumentORM(Base):
     content_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     text_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     parser_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parser_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parser_output_format: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parser_metadata: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=sql_text("'{}'")
+    )
+    parser_intermediate: Mapped[object | None] = mapped_column(JSONB, nullable=True)
     chunker_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     retrieved_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -71,5 +79,3 @@ class DocumentORM(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-
-

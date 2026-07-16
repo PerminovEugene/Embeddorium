@@ -3,7 +3,6 @@ import { Controller, useForm } from "react-hook-form";
 import Field from "../common/Field";
 import TextInput from "../common/TextInput";
 import Select, { SelectOption } from "../common/Select";
-import Checkbox from "../common/Checkbox";
 import MultiPathSelect from "../common/MultiPathSelect";
 import { Dataset, DatasetFormValues, DatasetSourceType } from "./types";
 
@@ -26,9 +25,6 @@ const EMPTY_VALUES: DatasetFormValues = {
   name: "",
   sourceType: "web",
   url: "",
-  processChildLinks: false,
-  processCrossDomainLinks: false,
-  depth: 1,
   paths: [],
 };
 
@@ -40,9 +36,6 @@ const toFormValues = (dataset: Dataset | null): DatasetFormValues => {
       name: dataset.name,
       sourceType: "web",
       url: dataset.url,
-      processChildLinks: dataset.processChildLinks,
-      processCrossDomainLinks: dataset.processCrossDomainLinks,
-      depth: dataset.depth,
     };
   }
   return {
@@ -75,7 +68,6 @@ const DatasetForm: React.FC<DatasetFormProps> = ({
   }, [dataset, reset]);
 
   const sourceType = watch("sourceType") as DatasetSourceType;
-  const processChildLinks = watch("processChildLinks");
   const isReadOnly = dataset !== null;
 
   return (
@@ -106,36 +98,6 @@ const DatasetForm: React.FC<DatasetFormProps> = ({
                 {...register("url", { required: "URL is required" })}
               />
             </Field>
-
-            <Checkbox
-              label="Process child links"
-              {...register("processChildLinks")}
-            />
-
-            {processChildLinks && (
-              <div className="flex flex-col gap-4 pl-6 border-l-2 border-emd-border">
-                <Checkbox
-                  label="Process cross-domain links"
-                  {...register("processCrossDomainLinks")}
-                />
-
-                <Field
-                  label="Depth level"
-                  htmlFor="depth"
-                  error={errors.depth?.message}
-                >
-                  <TextInput
-                    id="depth"
-                    type="number"
-                    min={1}
-                    {...register("depth", {
-                      valueAsNumber: true,
-                      min: { value: 1, message: "Depth must be at least 1" },
-                    })}
-                  />
-                </Field>
-              </div>
-            )}
           </>
         )}
 

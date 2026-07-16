@@ -8,7 +8,7 @@ you've done the [first mock run](first_mock_run.md) and the stack is up.
 
 The embed worker calls Ollama over HTTP via thin `httpx`/`langchain-ollama`
 clients — no `torch`, no `sentence-transformers` in the container. For the full
-provider reference and networking matrix, see [../embeddings.md](../embeddings.md).
+provider reference and networking matrix, see [../providers.md](../providers.md).
 
 ## Step 1 — Run Ollama and pull an embedding model
 

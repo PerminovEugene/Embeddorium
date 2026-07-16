@@ -101,10 +101,10 @@ class FetchSourceSettings(BaseModel):
 class ScheduleDiscoveredLinksSettings(BaseModel):
     """Settings consumed by the ``schedule_discovered_links`` actor.
 
-    ``follow_child_links`` gates whether discovered links are scheduled back to
-    the frontier at all. ``follow_cross_domain`` / ``max_depth`` are stored for
-    crawl-scope features that overlap the dormant dataset-level fields and are
-    not yet enforced.
+    This is the single source of truth for crawl scope (there are no
+    dataset-level crawl fields). ``follow_child_links`` gates whether discovered
+    links are scheduled back to the frontier at all. ``follow_cross_domain`` /
+    ``max_depth`` are stored crawl-scope knobs that are not yet enforced.
     """
 
     follow_child_links: bool = True

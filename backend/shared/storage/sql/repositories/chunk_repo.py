@@ -21,6 +21,8 @@ class ChunkRepository:
                 document_id=chunk.document_id,
                 text=chunk.text,
                 chunk_index=chunk.chunk_index,
+                chunk_type=chunk.chunk_type,
+                chunk_metadata=dict(chunk.chunk_metadata),
                 start_offset=chunk.start_offset,
                 end_offset=chunk.end_offset,
             )
@@ -37,6 +39,8 @@ class ChunkRepository:
                     document_id=chunk.document_id,
                     text=chunk.text,
                     chunk_index=chunk.chunk_index,
+                    chunk_type=chunk.chunk_type,
+                    chunk_metadata=dict(chunk.chunk_metadata),
                     start_offset=chunk.start_offset,
                     end_offset=chunk.end_offset,
                 )

@@ -8,7 +8,13 @@ from pydantic import BaseModel, Field
 
 
 class WebDataset(BaseModel):
-    """A dataset sourced from a single URL, optionally crawling its links."""
+    """A dataset sourced from a single URL.
+
+    Crawl scope (whether to follow child links, cross-domain, and how deep)
+    is configured on the ingestion pipeline's ``schedule_discovered_links``
+    actor config — the single source of truth the crawl actually reads — not
+    on the dataset.
+    """
 
     id: Optional[uuid.UUID] = None
     name: str
@@ -16,13 +22,6 @@ class WebDataset(BaseModel):
     source_type: Literal["web"] = "web"
 
     url: str
-    # Follow links found on the page.
-    process_child_links: bool
-    # Only meaningful when process_child_links is true.
-    process_cross_domain_links: bool
-    # How many link levels deep to crawl. Only meaningful when
-    # process_child_links is true.
-    depth: int
 
     created_at: Optional[datetime] = None
 
@@ -41,6 +40,4 @@ class LocalDataset(BaseModel):
     created_at: Optional[datetime] = None
 
 
-Dataset = Annotated[
-    Union[WebDataset, LocalDataset], Field(discriminator="source_type")
-]
+Dataset = Annotated[Union[WebDataset, LocalDataset], Field(discriminator="source_type")]

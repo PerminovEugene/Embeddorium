@@ -56,7 +56,9 @@ def resolve_reranker_target(
             "Reranker provider must be a cross-encoder model, "
             f"got {provider.model_type!r}"
         )
-    return resolve_rerank_target(provider.provider_type, provider.config)
+    return resolve_rerank_target(
+        provider.provider_type, provider.model_type, provider.config
+    )
 
 
 async def rerank_results(

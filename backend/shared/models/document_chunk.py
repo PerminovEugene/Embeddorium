@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel, Field
+from backend.plugins.structured_data import JsonObject
 
 if TYPE_CHECKING:
     from backend.shared.models.document import Document
@@ -18,7 +19,7 @@ class DocumentChunk(BaseModel):
     # "passage" for generic text chunks; legal_body/act_title/amendment_history/
     # legal_metadata for chunks produced by the legal XML chunker.
     chunk_type: str = "passage"
-    chunk_metadata: dict = Field(default_factory=dict)
+    chunk_metadata: JsonObject = Field(default_factory=dict)
     # Character offsets of this chunk within the parsed source text
     # (document.text_path content): start inclusive, end exclusive. None when
     # the chunker doesn't track positions (structure-aware chunkers) or for

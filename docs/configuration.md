@@ -12,7 +12,7 @@ There are two env files:
 - **`.env`** — host/local runs. Use `localhost` for everything.
 - **`.env.docker`** — the Compose stack. Use Compose service names as hosts
   (`postgres`, `qdrant`, `rabbitmq`), and `host.docker.internal` or the `ollama`
-  service name to reach Ollama (see [embeddings.md](embeddings.md)).
+  service name to reach Ollama (see [providers.md](providers.md)).
 
 ## Core
 
@@ -24,7 +24,6 @@ There are two env files:
 | `POSTGRES_HOST` | no | `localhost` | PostgreSQL host |
 | `POSTGRES_PORT` | no | `5432` | PostgreSQL port |
 | `QDRANT_URL` | no | `http://localhost:6333` | Qdrant instance URL |
-| `HG_TOKEN` | no | — | HuggingFace token. Only the `huggingface` embedding provider uses it; it no-ops when unset. |
 
 ## Message broker
 
@@ -41,12 +40,12 @@ The server and workers need RabbitMQ credentials.
 ## Embeddings
 
 Fallbacks for how chunk vectors are produced — each run normally carries its
-own provider snapshot, which takes precedence. See [embeddings.md](embeddings.md)
+own provider snapshot, which takes precedence. See [providers.md](providers.md)
 for the full rundown of each provider and the Ollama networking details.
 
 | Variable | Required | Default | Description |
 | -------- | -------- | ------- | ----------- |
-| `EMBED_PROVIDER` | no | `huggingface` | `huggingface` (local model), `ollama` (remote HTTP), or `mock` (random vectors) |
+| `EMBED_PROVIDER` | no | `ollama` | `ollama` (remote HTTP), `openai` (remote API), or `mock` (random vectors) |
 | `MOCK_EMBED_DIM` | no | `4096` | Vector dimension for the `mock` provider |
 | `OLLAMA_EMBED_BASE_URL` | if `ollama` | `http://localhost:11434` | Ollama server URL **for embeddings** |
 | `OLLAMA_EMBED_MODEL` | if `ollama` | `qwen3-embedding` | Ollama embedding model |

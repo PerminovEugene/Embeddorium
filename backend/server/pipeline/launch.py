@@ -65,11 +65,15 @@ def seed_pipeline(
         ``source_type`` ("web" or "local") plus the type-specific fields.
     broker:
         Dramatiq broker to enqueue on.  When ``None`` a fresh ``QueueClient``
-        broker is created (production path); inject a mock in tests.
+        broker is created; inject the shared broker in the server, or a mock in
+        tests.
     """
     if broker is None:
+        # Build a local broker to enqueue on. We deliberately do NOT call
+        # ``dramatiq.set_broker`` here: enqueueing uses this local instance
+        # directly, and mutating the process-global broker would swap it out
+        # from under whatever the app configured at startup.
         broker = QueueClient().create("pipeline_launch")
-        dramatiq.set_broker(broker)
 
     source_type = dataset_snapshot.get("source_type")
     pipeline_id_str = str(pipeline_id)

@@ -1,13 +1,10 @@
-"""OpenAI (and OpenAI-compatible) provider-type adapter: a remote HTTP API.
+"""OpenAI (and OpenAI-compatible) provider type: a remote HTTP API.
 
 A networked, authenticated endpoint: ``url`` defaults to the public OpenAI API
 (env-overridable) and ``api_key`` is a real, if optional, credential. Adding a
-sibling remote API later (e.g. ``claude.py``) is just another module like this
-one.
-
-The resolved target routes to the shared OpenAI HTTP embedding client. The
-client is deliberately transport-only; configuration and endpoint assembly
-remain in this adapter.
+sibling remote API later (e.g. an ``anthropic`` folder) is just another provider
+package like this one. The model to call is capability-specific and lives on the
+model-type handlers under ``model_types/``.
 """
 
 from __future__ import annotations
@@ -16,17 +13,14 @@ from backend.plugins.provider_types._remote import (
     api_key_field,
     build_base_url,
     env_default,
-    model_name_field,
     port_field,
     url_field,
 )
 from backend.plugins.provider_types.base import (
     ProviderTypeAdapter,
     ProviderTypeConfig,
-    ResolvedEmbedTarget,
+    ResolvedConnection,
 )
-
-_OPENAI_DEFAULT_MODEL = "text-embedding-3-small"
 
 
 class OpenAIProviderType(ProviderTypeAdapter):
@@ -38,7 +32,6 @@ class OpenAIProviderType(ProviderTypeAdapter):
             "an API key."
         ),
         type="remote",
-        supported_model_types=("embedding", "text", "long-text", "reranker"),
         fields=[
             url_field(
                 default=env_default(
@@ -48,14 +41,11 @@ class OpenAIProviderType(ProviderTypeAdapter):
             ),
             port_field(default=None),
             api_key_field(),
-            model_name_field(default=_OPENAI_DEFAULT_MODEL),
         ],
     )
 
-    def resolve(self) -> ResolvedEmbedTarget:
-        return ResolvedEmbedTarget(
-            provider="openai",
-            model=self._get("model_name") or _OPENAI_DEFAULT_MODEL,
+    def resolve_connection(self) -> ResolvedConnection:
+        return ResolvedConnection(
             base_url=build_base_url(self._get("url"), self._get("port")),
             api_key=self._get("api_key") or None,
         )

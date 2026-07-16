@@ -28,24 +28,14 @@ web = [
   "langchain-text-splitters>=0.3",
 ]
 
-# worker-embed-chunks (in docker-compose): lightweight path for the mock and
-# remote-HTTP (ollama) embedding providers. No torch/sentence-transformers in
-# the container image — langchain-ollama/ollama are HTTP clients (httpx-based).
+# worker-embed-chunks (in docker-compose): the embedding providers are all
+# remote/API (ollama, openai) or the trivial in-process mock, so the container
+# stays lightweight — no torch/onnxruntime/sentence-transformers. langchain-
+# ollama/ollama and the openai client are HTTP clients (httpx-based).
 embed = [
   "qdrant-client>=1",
   "langchain-ollama>=0.3",
-  # FastEmbed: local ONNX embeddings via onnxruntime. Lightweight — no torch.
-  "fastembed>=0.8",
   "httpx>=0.27",
-]
-
-# Real local embedding model (run by hand, not in docker-compose): the heavy ML
-# stack on top of the lightweight `embed` deps.
-embedding = [
-  "qdrant-client>=1",
-  "sentence-transformers>=3",
-  "huggingface-hub>=0.20",
-  "torch>=2",
 ]
 
 # Embeddings tester API (server/): FastAPI service that embeds source/candidate
@@ -63,8 +53,6 @@ server = [
   "langchain-text-splitters>=0.3",
   "trafilatura>=2",
   "numpy>=1",
-  # FastEmbed: local ONNX embeddings via onnxruntime. Lightweight — no torch.
-  "fastembed>=0.8",
   "httpx>=0.27",
 ]
 

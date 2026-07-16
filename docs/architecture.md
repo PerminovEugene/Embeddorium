@@ -11,6 +11,10 @@ files. Both run through the _same_ chain of actors: the first two stages
 (`validate_source`, `fetch_source`) select a per-source-type strategy plugin
 (web vs local file) and the rest is fully shared.
 
+> For the implementation-level reference — each actor's message payload, queue
+> name, status transitions and failure modes, plus the broker/retry setup — see
+> [pipeline/](pipeline/README.md).
+
 ## The crawl chain (web)
 
 <img src="docs/assets/Architecture.png" alt="Embeddorium architecture" >

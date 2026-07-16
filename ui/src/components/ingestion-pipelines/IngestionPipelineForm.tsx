@@ -195,10 +195,18 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
     onSubmit({ ...values, name: values.name.trim(), actorSettings });
   };
 
+  // A pipeline's actor chain is derived from a single source type, so mixing
+  // web and local datasets isn't allowed. Once one type is selected, lock the
+  // options of the other type until the selection is cleared.
+  const lockedSourceType: DatasetSourceType | null =
+    sourceTypes.size === 1 ? [...sourceTypes][0] : null;
+
   const datasetOptions = datasets.map((d) => ({
     id: d.id,
     label: d.name,
     sublabel: d.sourceType,
+    disabled:
+      lockedSourceType !== null && d.sourceType !== lockedSourceType,
   }));
 
   return (
@@ -227,6 +235,12 @@ const IngestionPipelineForm: React.FC<IngestionPipelineFormProps> = ({
           emptyMessage="No datasets yet — create one first."
           disabled={disabled}
         />
+        {lockedSourceType && (
+          <p className="text-xs text-emd-placeholder mt-1">
+            Web and file datasets can't be mixed in one pipeline. Clear the
+            selection to switch source type.
+          </p>
+        )}
       </Field>
 
       {/* Actor config — the chain is selected from the datasets' source types. */}

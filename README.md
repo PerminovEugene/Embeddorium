@@ -116,7 +116,6 @@ and a matching collection appears in the Qdrant dashboard
 Local endpoints:
 
 - UI — http://localhost:5173
-- API + interactive docs — http://localhost:8000/docs
 - Qdrant dashboard — http://localhost:6333/dashboard
 - RabbitMQ management — http://localhost:15672
 
@@ -140,7 +139,7 @@ Ollama listens on) and select it for a run.
 > **Docker networking:** the embed worker runs in a container, so `localhost`
 > won't reach Ollama on your host. Use `host.docker.internal` (Docker Desktop) or
 > the Docker bridge IP on Linux. Details in
-> [docs/embeddings.md](docs/embeddings.md).
+> [docs/providers.md](docs/providers.md).
 
 ## Architecture
 
@@ -169,19 +168,20 @@ docker-compose.yml
 
 ## Documentation
 
-| Guide                                      | Contents                                                              |
-| ------------------------------------------ | --------------------------------------------------------------------- |
-| [Quick start](docs/quickstart.md)          | Detailed first run, service URLs, reset, common failures              |
-| [Usage](docs/usage.md)                     | Starting runs, local XML sources, the agent, the embeddings tester    |
-| [Search](docs/search.md)                   | Querying a run's collection from the UI and the API                   |
-| [Architecture](docs/architecture.md)       | Pipeline stages, outbox, status machine, storage model                |
-| [Configuration](docs/configuration.md)     | Every environment variable, for host and Docker                       |
-| [Embeddings](docs/embeddings.md)           | The `mock` / `ollama` / `huggingface` providers and Ollama networking |
-| [Concurrency](docs/concurrency.md)         | Per-stage threads/processes, fan-out, embedding load                  |
-| [Plugins](docs/plugins.md)                 | Writing your own chunker plugin, auto-discovery, the built-ins        |
-| [Development](docs/development.md)         | Setup, tests, linting, migrations, resetting local state              |
-| [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs                     |
-| [Roadmap](docs/roadmap.md)                 | What's shipped, what's next (hybrid search, reranking, evaluation)    |
+| Guide                                      | Contents                                                               |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| [Quick start](docs/quickstart.md)          | Detailed first run, service URLs, reset, common failures               |
+| [Usage](docs/usage.md)                     | Starting runs, local XML sources, the agent, the embeddings tester     |
+| [Search](docs/search.md)                   | Querying a run's collection from the UI and the API                    |
+| [Architecture](docs/architecture.md)       | Pipeline stages, outbox, status machine, storage model                 |
+| [Pipeline actors](docs/pipeline/README.md) | Per-actor reference: payloads, queues, retries, run state, idempotency |
+| [Configuration](docs/configuration.md)     | Every environment variable, for host and Docker                        |
+| [Providers](docs/providers.md)             | The `mock` / `ollama` / `openai` providers, config fields, Ollama networking |
+| [Concurrency](docs/concurrency.md)         | Per-stage threads/processes, fan-out, embedding load                   |
+| [Plugins](docs/plugins.md)                 | Writing your own chunker plugin, auto-discovery, the built-ins         |
+| [Development](docs/development.md)         | Setup, tests, linting, migrations, resetting local state               |
+| [Troubleshooting](docs/troubleshooting.md) | Startup failures, ports, stuck runs, reading logs                      |
+| [Roadmap](docs/roadmap.md)                 | What's shipped, what's next (hybrid search, reranking, evaluation)     |
 
 **Tutorials:**
 [First mock run](docs/tutorials/first_mock_run.md) ·

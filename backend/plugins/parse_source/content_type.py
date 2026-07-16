@@ -18,6 +18,7 @@ from __future__ import annotations
 from backend.plugins._fields import FieldSpec
 from backend.plugins.parse_source.base import ParseStrategy, ParseStrategyConfig
 from backend.plugins.parse_source.formats.registry import get_parser, get_parser_by_name
+from backend.plugins.structured_data import ParsedDocument, normalize_parsed_document
 
 
 class ContentTypeParse(ParseStrategy):
@@ -47,8 +48,18 @@ class ContentTypeParse(ParseStrategy):
 
     def parse(
         self, *, raw: str, content_type: str | None, final_url: str
-    ) -> str | None:
+    ) -> str | ParsedDocument | None:
         parser = get_parser_by_name(self._get("parser")) or get_parser(content_type)
         if parser is None:
             return None
-        return parser.parse(raw, final_url)
+        parsed = parser.parse(raw, final_url)
+        if isinstance(parsed, str):
+            return parsed
+        result = normalize_parsed_document(parsed)
+        return ParsedDocument(
+            text=result.text,
+            metadata=result.metadata,
+            intermediate=result.intermediate,
+            output_format=result.output_format or parser.config.output_format,
+            parser_name=result.parser_name or parser.config.name,
+        )

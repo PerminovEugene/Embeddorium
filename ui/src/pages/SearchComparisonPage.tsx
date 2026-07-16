@@ -119,11 +119,19 @@ const SearchComparisonPage = () => {
       )}
 
       <div className="mb-6">
-        <Card title="Select searches">
-          {summariesLoading ? (
+        {summariesLoading ? (
+          <Card title="Select searches">
             <p className="text-sm text-emd-placeholder">Loading searches…</p>
-          ) : (
-            <>
+          </Card>
+        ) : summaries.length === 0 ? (
+          <Card title="No saved searches yet">
+            <p className="text-sm text-emd-placeholder">
+              There are no saved searches to compare. Run a search first, then
+              come back here to compare the stored results side by side.
+            </p>
+          </Card>
+        ) : (
+          <Card title="Select searches">
               <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-sm text-emd-text">
                 <input
                   type="checkbox"
@@ -144,9 +152,8 @@ const SearchComparisonPage = () => {
                 onChange={setSelectedIds}
                 allowDifferentInputs={allowDifferentInputs}
               />
-            </>
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
 
       {selectedIds.length > 0 && (

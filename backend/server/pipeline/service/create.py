@@ -10,6 +10,7 @@ helpers here (``_parse_provider_id``, ``_build_settings``,
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any, TypeVar
 
@@ -77,7 +78,15 @@ def _build_settings(model_cls: type[_SettingsT], block: dict[str, Any]) -> _Sett
         return model_cls.model_validate(snaked)
     except Exception:
         # A malformed value (e.g. wrong type) shouldn't 500 the create; fall
-        # back to defaults so the run is still created with sane config.
+        # back to defaults so the run is still created with sane config. Log the
+        # discarded input, though — silently diverging from what the user asked
+        # for is a data-integrity trap for a config-reproducing workbench.
+        logging.warning(
+            "Discarding malformed %s settings; falling back to defaults. input=%r",
+            model_cls.__name__,
+            snaked,
+            exc_info=True,
+        )
         return model_cls()
 
 

@@ -1,59 +1,96 @@
-"""The provider-type adapter interface.
+"""The provider-type / model-type adapter interfaces.
 
-A provider-type adapter owns the provider-specific half of embedding: turning a
-stored :class:`~backend.shared.models.provider.Provider`'s ``config`` blob into
-the concrete :class:`ResolvedEmbedTarget` the embed clients need (a worker-facing
-provider key, the model to load, an optional endpoint, and the mock dimension).
-Everything else — the model cache, the encode loop, vector upsert, HTTP — stays
-in the embed clients and the actor/launcher, which are provider-agnostic.
+Embedding (and reranking) is described by two layers, mirroring how a real
+deployment is configured:
 
-Every adapter declares a class-level :class:`ProviderTypeConfig`, sharing the
-same ``name``/``label``/``description``/``fields`` shape as every other plugin
-config so one API schema serves them all, plus two provider-specific pieces of
-metadata: ``type`` (in-process ``"builtin"`` vs. networked ``"remote"``) and
-``supported_model_types`` (the capabilities the UI's model-type select should be
-constrained to).
+- A **provider type** is the runtime/API you talk to — ``mock``, ``ollama``,
+  ``openai``. It owns the *connection*: the ``url``/``port``/``api_key`` shared by
+  every model that provider serves, plus the ``type`` metadata (in-process
+  ``"builtin"`` vs. networked ``"remote"``). A provider type is a
+  :class:`ProviderTypeAdapter` with a class-level :class:`ProviderTypeConfig`.
+- A **model type** is the capability a model serves under a provider —
+  ``embedding``, ``cross-encoder`` (reranker), … . It owns the
+  *capability-specific* settings (``model_name``, ``mock_dim``, ``rerank_path``)
+  and the code that turns them, plus the provider's resolved connection, into a
+  concrete target (:class:`ResolvedEmbedTarget` / :class:`ResolvedRerankTarget`)
+  and, for embedding, an :class:`~backend.shared.clients.embed_client.EmbedClient`.
+  A model type is a :class:`ModelTypeHandler` with a class-level
+  :class:`ModelTypeConfig`, discovered from the provider's ``model_types/``
+  subpackage.
 
-``__init__`` resolves the raw ``config`` dict against ``config.fields``, filling
-each field's ``default`` for any missing key — the same settings-resolution
-convenience the chunker/embed_chunks plugins offer. Subclasses read values via
-:meth:`_get` and implement :meth:`resolve`.
+A cross-encoder reranker is therefore a *model type* offered under a provider
+(``ollama``), not a provider type of its own.
+
+The persisted :class:`~backend.shared.models.provider.Provider` stays a flat
+``{provider_type, model_type, config}`` record. When resolving, the single
+``config`` blob is validated against the *union* of the provider's connection
+fields and the selected model-type handler's fields — the provider adapter reads
+the connection keys, the handler reads the capability keys, each ignoring keys it
+did not declare.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from backend.plugins._fields import FieldSpec
-from backend.shared.models.provider import ModelType
 
-# Where an adapter's model actually runs. ``builtin`` = in-process, no network
-# (fastembed, mock); ``remote`` = a server/API reached over the network (ollama,
-# openai). This is a fixed property of the adapter, not a per-provider user
-# choice, so it lives on the config as metadata rather than as a ``FieldSpec``.
+if TYPE_CHECKING:
+    from backend.shared.clients.embed_client import EmbedClient
+
+# Where a provider's model actually runs. ``builtin`` = in-process, no network
+# (mock); ``remote`` = a server/API reached over the network (ollama, openai).
+# This is a fixed property of the provider type, not a per-provider user choice,
+# so it lives on the config as metadata rather than as a ``FieldSpec``.
 ProviderType = Literal["builtin", "remote"]
 
 
 @dataclass(frozen=True)
 class ProviderTypeConfig:
-    """Static, UI-facing description of a provider-type adapter.
+    """Static, UI-facing description of a provider type.
 
-    ``name`` is the stable id the adapter is looked up under (and the value
-    stored in ``Provider.provider_type``). ``type`` and
-    ``supported_model_types`` are advertised to the UI so it can group the
-    provider-type picker and constrain the model-type select; ``fields``
-    describes the settings form and is the single source of truth for what the
-    adapter's ``config`` blob may contain.
+    ``name`` is the stable id the provider is looked up under (and the value
+    stored in ``Provider.provider_type``). ``type`` is advertised to the UI so it
+    can group the provider-type picker; ``fields`` describes the provider's
+    *connection* form (url/port/api_key) — the capability-specific fields live on
+    each :class:`ModelTypeConfig` instead.
     """
 
     name: str
     label: str
     description: str
     type: ProviderType
-    supported_model_types: tuple[ModelType, ...]
     fields: list[FieldSpec] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ModelTypeConfig:
+    """Static, UI-facing description of one model type served by a provider.
+
+    ``model_type`` is the capability id (``embedding``, ``cross-encoder``, …) —
+    the value stored in ``Provider.model_type`` — and ``fields`` describes the
+    capability-specific settings form (``model_name``, ``mock_dim``,
+    ``rerank_path``) rendered under the provider's connection form.
+    """
+
+    model_type: str
+    label: str
+    fields: list[FieldSpec] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ResolvedConnection:
+    """The provider's resolved connection, handed to its model-type handlers.
+
+    ``base_url`` and ``api_key`` are the networked-provider settings (both
+    ``None`` for the in-process mock). A model-type handler combines these with
+    its own ``model_name`` to build a concrete target/client.
+    """
+
+    base_url: str | None = None
+    api_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -61,10 +98,10 @@ class ResolvedEmbedTarget:
     """The concrete embedding target derived from a provider's ``config``.
 
     ``provider`` is the worker-facing embed-client key (``"ollama"`` /
-    ``"mock"`` / ``"fastembed"`` / ``"huggingface"``); ``model`` is the model to
-    load; ``base_url`` and ``api_key`` are connection settings for networked
-    providers (``None`` for in-process ones); ``mock_dim`` is the vector size
-    for the mock provider (``None`` for real providers).
+    ``"openai"`` / ``"mock"``); ``model`` is the model to load; ``base_url`` and
+    ``api_key`` are connection settings for networked providers (``None`` for
+    in-process ones); ``mock_dim`` is the vector size for the mock provider
+    (``None`` for real providers).
     """
 
     provider: str
@@ -88,7 +125,7 @@ class ResolvedRerankTarget:
     Infinity / Cohere — not in-process, so torch/sentence-transformers never
     enter the container path). ``path`` is the rerank endpoint relative to
     ``base_url`` — servers disagree (vLLM ``v1/rerank``, Infinity ``rerank``) so
-    it is resolved per-provider rather than hardcoded in the client.
+    it is resolved per-model-type rather than hardcoded in the client.
     """
 
     provider: str
@@ -98,98 +135,149 @@ class ResolvedRerankTarget:
     path: str = "v1/rerank"
 
 
+def _validate_value(field: FieldSpec, value: Any) -> Any:
+    """Validate one JSON value against its UI field descriptor.
+
+    Shared by both :class:`ProviderTypeAdapter` and :class:`ModelTypeHandler`:
+    the two layers split a provider's flat ``config`` between them but validate
+    their own keys the same way.
+    """
+    if value is None:
+        if field.required:
+            raise ValueError(f"Provider config field {field.key!r} is required")
+        return None
+
+    if field.type == "text":
+        if not isinstance(value, str):
+            raise ValueError(f"Provider config field {field.key!r} must be text")
+        if field.required and not value.strip():
+            raise ValueError(f"Provider config field {field.key!r} is required")
+        return value
+
+    if field.type == "number":
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"Provider config field {field.key!r} must be a number")
+        if field.min is not None and value < field.min:
+            raise ValueError(
+                f"Provider config field {field.key!r} must be at least {field.min}"
+            )
+        if field.max is not None and value > field.max:
+            raise ValueError(
+                f"Provider config field {field.key!r} must be at most {field.max}"
+            )
+        return value
+
+    if field.type == "checkbox":
+        if not isinstance(value, bool):
+            raise ValueError(f"Provider config field {field.key!r} must be a boolean")
+        return value
+
+    if field.type == "select":
+        allowed = {option.get("value") for option in field.options or []}
+        if value not in allowed:
+            raise ValueError(
+                f"Provider config field {field.key!r} has unsupported value {value!r}"
+            )
+        return value
+
+    return value
+
+
+def _resolve_config(fields: list[FieldSpec], values: dict[str, Any] | None) -> dict:
+    """Resolve *values* against *fields*, filling per-field defaults.
+
+    Fills each declared field's ``default`` for any missing key and drops keys
+    not declared here, so a layer only ever sees the keys it owns.
+    """
+    values = values or {}
+    return {
+        field.key: _validate_value(field, values.get(field.key, field.default))
+        for field in fields
+    }
+
+
 class ProviderTypeAdapter(ABC):
-    """Base class every provider-type adapter subclasses."""
+    """Base class every provider type subclasses.
+
+    Owns the provider's *connection*: it resolves the ``config`` blob against its
+    connection ``fields`` and exposes :meth:`resolve_connection`, whose
+    :class:`ResolvedConnection` is handed to the selected model-type handler.
+    """
 
     config: ClassVar[ProviderTypeConfig]
 
     def __init__(self, values: dict[str, Any] | None = None) -> None:
-        values = values or {}
-        # Resolve the raw provider config against the declared fields, filling
-        # per-field defaults for any missing key. Unknown keys are dropped, so
-        # the adapter only ever sees keys it declared.
-        self.values = {
-            field.key: self._validate_value(
-                field,
-                values.get(field.key, field.default),
-            )
-            for field in self.config.fields
-        }
-
-    @staticmethod
-    def _validate_value(field: FieldSpec, value: Any) -> Any:
-        """Validate one JSON value against its UI field descriptor."""
-        if value is None:
-            if field.required:
-                raise ValueError(f"Provider config field {field.key!r} is required")
-            return None
-
-        if field.type == "text":
-            if not isinstance(value, str):
-                raise ValueError(f"Provider config field {field.key!r} must be text")
-            if field.required and not value.strip():
-                raise ValueError(f"Provider config field {field.key!r} is required")
-            return value
-
-        if field.type == "number":
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(
-                    f"Provider config field {field.key!r} must be a number"
-                )
-            if field.min is not None and value < field.min:
-                raise ValueError(
-                    f"Provider config field {field.key!r} must be at least {field.min}"
-                )
-            if field.max is not None and value > field.max:
-                raise ValueError(
-                    f"Provider config field {field.key!r} must be at most {field.max}"
-                )
-            return value
-
-        if field.type == "checkbox":
-            if not isinstance(value, bool):
-                raise ValueError(
-                    f"Provider config field {field.key!r} must be a boolean"
-                )
-            return value
-
-        if field.type == "select":
-            allowed = {option.get("value") for option in field.options or []}
-            if value not in allowed:
-                raise ValueError(
-                    f"Provider config field {field.key!r} has unsupported value {value!r}"
-                )
-            return value
-
-        return value
+        self.values = _resolve_config(self.config.fields, values)
 
     def _get(self, key: str) -> Any:
-        """Return the resolved value for a declared field key."""
+        """Return the resolved value for a declared connection field key."""
         return self.values[key]
 
     def resolved_config(self) -> dict[str, Any]:
-        """Return the config resolved against the adapter's field defaults."""
+        """Return the connection config resolved against its field defaults."""
         return dict(self.values)
 
     @abstractmethod
-    def resolve(self) -> ResolvedEmbedTarget:
-        """Resolve this provider's config into a concrete embed target.
+    def resolve_connection(self) -> ResolvedConnection:
+        """Resolve this provider's connection settings.
 
-        Adapters whose capability is not embedding (e.g. a cross-encoder
-        reranker) must still implement this abstract method, but should raise a
-        clear error here so they can never be picked as an embed target, and
-        implement :meth:`resolve_rerank` instead.
+        Networked providers assemble a ``base_url`` (and optionally an
+        ``api_key``); the in-process mock returns an empty connection.
         """
         raise NotImplementedError
 
-    def resolve_rerank(self) -> ResolvedRerankTarget:
-        """Resolve this provider's config into a concrete rerank target.
 
-        The default raises: only reranker adapters (``cross-encoder``) override
-        it. This keeps ``resolve``/``resolve_rerank`` symmetric with the two
-        capabilities without forcing every embedding adapter to implement a
-        method it has no use for.
+class ModelTypeHandler(ABC):
+    """Base class every model-type handler subclasses.
+
+    A handler serves one capability (``config.model_type``) under a provider. It
+    resolves its capability-specific ``config`` keys and combines them with the
+    provider's :class:`ResolvedConnection` to build a concrete target/client.
+
+    :meth:`resolve` + :meth:`build_embed_client` are for embedding handlers;
+    :meth:`resolve_rerank` is for reranker handlers. The defaults raise so a
+    handler that serves one capability can never be driven as the other.
+    """
+
+    config: ClassVar[ModelTypeConfig]
+
+    def __init__(
+        self,
+        values: dict[str, Any] | None = None,
+        connection: ResolvedConnection | None = None,
+    ) -> None:
+        self.values = _resolve_config(self.config.fields, values)
+        self.connection = connection or ResolvedConnection()
+
+    def _get(self, key: str) -> Any:
+        """Return the resolved value for a declared capability field key."""
+        return self.values[key]
+
+    def resolved_config(self) -> dict[str, Any]:
+        """Return the capability config resolved against its field defaults."""
+        return dict(self.values)
+
+    def resolve(self) -> ResolvedEmbedTarget:
+        """Resolve this model type's config into a concrete embed target."""
+        raise NotImplementedError(
+            f"Model type {self.config.model_type!r} does not support embedding"
+        )
+
+    def build_embed_client(self) -> EmbedClient:
+        """Build the embed client this model type embeds with.
+
+        The provider-specific *strategy* the embed actor (and compare/search)
+        dispatch through instead of a hardcoded ``if provider == ...`` switch:
+        each embedding handler owns how to construct its client — importing its
+        heavy backend lazily, reusing :meth:`resolve` for model/endpoint
+        resolution — so callers only ``build_embed_client()`` and ``encode``.
         """
         raise NotImplementedError(
-            f"Provider type {type(self).__name__!r} does not support reranking"
+            f"Model type {self.config.model_type!r} does not support embedding"
+        )
+
+    def resolve_rerank(self) -> ResolvedRerankTarget:
+        """Resolve this model type's config into a concrete rerank target."""
+        raise NotImplementedError(
+            f"Model type {self.config.model_type!r} does not support reranking"
         )

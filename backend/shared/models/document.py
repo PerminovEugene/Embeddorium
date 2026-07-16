@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel, Field
+from backend.plugins.structured_data import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from backend.shared.models.document_chunk import DocumentChunk
@@ -28,6 +29,10 @@ class Document(BaseModel):
     content_hash: Optional[str] = None
     text_hash: Optional[str] = None
     parser_version: Optional[str] = None
+    parser_name: Optional[str] = None
+    parser_output_format: Optional[str] = None
+    parser_metadata: JsonObject = Field(default_factory=dict)
+    parser_intermediate: JsonValue = None
     chunker_version: Optional[str] = None
     retrieved_at: Optional[datetime] = None
 

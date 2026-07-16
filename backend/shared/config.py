@@ -13,19 +13,16 @@ def _require(name: str) -> str:
     return value
 
 
-# HuggingFace. Optional: only used by hg_client, which already no-ops when unset,
-# so DB-only entrypoints (e.g. migrations) don't need a token.
-HG_TOKEN: str = os.getenv("HG_TOKEN", "")
+# Embedding provider used by the legacy env fallback (no pipeline_id). Only
+# remote/API providers and the trivial mock are supported: "ollama" calls a
+# remote Ollama server over HTTP (e.g. qwen3-embedding); "openai" calls an
+# OpenAI-compatible API; "mock" returns random vectors instead, so the
+# crawl/embed pipeline can be exercised quickly without any real model.
+EMBED_PROVIDER: str = os.getenv("EMBED_PROVIDER", "ollama")
 
-# Embedding provider. "huggingface" loads the real (slow) SentenceTransformer
-# model; "ollama" calls a remote Ollama server over HTTP (e.g. qwen3-embedding);
-# "mock" returns random vectors instead, so the crawl/embed pipeline can be
-# exercised quickly without loading any model.
-EMBED_PROVIDER: str = os.getenv("EMBED_PROVIDER", "huggingface")
-
-# Vector dimension used by the mock embedding provider. Defaults to the real
-# model's dimension (Qwen/Qwen3-Embedding-8B = 4096) so mock and real
-# collections stay compatible by default.
+# Vector dimension used by the mock embedding provider. Defaults to 4096 (the
+# Qwen/Qwen3-Embedding-8B dimension) so mock and real collections stay
+# compatible by default.
 MOCK_EMBED_DIM: int = int(os.getenv("MOCK_EMBED_DIM", "4096"))
 
 # Ollama embeddings (EMBED_PROVIDER=ollama). This is the embedding pipeline's
@@ -38,7 +35,9 @@ MOCK_EMBED_DIM: int = int(os.getenv("MOCK_EMBED_DIM", "4096"))
 # - docker compose, Ollama on the host (Mac/Windows Docker Desktop):
 #   http://host.docker.internal:11434
 # - process running directly on the host: http://localhost:11434
-OLLAMA_EMBED_BASE_URL: str = os.getenv("OLLAMA_EMBED_BASE_URL", "http://localhost:11434")
+OLLAMA_EMBED_BASE_URL: str = os.getenv(
+    "OLLAMA_EMBED_BASE_URL", "http://localhost:11434"
+)
 OLLAMA_EMBED_MODEL: str = os.getenv("OLLAMA_EMBED_MODEL", "qwen3-embedding")
 
 # PostgreSQL
@@ -75,3 +74,10 @@ LOG_DIR: str = os.getenv("LOG_DIR", "logs")
 # structure as LOG_DIR. Defaults to /tmp/pipeline_runs so run logs are
 # transient and don't fill persistent storage.
 PIPELINE_RUNS_DIR: str = os.getenv("PIPELINE_RUNS_DIR", "/tmp/pipeline_runs")
+
+# JSON plugin output limits. Structured data is rejected, never truncated.
+PARSER_METADATA_MAX_BYTES: int = int(os.getenv("PARSER_METADATA_MAX_BYTES", "262144"))
+PARSER_INTERMEDIATE_MAX_BYTES: int = int(
+    os.getenv("PARSER_INTERMEDIATE_MAX_BYTES", "8388608")
+)
+CHUNK_METADATA_MAX_BYTES: int = int(os.getenv("CHUNK_METADATA_MAX_BYTES", "262144"))

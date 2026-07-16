@@ -14,7 +14,7 @@ ModelType = Literal["embedding", "text", "long-text", "reranker", "cross-encoder
 
 
 class Provider(BaseModel):
-    """A configured model provider (Ollama, OpenAI, FastEmbed, mock, ...).
+    """A configured model provider (Ollama, OpenAI, mock, ...).
 
     The provider is a single, flat record: ``provider_type`` is the name of the
     provider-type *adapter* (``backend/plugins/provider_types/<name>.py``) that
@@ -28,7 +28,7 @@ class Provider(BaseModel):
 
     id: uuid.UUID | None = None
     name: str
-    # Adapter name (registry key): "ollama" | "mock" | "fastembed" | "openai" | ...
+    # Adapter name (registry key): "ollama" | "mock" | "openai" | ...
     provider_type: str
     model_type: ModelType
     # Type-specific settings, resolved against the adapter's field defaults.

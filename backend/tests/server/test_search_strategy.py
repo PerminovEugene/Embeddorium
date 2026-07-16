@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from backend.server.search import service
 from backend.server.search.schemas import SearchRequest
@@ -167,11 +168,11 @@ def test_unknown_strategy_returns_error(monkeypatch):
     monkeypatch.setattr(service, "get_pipeline_run", called)
     store = _make_store()
 
-    result = asyncio.run(search_db(store, MagicMock(), _request("dense")))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(search_db(store, MagicMock(), _request("dense")))
 
-    assert result["status"] == "error"
-    assert "search strategy" in result["detail"].lower()
-    assert result["results"] == []
+    assert exc.value.status_code == 400
+    assert "search strategy" in exc.value.detail.lower()
     # Rejected before the run is even loaded.
     called.assert_not_called()
 
@@ -312,7 +313,7 @@ def _cross_encoder_provider() -> Provider:
     return Provider(
         id=_RERANKER_ID,
         name="reranker",
-        provider_type="cross_encoder",
+        provider_type="ollama",
         model_type="cross-encoder",
         config={},
     )
@@ -375,12 +376,13 @@ def test_hybrid_reranking_requires_provider_id(monkeypatch):
     store = _make_store()
     _patch_common(monkeypatch, dense_hits=[])
 
-    result = asyncio.run(
-        search_db(store, MagicMock(), _rerank_request(rerankerProviderId=""))
-    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            search_db(store, MagicMock(), _rerank_request(rerankerProviderId=""))
+        )
 
-    assert result["status"] == "error"
-    assert "rerankerProviderId" in result["detail"]
+    assert exc.value.status_code == 400
+    assert "rerankerProviderId" in exc.value.detail
     store.searches.create.assert_not_called()
 
 
@@ -389,10 +391,11 @@ def test_hybrid_reranking_requires_valid_top_k(monkeypatch):
     store.providers.get.return_value = _cross_encoder_provider()
     _patch_common(monkeypatch, dense_hits=[])
 
-    result = asyncio.run(search_db(store, MagicMock(), _rerank_request(rerankerTopK=0)))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(search_db(store, MagicMock(), _rerank_request(rerankerTopK=0)))
 
-    assert result["status"] == "error"
-    assert "rerankerTopK" in result["detail"]
+    assert exc.value.status_code == 400
+    assert "rerankerTopK" in exc.value.detail
 
 
 def test_hybrid_reranking_rejects_non_cross_encoder_provider(monkeypatch):
@@ -406,10 +409,11 @@ def test_hybrid_reranking_rejects_non_cross_encoder_provider(monkeypatch):
     )
     _patch_common(monkeypatch, dense_hits=[])
 
-    result = asyncio.run(search_db(store, MagicMock(), _rerank_request()))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(search_db(store, MagicMock(), _rerank_request()))
 
-    assert result["status"] == "error"
-    assert "cross-encoder" in result["detail"].lower()
+    assert exc.value.status_code == 400
+    assert "cross-encoder" in exc.value.detail.lower()
 
 
 def test_reranking_ignored_for_non_hybrid_strategy(monkeypatch):

@@ -53,6 +53,9 @@ def semantic_search(
                 "group": dataset_name,
                 "chunkText": chunk.text if chunk else None,
                 "sourceUrl": document.source_url if document else None,
+                "metadata": (
+                    dict(getattr(chunk, "chunk_metadata", {}) or {}) if chunk else {}
+                ),
             }
         )
     return query_results

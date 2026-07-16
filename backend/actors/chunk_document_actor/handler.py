@@ -17,11 +17,19 @@ method: ``Chunker.chunk(ctx: ChunkInput) -> list[Chunk]``. See
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 from uuid import UUID
 
 from backend.shared.pipeline.url_helper import normalize_url
-from backend.plugins.chunkers.base import Chunker, ChunkInput
+from backend.plugins.chunkers.base import (
+    RESERVED_METADATA_KEYS,
+    Chunker,
+    ChunkInput,
+    validate_parser_chunker_compatibility,
+)
+from backend.plugins.structured_data import validate_json_size
+from backend.shared import config
 from backend.shared.clients.queue.logging_middleware import log_message_skipped
 from backend.shared.clients.queue.pipeline_payloads import (
     ChunkDocumentPayload,
@@ -42,6 +50,8 @@ from backend.shared.models import (
 from backend.shared.parsers.link_extractor import LinkExtractor
 from backend.shared.pipeline.source_files import read_source_file
 from backend.shared.storage.sql.sql_store import SqlStore
+
+logger = logging.getLogger(__name__)
 
 
 def _build_chunk_input(*, document, target_id: UUID, store: SqlStore) -> ChunkInput:
@@ -65,7 +75,35 @@ def _build_chunk_input(*, document, target_id: UUID, store: SqlStore) -> ChunkIn
         source_url=document.source_url,
         language=document.language or "en",
         content_type=document.content_type,
+        document_id=str(document.id),
+        document_metadata=dict(document.parser_metadata),
+        parser_intermediate=document.parser_intermediate,
+        parser_output_format=document.parser_output_format,
     )
+
+
+def _merged_metadata(*, document, chunk, chunker_name: str) -> dict:
+    document_keys = RESERVED_METADATA_KEYS.intersection(document.parser_metadata)
+    chunk_keys = RESERVED_METADATA_KEYS.intersection(chunk.metadata)
+    collisions = sorted(document_keys | chunk_keys)
+    if collisions:
+        logger.error(
+            "reserved metadata collision rejected",
+            extra={"chunker_name": chunker_name, "reserved_keys": collisions},
+        )
+        raise ValueError(
+            f"{chunker_name} metadata for document {document.id} attempts to "
+            f"overwrite reserved keys: {collisions}"
+        )
+    merged = {**dict(document.parser_metadata), **dict(chunk.metadata)}
+    validate_json_size(
+        merged,
+        limit=config.CHUNK_METADATA_MAX_BYTES,
+        kind="chunk metadata",
+        plugin_name=chunker_name,
+        source=str(document.id),
+    )
+    return merged
 
 
 def chunk_document(
@@ -104,6 +142,7 @@ def chunk_document(
         raise RuntimeError(f"document missing for target {target_id}")
 
     ctx = _build_chunk_input(document=document, target_id=target_id, store=store)
+    validate_parser_chunker_compatibility(document.parser_output_format, chunker.config)
     raw_chunks = chunker.chunk(ctx)
 
     extractor = LinkExtractor()
@@ -113,12 +152,25 @@ def chunk_document(
             text=raw.text,
             chunk_index=index,
             chunk_type=raw.chunk_type,
-            chunk_metadata=raw.metadata,
+            chunk_metadata=_merged_metadata(
+                document=document, chunk=raw, chunker_name=chunker.config.name
+            ),
             start_offset=raw.start_offset,
             end_offset=raw.end_offset,
         )
         for index, raw in enumerate(raw_chunks)
     ]
+    logger.info(
+        "document chunked",
+        extra={
+            "chunker_name": chunker.config.name,
+            "parser_output_format": document.parser_output_format,
+            "chunk_count": len(chunk_models),
+            "chunk_metadata_bytes_total": sum(
+                len(str(chunk.chunk_metadata).encode("utf-8")) for chunk in chunk_models
+            ),
+        },
+    )
 
     schedule_payload = ScheduleEmbeddingsPayload(
         crawl_target_id=target_id,
