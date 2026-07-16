@@ -36,83 +36,79 @@ The pipeline uses PostgreSQL for state and chunk text, Qdrant for dense vectors,
 RabbitMQ/Dramatiq for actor messages, FastAPI for the API, and React/Vite for the
 UI.
 
-## Quick start
-
-You need Git and Docker with Compose v2. The first run can use random mock
-vectors, so no model server is required.
-
-```sh
-git clone https://github.com/PerminovEugene/web-knoweladge-indexer.git embeddorium
-cd embeddorium
-cp .env.example .env
-docker compose up -d --build
-```
-
-Open <http://localhost:5173>, then:
-
-1. **LLM Providers**: create a Mock / Embedding provider.
-2. **Datasets**: create a Web dataset.
-3. **Pipelines**: create a pipeline using that dataset/provider. Disable child
-   links for a bounded single-page run.
-4. Select the pending pipeline and launch it.
-5. **Indexing Runs**: wait for `completed` and inspect its targets.
-6. **Search**: select the completed run. Use BM25 for deterministic first
-   results; mock semantic vectors are random.
-
-Detailed instructions: [Installation](docs/getting-started/installation.md) and
-[Quick start](docs/getting-started/quick-start.md).
-
-## Local interfaces
-
-| Interface | Address |
-| --- | --- |
-| UI | <http://localhost:5173> |
-| API and OpenAPI | <http://localhost:8000/docs> |
-| Qdrant dashboard | <http://localhost:6333/dashboard> |
-| RabbitMQ management | <http://localhost:15672> |
-
-The API has no authentication and is intended for a trusted local environment.
-
 ## Documentation
 
-- [Documentation home](docs/index.md)
-- [Complete navigation](docs/navigation.md)
-- [Product overview](docs/product/overview.md)
-- [Concepts](docs/concepts/ingestion-pipelines.md)
-- [Retrieval guides](docs/guides/retrieval/run-vector-search.md)
-- [Architecture](docs/architecture/overview.md)
-- [Development](docs/development/setup.md)
-- [Known limitations](docs/product/limitations.md)
+### Root
 
-## Project status
+1. [Home](#embeddorium)
+2. [Glossary](docs/glossary.md)
+3. [FAQ](docs/faq.md)
+4. [Changelog](docs/changelog.md)
+5. [Contributing](docs/contributing.md)
 
-The package version is `0.1.0`, with no tagged releases in the repository.
-Important current constraints include XML-only local ingestion, unenforced crawl
-depth/cross-domain settings, no API authentication, one-thread workers, and an
-incomplete MCP/agent prototype. See the limitations page for the full verified
-list.
+### Product
 
-## Repository layout
+1. [Overview](docs/product/overview.md)
+2. [Goals and non-goals](docs/product/goals-and-non-goals.md)
+3. [Use cases](docs/product/use-cases.md)
+4. [Product model](docs/product/product-model.md)
+5. [Limitations](docs/product/limitations.md)
 
-```text
-backend/       actors, plugins, API, storage, tests
-ui/            React/Vite application
-infra/         PostgreSQL, RabbitMQ, and Qdrant support
-scripts/       local reset and worker rebuild helpers
-docs/          product, guides, architecture, and development docs
-sources/       gitignored local XML source root
-```
+### Getting started
 
-## Contributing
+1. [Installation](docs/getting-started/installation.md)
+2. [Quick start](docs/getting-started/quick-start.md)
+3. [First dataset](docs/getting-started/first-dataset.md)
+4. [First ingestion](docs/getting-started/first-ingestion.md)
+5. [First search](docs/getting-started/first-search.md)
 
-See [Contributing](docs/contributing.md). The core checks are:
+### Concepts
 
-```sh
-.venv/bin/python -m pytest backend/tests -q
-ruff check .
-ruff format --check .
-cd ui && npm run lint && npm run build
-```
+1. [Datasets](docs/concepts/datasets.md)
+2. [Providers](docs/concepts/providers.md)
+3. [Ingestion pipelines](docs/concepts/ingestion-pipelines.md)
+4. [Search](docs/concepts/search.md)
+5. [Search Lab](docs/concepts/search-lab.md)
+6. [Plugins](docs/concepts/plugins.md)
+
+### Guides
+
+#### Retrieval
+
+1. [Run vector search](docs/guides/retrieval/run-vector-search.md)
+2. [Run BM25 search](docs/guides/retrieval/run-bm25-search.md)
+3. [Configure hybrid search](docs/guides/retrieval/configure-hybrid-search.md)
+4. [Configure reranking](docs/guides/retrieval/configure-reranking.md)
+5. [Compare searches](docs/guides/retrieval/compare-searches.md)
+
+#### Plugins
+
+1. [Add custom actor configuration](docs/guides/plugins/how-to-add-custom-actor-configuration.md)
+2. [Add custom provider configuration](docs/guides/plugins/how-to-add-custom-provider-configuration.md)
+
+### Architecture
+
+1. [Overview](docs/architecture/overview.md)
+2. [System context](docs/architecture/system-context.md)
+3. [Runtime topology](docs/architecture/runtime-topology.md)
+4. [Domain model](docs/architecture/domain-model.md)
+5. [Data lifecycle](docs/architecture/data-lifecycle.md)
+6. [Ingestion flow](docs/architecture/ingestion-flow.md)
+7. [Retrieval flow](docs/architecture/retrieval-flow.md)
+8. [Evaluation flow](docs/architecture/evaluation-flow.md)
+9. [Persistence](docs/architecture/persistence.md)
+10. [Plugin system](docs/architecture/plugin-system.md)
+11. [Frontend](docs/architecture/frontend.md)
+12. [Error handling](docs/architecture/error-handling.md)
+13. [Security](docs/architecture/security.md)
+
+### Development
+
+1. [Setup](docs/development/setup.md)
+2. [Repository structure](docs/development/repository-structure.md)
+3. [Coding conventions](docs/development/coding-conventions.md)
+4. [Testing](docs/development/testing.md)
+5. [Release process](docs/development/release-process.md)
 
 ## License
 
