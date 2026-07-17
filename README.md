@@ -4,11 +4,12 @@
 
 # Embeddorium
 
-Embeddorium is a local-first platform for turning your data into searchable RAG infrastructure.
+Embeddorium is an open-source, local-first platform for building,
+inspecting, and comparing configurable RAG ingestion and retrieval pipelines.
 
 <p>
   <img src="https://img.shields.io/badge/RAG-platform-6F42C1" alt="RAG Platform">
-  <img src="https://img.shields.io/badge/Version-1.0.0-2EA44F" alt="Version 1.0.0">
+  <img src="https://img.shields.io/badge/Version-0.1.0-2EA44F" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/Docker%20Compose-supported-2496ED?logo=docker&logoColor=white" alt="Docker Compose">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License">
@@ -35,6 +36,8 @@ Embeddorium is a local-first platform for turning your data into searchable RAG 
 2. Prepare the environment:
 
 ```sh
+git clone https://github.com/PerminovEugene/Embeddorium.git
+cd Embeddorium
 cp .env.docker .env
 ```
 
