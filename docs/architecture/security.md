@@ -17,11 +17,12 @@ deployment.
 ## Known exposure
 
 - FastAPI has no authentication or authorization.
-- CORS allows credentials for localhost UI origins on ports 5173–5175.
+- CORS allows credentials for localhost UI origins on `UI_PORT` through
+  `UI_PORT + 2` (by default 5173–5175).
 - Qdrant, Postgres, RabbitMQ, RabbitMQ management, API, and UI ports are
   published to the host by Compose.
-- `.env.example` and `.env.docker` contain development credentials. They must
-  not be treated as production secrets.
+- `.env.docker` contains development credentials. They must not be treated as
+  production secrets.
 - Provider configuration, including API keys, is stored in PostgreSQL JSON and
   returned by provider GET endpoints; the UI can read it.
 - Local dataset APIs accept absolute paths for administrative use. The browse

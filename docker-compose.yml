@@ -272,12 +272,17 @@ services:
       args:
         # Lightweight extra (qdrant-client + langchain-ollama) — the container
         # runs the mock or ollama provider, so it needs no torch /
-        # sentence-transformers. EMBED_PROVIDER/OLLAMA_EMBED_BASE_URL are set in
-        # .env.docker. If EMBED_PROVIDER=ollama and Ollama runs as the `ollama`
-        # compose service (profile "ollama"), OLLAMA_EMBED_BASE_URL must be
-        # http://ollama:11434 — not localhost — since each container has its
-        # own loopback interface. If Ollama runs on the host instead, use
-        # http://host.docker.internal:11434 (Mac/Windows Docker Desktop).
+        # sentence-transformers. The provider (mock/ollama/openai), its model
+        # and its endpoint are NOT env config here: they come from the provider
+        # the user created in the UI, snapshotted per run in
+        # actor_configs.embed_chunks.provider. This worker reads that snapshot,
+        # so the endpoint it dials is whatever that provider row holds — and it
+        # must be reachable from INSIDE this container: http://ollama:11434 for
+        # the `ollama` compose service (profile "ollama"), or
+        # http://host.docker.internal:11434 for Ollama on the host
+        # (Mac/Windows Docker Desktop). Never localhost — that is this
+        # container's own loopback. (OLLAMA_URL/OLLAMA_PORT in .env.docker only
+        # pre-fill that form — they are read by the `server` service, not here.)
         EXTRAS: "embed"
     # --threads 1: the embedding model is a lazily-initialized module singleton;
     # a single thread avoids racing on first init and concurrent model.encode.
@@ -358,9 +363,9 @@ services:
     # --reload-dir backend: scope the reload watcher to the backend package so
     # it never scans ui/node_modules (which churns during `npm ci`/builds and
     # would otherwise crash the reloader with a FileNotFoundError mid-scan).
-    command: uvicorn backend.server.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend
+    command: uvicorn backend.server.main:app --host 0.0.0.0 --port ${SERVER_PORT:-8000} --reload --reload-dir backend
     ports:
-      - "8000:8000"
+      - "${SERVER_PORT:-8000}:${SERVER_PORT:-8000}"
     volumes:
       - .:/app
       - ./tmp/pipeline_run:/tmp/pipeline_runs
@@ -371,6 +376,10 @@ services:
       - .env.docker
     environment:
       - OLLAMA_HOST=host.docker.internal
+      # Overrides the .env.docker copy so the dev CORS allowlist always tracks
+      # the same ${UI_PORT} that publishes the `ui` service — otherwise raising
+      # UI_PORT in .env alone would move the UI and silently CORS-block it.
+      - UI_PORT=${UI_PORT:-5173}
     depends_on:
       qdrant:
         condition: service_started
@@ -400,7 +409,7 @@ services:
     env_file:
       - .env.docker
     environment:
-      - SERVER_URL=http://server:8000
+      - SERVER_URL=http://server:${SERVER_PORT:-8000}
       - MCP_PORT=8080
     depends_on:
       server:
@@ -410,7 +419,7 @@ services:
     image: node:lts-alpine
     working_dir: /app
     ports:
-      - "5173:5173"
+      - "${UI_PORT:-5173}:${UI_PORT:-5173}"
     volumes:
       - ./ui:/app
     command: >
@@ -418,6 +427,8 @@ services:
             npm run dev -- --host"
     environment:
       - HOST=0.0.0.0
+      # Read by ui/vite.config.ts (server.port). Must match the mapping above.
+      - UI_PORT=${UI_PORT:-5173}
     # stdin_open: true
     # tty: true
 

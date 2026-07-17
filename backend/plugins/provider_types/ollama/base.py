@@ -5,11 +5,16 @@ Ollama and are env-sourced (``OLLAMA_URL`` / ``OLLAMA_PORT``) so a container or 
 different host can override them without editing this file. No API key — Ollama
 is unauthenticated. The model to run is a capability-specific setting, so it lives
 on the model-type handlers under ``model_types/``.
+
+These are only *form defaults*; the endpoint a run actually uses is whatever the
+provider row recorded. The default matters when the form is filled from inside a
+container, where ``http://localhost`` is the container's own loopback and not the
+host — set ``OLLAMA_URL`` to ``http://ollama`` (Ollama as a compose service,
+profile "ollama") or ``http://host.docker.internal`` (Ollama on the host,
+Mac/Windows Docker Desktop).
 """
 
 from __future__ import annotations
-
-from urllib.parse import urlsplit, urlunsplit
 
 from backend.plugins.provider_types._remote import (
     build_base_url,
@@ -22,21 +27,9 @@ from backend.plugins.provider_types.base import (
     ProviderTypeConfig,
     ResolvedConnection,
 )
-from backend.shared import config
 
-
-def _endpoint_defaults() -> tuple[str, int]:
-    """Split the env-backed Ollama base URL into form-friendly URL and port."""
-    parsed = urlsplit(config.OLLAMA_EMBED_BASE_URL)
-    port = parsed.port or 11434
-    host = parsed.hostname or "localhost"
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    url = urlunsplit((parsed.scheme or "http", host, parsed.path, "", ""))
-    return url.rstrip("/"), port
-
-
-_OLLAMA_URL, _OLLAMA_PORT = _endpoint_defaults()
+_DEFAULT_URL = "http://localhost"
+_DEFAULT_PORT = "11434"
 
 
 class OllamaProviderType(ProviderTypeAdapter):
@@ -50,8 +43,8 @@ class OllamaProviderType(ProviderTypeAdapter):
         ),
         type="remote",
         fields=[
-            url_field(default=env_default("OLLAMA_URL", _OLLAMA_URL)),
-            port_field(default=int(env_default("OLLAMA_PORT", str(_OLLAMA_PORT)))),
+            url_field(default=env_default("OLLAMA_URL", _DEFAULT_URL)),
+            port_field(default=int(env_default("OLLAMA_PORT", _DEFAULT_PORT))),
         ],
     )
 

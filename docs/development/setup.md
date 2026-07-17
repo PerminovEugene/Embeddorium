@@ -8,11 +8,17 @@ The package requires Python 3.11 or newer.
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev,server,web,embed]'
-cp .env.example .env
 ```
 
 Optional extras also exist for `mcp` and `agent`, but the current MCP server is
 incomplete and is not a working development entry point.
+
+Then write a `.env` in the repository root from the [environment
+reference](#environment-reference) below — the five variables marked
+`required` at minimum. Every host defaults to `localhost` for a host/local
+run, so a `.env` that sets only those is enough to start. Do not copy `.env.docker`
+into `.env`: its hosts are compose service names (`postgres`, `rabbitmq`,
+`qdrant`) that do not resolve outside the stack.
 
 ## Infrastructure
 
@@ -45,15 +51,25 @@ Compose itself reads `.env` for `${...}` interpolation.
 | `RABBITMQ_HOST` | `localhost` | Broker host |
 | `RABBITMQ_PORT` | `5672` | AMQP port |
 | `RABBITMQ_VHOST` | `/` | Broker virtual host |
+| `SERVER_PORT` | `8000` | Port the FastAPI server listens on and publishes |
+| `UI_PORT` | `5173` | Port the Vite dev server listens on and publishes |
 | `SOURCE_ROOT` | `sources` | Root exposed by the source browser/seeder |
 | `PIPELINE_RUNS_DIR` | `/tmp/pipeline_runs` | Run logs and artifact root |
 | `LOG_DIR` | `logs` | Fallback logging root without a run |
 | `INSECURE_TLS_DOMAINS` | empty | Comma-separated TLS-verification exceptions |
 
-Embedding fallback variables are used only when no provider snapshot is
-available: `EMBED_PROVIDER` (default `ollama`), `MOCK_EMBED_DIM` (`4096`),
-`OLLAMA_EMBED_BASE_URL` (`http://localhost:11434`), and
-`OLLAMA_EMBED_MODEL` (`qwen3-embedding`). Provider-form defaults may also read
+`SERVER_PORT` and `UI_PORT` are interpolated into `docker-compose.yml` from
+`.env` (never `.env.docker`), which also re-injects `UI_PORT` into the `server`
+and `ui` containers — so `.env` alone is enough to move either port. Vite reads
+`UI_PORT` in `ui/vite.config.ts`, and the server derives its dev CORS allowlist
+from it, covering `UI_PORT` through `UI_PORT + 2` because Vite increments when
+its port is taken.
+
+There are no embedding-provider environment variables. The provider, its model
+and its endpoint are chosen when a provider is created in the UI, and each
+pipeline run snapshots them into `actor_configs.embed_chunks.provider`; the
+`embed_chunks` actor embeds with exactly that snapshot and fails loudly if a run
+has none. Only the *form defaults* for new providers are env-sourced:
 `OLLAMA_URL`, `OLLAMA_PORT`, `OPENAI_BASE_URL`, and `RERANKER_PATH`.
 
 Structured plugin output limits are bytes:

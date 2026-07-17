@@ -14,23 +14,26 @@ from backend.plugins.provider_types.base import (
     ModelTypeHandler,
     ResolvedEmbedTarget,
 )
-from backend.shared import config
 
 if TYPE_CHECKING:
     from backend.shared.clients.embed_client import EmbedClient
+
+# Pre-fills the form, and backs resolve() for a provider row that recorded an
+# empty model_name. The model must exist on the target Ollama server.
+_DEFAULT_MODEL = "qwen3-embedding"
 
 
 class OllamaEmbedding(ModelTypeHandler):
     config = ModelTypeConfig(
         model_type="embedding",
         label="Embedding",
-        fields=[model_name_field(default=config.OLLAMA_EMBED_MODEL)],
+        fields=[model_name_field(default=_DEFAULT_MODEL)],
     )
 
     def resolve(self) -> ResolvedEmbedTarget:
         return ResolvedEmbedTarget(
             provider="ollama",
-            model=self._get("model_name") or config.OLLAMA_EMBED_MODEL,
+            model=self._get("model_name") or _DEFAULT_MODEL,
             base_url=self.connection.base_url,
         )
 

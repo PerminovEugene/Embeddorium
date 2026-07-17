@@ -60,9 +60,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Embeddings Matcher API", lifespan=lifespan)
 
+# Dev-only allowlist: the vite dev server on UI_PORT, plus the next two ports —
+# vite increments when its configured port is already taken (a second `npm run
+# dev`, say), and the browser then sends that incremented origin.
+_UI_ORIGINS = [f"http://localhost:{config.UI_PORT + offset}" for offset in range(3)]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+    allow_origins=_UI_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -2,7 +2,8 @@
 
 The UI is a React 19 single-page application built with TypeScript and Vite 6.
 It calls the FastAPI server at `VITE_SERVER_URL`, defaulting to
-`http://localhost:8000`.
+`http://localhost:8000`. The dev server itself listens on `UI_PORT`
+(default `5173`), which the backend also uses to build its CORS allowlist.
 
 ## Routes
 
