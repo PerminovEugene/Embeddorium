@@ -35,7 +35,7 @@ Embeddorium is a local-first platform for turning your data into searchable RAG 
 2. Prepare the environment:
 
 ```sh
-cp .env.example .env
+cp .env.docker .env
 ```
 
 3. Start the containers:
