@@ -58,6 +58,7 @@ server = [
 
 mcp = [
   "fastmcp",
+  "httpx>=0.27",
 ]
 
 agent = [

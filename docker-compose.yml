@@ -379,6 +379,33 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # MCP server (backend/mcp/). Exposes the RAG lifecycle (create knowledge base
+  # → poll status → search) as MCP tools for external agents. It is a thin HTTP
+  # client of the `server` service and talks to nothing else — no
+  # postgres/qdrant/rabbitmq dependency — so it only waits for `server` to
+  # start. Agents connect over streamable-HTTP at http://mcp:8080/mcp (or
+  # http://localhost:8080/mcp from the host).
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        EXTRAS: "mcp"
+    working_dir: /app
+    command: python -m backend.mcp.server
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    env_file:
+      - .env.docker
+    environment:
+      - SERVER_URL=http://server:8000
+      - MCP_PORT=8080
+    depends_on:
+      server:
+        condition: service_started
+
   ui:
     image: node:lts-alpine
     working_dir: /app
