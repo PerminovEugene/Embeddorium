@@ -1,6 +1,6 @@
 ## End-of-task commit context
 
-At the end of every coding task, before the final response, update `.Codex/commit-context.md`.
+At the end of every coding task, before the final response, update `.codex/commit-context.md`.
 
 The file is ephemeral and must not be committed.
 
@@ -29,5 +29,5 @@ Keep it concise: max 10 lines after the header.
 Base it only on actual changes made in this session.
 Prefer Conventional Commit style for the header.
 Do not include noisy implementation details.
-Do not include .Codex/commit-context.md itself in git commits.
+Do not include .codex/commit-context.md itself in git commits.
 When creating a commit, read this file, use it as the commit message source, then clear it after a successful commit.

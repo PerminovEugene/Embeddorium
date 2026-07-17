@@ -24,9 +24,9 @@ legacy-compatible code.
 
 ## Before finishing
 
-- `ruff check .` and `ruff format .` clean (config in `setup.cfg`/`pyproject.toml`).
+- `ruff check .` and `ruff format .` clean (config in `[tool.ruff]` in `pyproject.toml`).
 - `.venv/bin/python -m pytest backend/tests -q` passes; add tests for new behavior.
-- New dependencies go in the correct extra in `pyproject.toml` and `requirements.txt`
+- New dependencies go in the correct extra in `pyproject.toml`
   is regenerated.
 
 Deliver complete, working code; report exactly which checks you ran and their results."""

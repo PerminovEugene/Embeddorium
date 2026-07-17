@@ -28,7 +28,7 @@ change crosses service boundaries. See [Testing](development/testing.md).
 
 Describe why the change is needed, the user-visible behavior, and the checks
 you ran. Preserve unrelated working-tree changes and do not include local data,
-environment files, `tmp/`, or `.Codex/commit-context.md`.
+environment files, `tmp/`, or `.codex/commit-context.md`.
 
 The repository does not define a code of conduct, issue template, pull-request
 template, or maintainer review policy: {MISSED_INFO}

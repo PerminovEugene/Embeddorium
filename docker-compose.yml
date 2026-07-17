@@ -65,7 +65,7 @@ services:
   migrate:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     command: python -m backend.shared.storage.sql.migrate
@@ -84,7 +84,7 @@ services:
   worker-validate-source:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -119,7 +119,7 @@ services:
   worker-fetch-source:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: "web"
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -146,7 +146,7 @@ services:
   worker-parse-source:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: "web"
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -170,7 +170,7 @@ services:
   worker-chunk-document:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: "web"
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -194,7 +194,7 @@ services:
   worker-schedule-embeddings:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -218,7 +218,7 @@ services:
   worker-schedule-links:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -244,7 +244,7 @@ services:
   worker-filter-documents:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -268,7 +268,7 @@ services:
   worker-embed-chunks:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         # Lightweight extra (qdrant-client + langchain-ollama) — the container
         # runs the mock or ollama provider, so it needs no torch /
@@ -301,7 +301,7 @@ services:
   worker-track-pipeline-status:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     # --processes/--threads pinned explicitly (dramatiq otherwise defaults to
@@ -325,7 +325,7 @@ services:
   worker-outbox-dispatcher:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: ""
     command: python -m backend.outbox.dispatcher
@@ -351,7 +351,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: "server"
     working_dir: /app
@@ -388,7 +388,7 @@ services:
   mcp:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: infra/docker/Dockerfile.dev
       args:
         EXTRAS: "mcp"
     working_dir: /app

@@ -30,6 +30,5 @@ sources/               Gitignored local XML source root
 tmp/pipeline_run/      Gitignored run logs and source artifacts
 ```
 
-`docker-compose.yml` is the runtime inventory. `pyproject.toml` owns package
-metadata and dependency extras. `requirements.txt` is also present as a pinned
-environment snapshot.
+`docker-compose.yml` is the runtime inventory. `pyproject.toml` is the single
+source of truth for package metadata, dependency extras, and Ruff config.

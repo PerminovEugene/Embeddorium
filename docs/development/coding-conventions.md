@@ -34,6 +34,6 @@
 
 ## Style
 
-Ruff is the configured formatter/linter dependency. `setup.cfg` sets a
-120-character pycodestyle line length. Follow the surrounding typed Python and
-TypeScript patterns and add focused tests with behavior changes.
+Ruff is the configured formatter/linter dependency. `[tool.ruff]` in
+`pyproject.toml` sets a 120-character line length. Follow the surrounding typed
+Python and TypeScript patterns and add focused tests with behavior changes.

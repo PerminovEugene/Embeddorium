@@ -19,6 +19,6 @@ Target: Python 3.11+, Pydantic v2, SQLAlchemy 2, Dramatiq. Match the style of `b
 - Layers stay separated: actors and server code use domain models from `backend/shared/models` and repos on the store; ORM types never cross out of `storage/sql/`.
 
 ## Checks before done
-- `ruff check` and `ruff format` clean (config in `setup.cfg`/`pyproject.toml`).
+- `ruff check` and `ruff format` clean (config in `[tool.ruff]` in `pyproject.toml`).
 - `.venv/bin/python -m pytest backend/tests -q` passes; add a test under `backend/tests/` for new behavior.
-- New dependency added to the correct extra in `pyproject.toml` (extras are per-worker: `web`, `embed`, `embedding`, `server`, `mcp`, `agent`, `dev`) and `requirements.txt` regenerated (`pip freeze > requirements.txt`).
+- New dependency added to the correct extra in `pyproject.toml` (extras are per-worker: `web`, `embed`, `embedding`, `server`, `mcp`, `agent`, `dev`).

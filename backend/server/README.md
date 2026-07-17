@@ -178,7 +178,7 @@ from the request, so a query is embedded the same way the collection was indexed
 ## Running with Docker (recommended)
 
 The server is a service in the repo's `docker-compose.yml`, built from the shared
-`Dockerfile.dev` (so `backend` is importable). It reads `.env.docker` for
+`infra/docker/Dockerfile.dev` (so `backend` is importable). It reads `.env.docker` for
 `QDRANT_URL` plus the Postgres/RabbitMQ vars `backend.shared.config` requires at
 import time.
 
